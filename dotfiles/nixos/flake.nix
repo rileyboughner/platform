@@ -1,0 +1,100 @@
+{
+  description = "My nix flake for managing my computers";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-26.05";
+    unstable.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+
+    home-manager.url = "github:nix-community/home-manager/release-26.05";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
+
+    nixvim = {
+      url = "github:nix-community/nixvim/nixos-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    
+    hyprland.url = "github:hyprwm/hyprland?ref=v0.36.0";
+    rose-pine-hyprcursor.url = "github:ndom91/rose-pine-hyprcursor";
+    musnix.url = "github:musnix/musnix";
+
+    agenix.url = "github:ryantm/agenix";
+    agenix.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, home-manager, ... } @inputs: 
+  let
+
+    userModule = { username, extraGroups ? [ ] }: {
+      users.users.${username} = {
+        isNormalUser = true;
+        group = username;
+        extraGroups = [ "wheel" ] ++ extraGroups;
+      };
+      users.groups.${username} = {}; 
+    };
+
+    #options
+    username = "rileyboughner";
+    serverUsername = "admin";
+    hosts = import ./hosts.nix;
+
+    system = "x86_64-linux";
+    pkgs = import nixpkgs {
+      inherit system;
+      config = {
+        allowUnfree = true;
+      };
+    };
+  in
+  {
+    nixosConfigurations.desktop = nixpkgs.lib.nixosSystem{
+      inherit system;
+      specialArgs = { inherit inputs username hosts; };
+      modules = [
+        ./hosts/desktop/configuration.nix
+	(userModule { username = username; })
+
+        ./home-manager.nix
+        ./modules/hyprland.nix
+        ./modules/kdeconnect.nix
+        ./modules/keyd.nix
+        ./modules/gaming.nix
+        ./modules/terraform.nix
+        ./modules/quickemu.nix
+        ./modules/docker.nix
+        ./modules/kubernetes.nix
+        ./modules/secrets.nix
+      ];
+    };
+
+    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem{
+      inherit system;
+      specialArgs = { inherit inputs username hosts; };
+      modules = [
+        ./hosts/laptop/configuration.nix
+	(userModule { username = username; })
+
+        ./home-manager.nix
+        ./modules/hyprland.nix
+        ./modules/kdeconnect.nix
+        ./modules/keyd.nix
+        ./modules/secrets.nix
+        ./modules/gaming.nix
+      ];
+    };
+
+    nixosConfigurations.server = nixpkgs.lib.nixosSystem{
+      inherit system;
+      specialArgs = { inherit inputs hosts; username = serverUsername; };
+      modules = [
+        ./hosts/server/configuration.nix
+	(userModule { username = serverUsername; extraGroups = [ "admin" ]; })
+
+        ./home-manager.nix
+        ./modules/git-credentials.nix
+        ./modules/youtube-secret.nix
+        ./modules/server-remote-access.nix
+      ];
+    };
+  };
+}

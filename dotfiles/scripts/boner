@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DOTFILES_TARGET="$HOME/.dotfiles"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(dirname "$SCRIPT_DIR")
+
+# Fall back to nix-shell only for deps that are actually missing (e.g. a
+# brand new machine, before its first nixos-rebuild has applied these as
+# systemPackages). Unconditionally wrapping the whole script in nix-shell
+# (as this used to) pays its ~0.3-1s nixpkgs-evaluation cost on every
+# single invocation, which is most of why `boner` felt slow to run at all
+# on an already set-up system. virt-viewer is deliberately left out here -
+# see cmd_vm, which is the only command that needs it.
+missing=()
+for bin in stow git jq; do
+    command -v "$bin" >/dev/null 2>&1 || missing+=("$bin")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+    printf -v _relaunch '%q ' bash "$0" "$@"
+    exec nix-shell -p "${missing[@]}" --run "$_relaunch"
+fi
+
+bold="" head="" reset="" dim=""
+if [ -t 2 ]; then
+    bold=$'\033[1m'
+    head=$'\033[1;36m'
+    dim=$'\033[2m'
+    reset=$'\033[0m'
+fi
+
+_section() { printf '%s%s%s\n' "$head" "$1" "$reset" >&2; }
+_row() { printf '  %s%-22s%s%s\n' "$bold" "$1" "$reset" "$2" >&2; }
+
+_rows_setup() {
+    _row "install"  "Move dotfiles to ~/.dotfiles, stow configs, clone wallpapers"
+    _row "rebuild"  "Rebuild and switch NixOS configuration"
+    _row "update"   "Update flake inputs, push flake.lock, and rebuild"
+    _row "push"     "Push local dotfiles commits to the remote"
+    _row "pull"     "Pull the latest dotfiles commits from the remote"
+}
+
+_rows_wallpaper() {
+    _row "wallpaper set <path>" "Set the wallpaper and regenerate the pywal theme"
+    _row "wallpaper random"     "Set a random wallpaper from ~/.wallpapers"
+    _row "wallpaper restore"    "Restore the last-set wallpaper"
+    _row "wallpaper warm"       "Pre-cache pywal colors for every wallpaper"
+}
+
+_rows_secrets() {
+    _row "secrets"               "List agenix secrets decryptable by this key/host"
+    _row "secrets update <name>" "Edit/create a secret (opens \$EDITOR via agenix)"
+}
+
+_rows_remote() {
+    _row "vm cyber-defence" "Connect to the cyber-defence VM hosted on server"
+}
+
+# Per-subcommand usage, shown whenever that subcommand is called with a
+# missing/unrecognized argument instead of a bare bash error.
+_usage_wallpaper() {
+    printf 'Usage: boner wallpaper %s<subcommand>%s [args]\n\n' "$dim" "$reset" >&2
+    _rows_wallpaper
+}
+
+_usage_secrets() {
+    printf 'Usage: boner secrets %s[update <name>]%s\n\n' "$dim" "$reset" >&2
+    _rows_secrets
+}
+
+_usage_vm() {
+    printf 'Usage: boner vm %s<name>%s\n\n' "$dim" "$reset" >&2
+    _rows_remote
+}
+
+cmd_rebuild() {
+    sudo nixos-rebuild switch --flake "$HOME/.dotfiles/nixos#" --impure
+}
+
+cmd_update() {
+    echo "Updating flake inputs..."
+    nix flake update --flake "$DOTFILES_TARGET/nixos"
+
+    if git -C "$DOTFILES_TARGET" diff --quiet -- nixos/flake.lock; then
+        echo "flake.lock unchanged."
+    else
+        echo "Committing updated flake.lock..."
+        git -C "$DOTFILES_TARGET" add nixos/flake.lock
+        git -C "$DOTFILES_TARGET" commit -m "nixos: update flake.lock"
+        git -C "$DOTFILES_TARGET" push
+    fi
+
+    cmd_rebuild
+}
+
+cmd_push() {
+    git -C "$DOTFILES_TARGET" push
+}
+
+cmd_pull() {
+    git -C "$DOTFILES_TARGET" pull
+}
+
+cmd_secrets() {
+    local subcmd="${1:-list}"
+    case "$subcmd" in
+        update) cmd_secrets_update "${2:-}" ;;
+        list) cmd_secrets_list ;;
+        *)
+            _usage_secrets
+            exit 1
+            ;;
+    esac
+}
+
+cmd_secrets_list() {
+    local rules="$DOTFILES_TARGET/nixos/secrets/secrets.nix"
+    local admin_key host_key
+
+    admin_key=$(awk -F': ' '/^# public key:/ {print $2}' "$HOME/.config/agenix/key.txt" 2>/dev/null || true)
+    host_key=$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null || true)
+
+    nix eval --json --file "$rules" | jq -r \
+        --arg admin "$admin_key" --arg host "$host_key" '
+        to_entries[]
+        | select(.value.publicKeys | index($admin) or index($host))
+        | .key
+        | sub("\\.age$"; "")
+    '
+}
+
+cmd_secrets_update() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then
+        _usage_secrets
+        exit 1
+    fi
+    name="${name%.age}.age"
+    local secret_file="$DOTFILES_TARGET/nixos/secrets/$name"
+    local before after
+
+    before=$(sha256sum "$secret_file" 2>/dev/null | cut -d' ' -f1 || true)
+
+    case "$name" in
+        git-credentials-*)
+            echo "Format (whole line, not just the token):" >&2
+            echo "  https://USERNAME:TOKEN@github.com" >&2
+            echo "" >&2
+            ;;
+    esac
+
+    (cd "$DOTFILES_TARGET/nixos/secrets" && nix run github:ryantm/agenix -- -e "$name" -i "$HOME/.config/agenix/key.txt")
+
+    after=$(sha256sum "$secret_file" 2>/dev/null | cut -d' ' -f1 || true)
+
+    if [ "$before" != "$after" ]; then
+        echo "" >&2
+        echo "$name changed -- commit it and run 'boner rebuild' for it to take effect." >&2
+    fi
+}
+
+cmd_vm() {
+    local name="${1:-}"
+    local port
+
+    if [ -z "$name" ]; then
+        _usage_vm
+        exit 1
+    fi
+
+    case "$name" in
+        cyber-defence) port=5930 ;;
+        windows-11)    port=5931 ;;
+        *)
+            echo "Unknown VM: $name" >&2
+            echo >&2
+            _usage_vm
+            exit 1
+            ;;
+    esac
+
+    echo "Connecting to $name via SPICE (192.168.1.2:$port)..."
+    export GTK_THEME="Adwaita:dark"
+    if command -v remote-viewer >/dev/null 2>&1; then
+        exec remote-viewer "spice://192.168.1.2:${port}"
+    else
+        exec nix-shell -p virt-viewer --run "remote-viewer 'spice://192.168.1.2:${port}'"
+    fi
+}
+
+cmd_wallpaper() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        # set/random/restore stay thin wrappers around the standalone
+        # scripts instead of reimplementing them here: those are also
+        # launched directly by Hyprland/Quickshell, where this script's
+        # nix-shell shebang would add ~0.3-1s of pure startup overhead on
+        # every wallpaper switch.
+        set)
+            shift
+            if [ -z "${1:-}" ]; then
+                _usage_wallpaper
+                exit 1
+            fi
+            exec set-wallpaper "$@"
+            ;;
+        random)  exec random-wallpaper ;;
+        restore) exec restore-wallpaper ;;
+        warm)    cmd_wallpaper_warm ;;
+        *)
+            _usage_wallpaper
+            exit 1
+            ;;
+    esac
+}
+
+cmd_wallpaper_warm() {
+    local wallpaper_dir="$HOME/.wallpapers"
+    local total
+
+    if [ ! -d "$wallpaper_dir" ]; then
+        echo "No wallpapers found at $wallpaper_dir" >&2
+        exit 1
+    fi
+
+    total=$(find "$wallpaper_dir" -type f \( \
+        -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" -o -iname "*.webp" \
+    \) | wc -l)
+    echo "Pre-caching pywal colors for up to $total wallpapers (already-cached ones are skipped fast)..."
+
+    # wal already caches generated colorschemes per-image under
+    # ~/.cache/wal/schemes/, keyed by path+size+backend. Priming that cache
+    # ahead of time means set-wallpaper's own `wal -i` call hits it instead
+    # of re-running color quantization, which is most of a wallpaper
+    # switch's latency for a never-before-seen image. -n -s -t -e skip
+    # every live side effect (wallpaper/terminal/tty/gtk reload), so this
+    # is safe to run in the background without visibly touching anything.
+    find "$wallpaper_dir" -type f \( \
+        -iname "*.jpg" -o -iname "*.png" -o -iname "*.jpeg" -o -iname "*.webp" \
+    \) -print0 | nice -n 10 xargs -0 -P "$(nproc)" -I{} wal -i "{}" -n -s -t -e -q
+
+    echo "Done."
+}
+
+cmd_install() {
+    if [ "$REPO_ROOT" != "$DOTFILES_TARGET" ]; then
+        if [ -e "$DOTFILES_TARGET" ]; then
+            echo "Error: $DOTFILES_TARGET already exists. Remove it first." >&2
+            exit 1
+        fi
+        echo "Moving dotfiles to $DOTFILES_TARGET..."
+        mv "$REPO_ROOT" "$DOTFILES_TARGET"
+        exec "$DOTFILES_TARGET/scripts/boner" install
+    fi
+
+    echo "Stowing config files..."
+    mkdir -p "$HOME/.config"
+    stow --dir "$DOTFILES_TARGET" --target "$HOME/.config" config
+
+    if [ ! -d "$HOME/.wallpapers" ]; then
+        echo "Cloning wallpapers and pre-caching their pywal colors in the background (log: $HOME/.wallpapers-clone.log)..."
+        nohup sh -c "git clone https://github.com/dharmx/walls.git '$HOME/.wallpapers' && '$DOTFILES_TARGET/scripts/boner' wallpaper warm" \
+            >"$HOME/.wallpapers-clone.log" 2>&1 &
+        disown
+    else
+        echo "$HOME/.wallpapers already exists, skipping clone."
+    fi
+
+    echo "Done."
+}
+
+print_usage() {
+    printf '%sboner%s - dotfiles management\n\n' "$bold" "$reset" >&2
+    printf 'Usage: boner %s<command>%s [args]\n\n' "$dim" "$reset" >&2
+
+    _section "Setup"
+    _rows_setup
+    echo >&2
+
+    _section "Wallpaper"
+    _rows_wallpaper
+    echo >&2
+
+    _section "Secrets"
+    _rows_secrets
+    echo >&2
+
+    _section "Remote"
+    _rows_remote
+}
+
+case "${1:-}" in
+    install) cmd_install ;;
+    rebuild) cmd_rebuild ;;
+    update) cmd_update ;;
+    push) cmd_push ;;
+    pull) cmd_pull ;;
+    secrets) cmd_secrets "${@:2}" ;;
+    vm) cmd_vm "${@:2}" ;;
+    wallpaper) cmd_wallpaper "${@:2}" ;;
+    help|-h|--help) print_usage ;;
+    *)
+        print_usage
+        exit 1
+        ;;
+esac
