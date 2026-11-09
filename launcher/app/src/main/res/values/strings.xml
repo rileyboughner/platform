@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Launcher</string>
+
+    <string name="app_grid_title">Apps</string>
+    <string name="app_grid_empty">No launchable apps found.</string>
+
+    <string name="jellyfin_row_title">Continue Watching</string>
+    <string name="jellyfin_row_stub_notice">Stub — wire up Jellyfin API client in Phase 2+</string>
+    <string name="jellyfin_open_app">Open in Jellyfin</string>
+
+    <string name="home_assistant_panel_title">Home</string>
+    <string name="home_assistant_panel_stub_notice">Stub — wire up Home Assistant REST/WebSocket API in Phase 2+</string>
+
+    <string name="tv_home_title">Launcher — TV</string>
+    <string name="tv_home_stub_notice">TV browse screen is a stub. Full Compose for TV layout is future work.</string>
+</resources>

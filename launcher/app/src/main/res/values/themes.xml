@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      System (pre-Compose) activity theme. Compose UI is themed in Kotlin via
+      AppTheme.kt, which reads colors straight from the generated
+      PlatformTheme object (theme/build/android/Theme.kt) — nothing here
+      duplicates a color value, @color/color_semantic_background is the
+      resource AAPT merges in from theme/build/android/colors.xml via the
+      syncThemeColors Gradle task (see app/build.gradle.kts).
+    -->
+    <style name="Theme.Launcher" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/color_semantic_background</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
