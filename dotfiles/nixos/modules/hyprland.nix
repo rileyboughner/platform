@@ -60,6 +60,10 @@
       install -Dm755 ${../../scripts/restore-theme} $out/bin/restore-theme
     '')
 
+    (pkgs.runCommand "wallpaper-recolor" { } ''
+      install -Dm755 ${../../scripts/wallpaper-recolor} $out/bin/wallpaper-recolor
+    '')
+
     (pkgs.runCommand "prewarm-scratchpads" { } ''
       install -Dm755 ${../../scripts/prewarm-scratchpads} $out/bin/prewarm-scratchpads
     '')

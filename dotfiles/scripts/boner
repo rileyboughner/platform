@@ -41,10 +41,11 @@ _rows_setup() {
 }
 
 _rows_wallpaper() {
-    _row "wallpaper set <path>" "Set the wallpaper and regenerate the pywal theme"
-    _row "wallpaper random"     "Set a random wallpaper from ~/.wallpapers"
-    _row "wallpaper restore"    "Restore the last-set wallpaper"
-    _row "wallpaper warm"       "Pre-cache pywal colors for every wallpaper"
+    _row "wallpaper set <path>"   "Set the wallpaper and regenerate the pywal theme"
+    _row "wallpaper random"       "Set a random wallpaper from ~/.wallpapers"
+    _row "wallpaper restore"      "Restore the last-set wallpaper"
+    _row "wallpaper warm"         "Pre-cache pywal colors for every wallpaper"
+    _row "wallpaper recolor [file]" "Recolor a wallpaper (or the current one) into the active theme"
 }
 
 _rows_theme() {
@@ -257,6 +258,12 @@ cmd_wallpaper() {
         random)  exec random-wallpaper ;;
         restore) exec restore-wallpaper ;;
         warm)    cmd_wallpaper_warm ;;
+        recolor)
+            shift
+            # Absolute path, not PATH lookup: same reasoning as `theme set`
+            # above -- this works right after `git pull` with no rebuild.
+            exec "$DOTFILES_TARGET/scripts/wallpaper-recolor" "$@"
+            ;;
         *)
             _usage_wallpaper
             exit 1

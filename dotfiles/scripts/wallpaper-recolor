@@ -1,0 +1,430 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Recolors a wallpaper into the active named theme (config/themes/*.json)
+# and sets the result the same way `set-wallpaper` would -- see
+# lib/theme-common.sh for why that's the only path allowed to touch the
+# wallpaper: it re-applies a pinned theme after `wal -i`, so going through
+# it here means recoloring can never clobber a pinned theme.
+#
+# Sourced (not executed) when BASH_SOURCE != 0, so a test harness can load
+# the functions below (score_image, recolor_image, theme_is_monochrome...)
+# without running main, triggering the nix-shell relaunch, or touching a
+# real wallpaper/Hyprland session.
+
+DOTFILES_TARGET="$HOME/.platform/dotfiles"
+# shellcheck source=lib/theme-common.sh
+. "$DOTFILES_TARGET/scripts/lib/theme-common.sh"
+
+WALLPAPER_DIR="$HOME/.wallpapers"
+CURRENT_WALLPAPER_LINK="$HOME/.wallpaper"
+CACHE_ROOT="$HOME/.cache/wallpapers/recolored"
+
+# Max possible RGB Euclidean distance (black to white): sqrt(3 * 255^2).
+# Used to normalize color-match scores onto a 0-100 scale.
+MAX_RGB_DISTANCE="441.6729559300637"
+
+# Below this score, --list/the fallback picker call a match "poor" instead
+# of pretending it's fine.
+POOR_MATCH_THRESHOLD=40
+
+# Same nix-shell-only-if-missing fallback boner uses, so this also works
+# on a machine that hasn't rebuilt yet (e.g. this headless server, which
+# doesn't import hyprland.nix and so never gets imagemagick/pywal16 as a
+# systemPackage). Only called from main(), so sourcing this file for unit
+# testing never triggers a re-exec.
+relaunch_in_nix_shell_if_missing_deps() {
+    local missing=() bin pkgs=()
+    for bin in jq magick; do
+        command -v "$bin" >/dev/null 2>&1 || missing+=("$bin")
+    done
+    [ "${#missing[@]}" -gt 0 ] || return 0
+    for bin in "${missing[@]}"; do
+        case "$bin" in
+            magick) pkgs+=("imagemagick") ;;
+            *) pkgs+=("$bin") ;;
+        esac
+    done
+    local _relaunch
+    printf -v _relaunch '%q ' bash "$0" "${ORIGINAL_ARGS[@]}"
+    exec nix-shell -p "${pkgs[@]}" --run "$_relaunch"
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: wallpaper-recolor [file] [options]
+
+  (no args)          Recolor the current wallpaper into the active theme.
+                      If there is no current wallpaper, pick the
+                      best-matching image from ~/.wallpapers first.
+  <file>             Recolor that specific image into the active theme.
+  --list             Show what would be recolored and the ranked
+                      ~/.wallpapers candidates, without changing anything.
+  --check <file>     Report how <file> would map onto the active theme
+                      (score + remap method), without changing anything.
+  --random           With no file given, pick a random ~/.wallpapers
+                      candidate instead of the best-scoring one.
+  -h, --help         Show this help.
+EOF
+}
+
+# ---- color math -------------------------------------------------------
+
+hex_to_rgb() {
+    local h="${1#\#}"
+    printf '%d %d %d\n' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"
+}
+
+hex_luminance() {
+    local r g b
+    read -r r g b < <(hex_to_rgb "$1")
+    awk -v r="$r" -v g="$g" -v b="$b" \
+        'BEGIN { printf "%d\n", int(0.299 * r + 0.587 * g + 0.114 * b + 0.5) }'
+}
+
+# Prints every reference color (background, foreground, color0..color15)
+# for a theme JSON file, one hex string per line.
+theme_ref_colors() {
+    jq -r '[.special.background, .special.foreground] + [.colors[]] | .[]' "$1"
+}
+
+# True (exit 0) when every reference color in the theme is near-grayscale.
+# Chroma (max channel - min channel) is 0 for a perfectly neutral gray;
+# 14/255 (~5.5%) gives Graphite (chroma 0-1) plenty of room while still
+# rejecting every colorful bundled theme (chroma 100+).
+theme_is_monochrome() {
+    local max_chroma=0
+    local hex r g b max min chroma
+    while IFS= read -r hex; do
+        read -r r g b < <(hex_to_rgb "$hex")
+        max=$r; min=$r
+        [ "$g" -gt "$max" ] && max=$g; [ "$g" -lt "$min" ] && min=$g
+        [ "$b" -gt "$max" ] && max=$b; [ "$b" -lt "$min" ] && min=$b
+        chroma=$((max - min))
+        [ "$chroma" -gt "$max_chroma" ] && max_chroma=$chroma
+    done < <(theme_ref_colors "$1")
+    [ "$max_chroma" -le 14 ]
+}
+
+# ---- scoring (used for both --check and ~/.wallpapers ranking) --------
+
+# Dominant colors of an image: downsamples, quantizes to a handful of
+# colors, and prints "<pixel-count> <r> <g> <b>" per resulting color. This
+# is the same color-reduction ImageMagick uses for -remap, just surfaced
+# as numbers instead of an image.
+dominant_colors() {
+    magick "$1" -auto-orient -resize 128x128 -depth 8 -colors 6 +dither \
+        -format %c histogram:info:- 2>/dev/null \
+        | sed -E 's/^[[:space:]]*([0-9]+):[[:space:]]*\(([^)]*)\).*/\1 \2/' \
+        | awk -F'[ ,]+' '{ printf "%d %.0f %.0f %.0f\n", $1, $2, $3, $4 }'
+}
+
+# Weighted-average nearest-color match of an image's dominant colors
+# against a theme's full reference palette, 0 (no relation) - 100
+# (exact match). One distance metric covers both halves of the spec: a
+# monochrome theme's references are all grays, so colorful dominant
+# colors end up far from all of them (low score) while grayscale ones
+# land close to some step of the ramp (high score); a colorful theme's
+# references are hues, so this naturally rewards matching hues too.
+score_image() {
+    local img="$1" theme_file="$2"
+    local refs dom
+    refs=$(theme_ref_colors "$theme_file")
+    dom=$(dominant_colors "$img")
+    [ -n "$dom" ] || { echo "0"; return; }
+    awk -v refs="$refs" -v maxdist="$MAX_RGB_DISTANCE" '
+    BEGIN {
+        rc = split(refs, lines, "\n")
+        n = 0
+        for (i = 1; i <= rc; i++) {
+            h = lines[i]
+            gsub(/#/, "", h)
+            if (length(h) != 6) continue
+            n++
+            rr[n] = strtonum("0x" substr(h, 1, 2))
+            rg[n] = strtonum("0x" substr(h, 3, 2))
+            rb[n] = strtonum("0x" substr(h, 5, 2))
+        }
+    }
+    {
+        count = $1; r = $2; g = $3; b = $4
+        total += count
+        mind = -1
+        for (i = 1; i <= n; i++) {
+            dr = r - rr[i]; dg = g - rg[i]; db = b - rb[i]
+            d = sqrt(dr * dr + dg * dg + db * db)
+            if (mind < 0 || d < mind) mind = d
+        }
+        sumw += count * mind
+    }
+    END {
+        if (total == 0) { print "0"; exit }
+        avgdist = sumw / total
+        score = 100 * (1 - avgdist / maxdist)
+        if (score < 0) score = 0
+        if (score > 100) score = 100
+        printf "%.1f\n", score
+    }' <<<"$dom"
+}
+
+match_label() {
+    local score="$1"
+    if awk -v s="$score" 'BEGIN { exit !(s >= 70) }'; then
+        echo "good match"
+    elif awk -v s="$score" -v t="$POOR_MATCH_THRESHOLD" 'BEGIN { exit !(s >= t) }'; then
+        echo "fair match"
+    else
+        echo "poor match"
+    fi
+}
+
+# ---- recoloring ---------------------------------------------------------
+
+build_palette_image() {
+    local theme_file="$1" outpath="$2"
+    local tmpdir hex i=0
+    tmpdir=$(mktemp -d)
+    local tiles=()
+    while IFS= read -r hex; do
+        magick -size 1x1 "xc:$hex" "$tmpdir/$i.png"
+        tiles+=("$tmpdir/$i.png")
+        i=$((i + 1))
+    done < <(theme_ref_colors "$theme_file")
+    magick "${tiles[@]}" +append "$outpath"
+    rm -rf "$tmpdir"
+}
+
+# Recolors $1 into $3 using theme $2. Monochrome themes get a true
+# grayscale remap (background = black point, foreground = white point);
+# colorful themes get their 16-color palette quantized/remapped onto the
+# image directly, so the result is a genuine recolor, not a tint/overlay.
+recolor_image() {
+    local src="$1" theme_file="$2" outpath="$3"
+    mkdir -p "$(dirname "$outpath")"
+    if theme_is_monochrome "$theme_file"; then
+        local bg_hex fg_hex bg_lum fg_lum grad gray
+        bg_hex=$(jq -r '.special.background' "$theme_file")
+        fg_hex=$(jq -r '.special.foreground' "$theme_file")
+        bg_lum=$(hex_luminance "$bg_hex")
+        fg_lum=$(hex_luminance "$fg_hex")
+        grad=$(mktemp --suffix=.png)
+        gray=$(mktemp --suffix=.png)
+        # 256x1 gradient used as a CLUT: index v (0-255) of the grayscale
+        # input maps to gradient pixel v, i.e. a linear remap of the
+        # input's luminance range onto [bg_lum, fg_lum]. Built from
+        # gray(N) endpoints (not the theme hex directly) so the result is
+        # provably R=G=B even if a theme's bg/fg aren't perfectly neutral.
+        magick -size 256x1 "gradient:gray(${bg_lum})-gray(${fg_lum})" "$grad"
+        magick "$src" -auto-orient -colorspace Gray -depth 8 -auto-level "$gray"
+        magick "$gray" "$grad" -clut "$outpath"
+        rm -f "$grad" "$gray"
+    else
+        local palette
+        palette=$(mktemp --suffix=.png)
+        build_palette_image "$theme_file" "$palette"
+        # +dither: crisp blocks of exact theme colors rather than a
+        # speckled Floyd-Steinberg mix -- a deliberate recolor, not noise.
+        magick "$src" -auto-orient -depth 8 +dither -remap "$palette" "$outpath"
+        rm -f "$palette"
+    fi
+}
+
+# ---- wallpaper discovery ------------------------------------------------
+
+list_candidates() {
+    [ -d "$WALLPAPER_DIR" ] || return 0
+    find "$WALLPAPER_DIR" -type f \( \
+        -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+        -o -iname '*.webp' -o -iname '*.bmp' \
+    \) 2>/dev/null
+}
+
+current_wallpaper_path() {
+    [ -e "$CURRENT_WALLPAPER_LINK" ] || return 1
+    realpath "$CURRENT_WALLPAPER_LINK"
+}
+
+# Prints "<score>\t<path>" per candidate, best first.
+rank_candidates() {
+    local theme_file="$1" f s
+    while IFS= read -r f; do
+        s=$(score_image "$f" "$theme_file")
+        printf '%s\t%s\n' "$s" "$f"
+    done < <(list_candidates) | sort -t "$(printf '\t')" -k1,1 -rn
+}
+
+cache_path_for() {
+    local src="$1" theme_name="$2"
+    local base stem hash
+    base=$(basename "$src")
+    stem="${base%.*}"
+    hash=$(printf '%s' "$(realpath "$src")" | sha256sum | cut -c1-8)
+    printf '%s/%s/%s-%s.png\n' "$CACHE_ROOT" "$theme_name" "$stem" "$hash"
+}
+
+# ---- commands -----------------------------------------------------------
+
+active_theme() {
+    local name
+    name=$(theme_active_name) || name="graphite"
+    printf '%s\n' "$name"
+}
+
+active_theme_file() {
+    local name="$1"
+    theme_resolve "$name" || {
+        echo "Unknown active theme '$name' -- is \$HOME/.cache/theme/current stale?" >&2
+        exit 1
+    }
+}
+
+describe_remap() {
+    local theme_file="$1" theme_name="$2"
+    if theme_is_monochrome "$theme_file"; then
+        printf 'Monochrome remap: grayscale, then map luminance onto the "%s" ramp (background %s = black point, foreground %s = white point).\n' \
+            "$theme_name" "$(jq -r '.special.background' "$theme_file")" "$(jq -r '.special.foreground' "$theme_file")"
+    else
+        printf 'Palette remap: quantize onto the 16 "%s" colors (%s).\n' \
+            "$theme_name" "$(theme_ref_colors "$theme_file" | tr '\n' ' ')"
+    fi
+}
+
+cmd_check() {
+    local file="$1"
+    [ -f "$file" ] || { echo "No such file: $file" >&2; exit 1; }
+    local theme_name theme_file score label
+    theme_name=$(active_theme)
+    theme_file=$(active_theme_file "$theme_name")
+    score=$(score_image "$file" "$theme_file")
+    label=$(match_label "$score")
+    echo "File:          $file"
+    echo "Active theme:  $theme_name"
+    echo "Match score:   $score/100 ($label)"
+    describe_remap "$theme_file" "$theme_name"
+}
+
+cmd_list() {
+    local theme_name theme_file current found_any=0
+    theme_name=$(active_theme)
+    theme_file=$(active_theme_file "$theme_name")
+    echo "Active theme: $theme_name"
+    echo
+
+    if current=$(current_wallpaper_path 2>/dev/null); then
+        found_any=1
+        local score label
+        score=$(score_image "$current" "$theme_file")
+        label=$(match_label "$score")
+        echo "Current wallpaper (default pick with no file argument):"
+        printf '  %s  score %s/100 (%s)\n' "$current" "$score" "$label"
+        echo
+    fi
+
+    if [ -d "$WALLPAPER_DIR" ] && [ -n "$(list_candidates)" ]; then
+        found_any=1
+        echo "Ranked candidates in $WALLPAPER_DIR (used as a fallback when there is no current wallpaper, or with --random):"
+        local rank=0
+        while IFS=$'\t' read -r score path; do
+            rank=$((rank + 1))
+            label=$(match_label "$score")
+            printf '  %2d. %6s/100 (%-10s) %s\n' "$rank" "$score" "$label" "$path"
+        done < <(rank_candidates "$theme_file")
+    fi
+
+    if [ "$found_any" -eq 0 ]; then
+        echo "No current wallpaper (\$HOME/.wallpaper) and no images found in $WALLPAPER_DIR." >&2
+        echo "Nothing to recolor -- set a wallpaper first, or add images to $WALLPAPER_DIR." >&2
+        exit 1
+    fi
+}
+
+cmd_recolor() {
+    local file_arg="$1" random_flag="$2"
+    local theme_name theme_file src kind score
+    theme_name=$(active_theme)
+    theme_file=$(active_theme_file "$theme_name")
+
+    if [ -n "$file_arg" ]; then
+        [ -f "$file_arg" ] || { echo "No such file: $file_arg" >&2; exit 1; }
+        src=$file_arg
+        kind="explicit"
+    elif src=$(current_wallpaper_path 2>/dev/null); then
+        kind="current"
+    else
+        local candidates
+        candidates=$(list_candidates)
+        if [ -z "$candidates" ]; then
+            echo "No current wallpaper (\$HOME/.wallpaper) and no images found in $WALLPAPER_DIR." >&2
+            echo "Nothing to recolor -- pass a file, set a wallpaper first, or add images to $WALLPAPER_DIR." >&2
+            exit 1
+        fi
+        if [ "$random_flag" -eq 1 ]; then
+            src=$(printf '%s\n' "$candidates" | shuf -n 1)
+            score=$(score_image "$src" "$theme_file")
+        else
+            local best
+            best=$(rank_candidates "$theme_file" | head -n 1)
+            score="${best%%$'\t'*}"
+            src="${best#*$'\t'}"
+        fi
+        kind="selected"
+    fi
+
+    if [ "$kind" = "selected" ] && [ -n "${score:-}" ]; then
+        local label
+        label=$(match_label "$score")
+        echo "Picked from $WALLPAPER_DIR: $src (score $score/100, $label)" >&2
+        if [ "$label" = "poor match" ]; then
+            echo "Warning: this is a poor color match for theme '$theme_name' -- proceeding anyway." >&2
+        fi
+    fi
+
+    local outpath
+    outpath=$(cache_path_for "$src" "$theme_name")
+    echo "Recoloring $src into theme '$theme_name'..." >&2
+    recolor_image "$src" "$theme_file" "$outpath"
+    echo "Saved recolored wallpaper: $outpath" >&2
+
+    exec "$DOTFILES_TARGET/scripts/set-wallpaper" "$outpath"
+}
+
+main() {
+    local -a ORIGINAL_ARGS=("$@")
+    relaunch_in_nix_shell_if_missing_deps
+
+    local file_arg="" mode="recolor" random_flag=0 check_file=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --list) mode="list"; shift ;;
+            --check)
+                mode="check"
+                shift
+                check_file="${1:-}"
+                [ -n "$check_file" ] || { usage; exit 1; }
+                shift
+                ;;
+            --random) random_flag=1; shift ;;
+            -h|--help) usage; exit 0 ;;
+            -*)
+                echo "Unknown option: $1" >&2
+                usage
+                exit 1
+                ;;
+            *)
+                file_arg="$1"
+                shift
+                ;;
+        esac
+    done
+
+    case "$mode" in
+        list) cmd_list ;;
+        check) cmd_check "$check_file" ;;
+        recolor) cmd_recolor "$file_arg" "$random_flag" ;;
+    esac
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
+fi

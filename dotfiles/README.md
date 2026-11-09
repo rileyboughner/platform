@@ -61,6 +61,7 @@ Credentials (git PATs per GitHub org, Todoist/gcalcli tokens, inter-host SSH key
 | `scripts/theme-set <name>` | Pins a named theme from `config/themes/*.json` (or `~/.config/themes/`): applies it through `wal --theme`, regenerates the derived HyprToolkit/qt6ct files, persists the choice to `~/.cache/theme/current`, and reloads every themed app. `boner theme set <name>` is a thin wrapper around this. |
 | `scripts/theme-auto` | Clears the pin and regenerates pywal colors from the current wallpaper, returning to pure wallpaper-driven color. `boner theme auto` wraps this. |
 | `scripts/restore-theme` | Reapplies the pinned theme (or Graphite, the default, if none is pinned) on login, after `restore-wallpaper`. |
+| `scripts/wallpaper-recolor [file]` | Recolors a wallpaper into the active theme (grayscale ramp for monochrome themes like Graphite, palette quantization for colorful ones) and sets the result via `set-wallpaper`. With no file, recolors the current wallpaper, or picks the best color-matching image from `~/.wallpapers` if there is none. `boner wallpaper recolor` wraps this; see `--help` for `--list`/`--check`/`--random`. |
 | `scripts/lib/theme-common.sh` | Shared shell functions (theme resolution/listing, the pywal apply call, HyprToolkit/qt6ct generation, the full reload sequence) sourced by `set-wallpaper`, `theme-set`, `theme-auto`, and `restore-theme` so none of them can drift from the others. |
 
 ## Wallpaper & theming
@@ -92,6 +93,31 @@ wallpaper decide:
 - This is unrelated to `theme/` at the repo root (the Rosé Pine design
   tokens for the launcher/web) -- see that directory's README for how the
   two systems differ.
+
+### Recoloring a wallpaper into a theme
+`boner wallpaper recolor [file]` (`scripts/wallpaper-recolor`) recolors a
+wallpaper into whatever theme is active -- this is a real ImageMagick
+color remap, not a tint/overlay:
+- **Monochrome themes (Graphite, the default, included):** the image is
+  desaturated to true grayscale, then its luminance range is remapped
+  onto the theme's gray ramp (background = black point, foreground =
+  white point), so the result is genuinely monochrome with good
+  contrast rather than washed out.
+- **Colorful themes:** the image's colors are quantized/remapped onto
+  the theme's 16-color palette directly.
+- With no file argument, it recolors the current wallpaper. With no
+  current wallpaper either, it scores every image in `~/.wallpapers`
+  against the active theme's palette (closest dominant colors win --
+  low-saturation images score highest for monochrome themes, matching
+  hues score highest for colorful ones) and recolors the best match.
+- The recolored image is cached under
+  `~/.cache/wallpapers/recolored/<theme>/` -- the original file is never
+  modified -- then set via `set-wallpaper`, so a pinned theme survives
+  exactly as it does for any other wallpaper change.
+- `--list` shows the ranked candidates without changing anything,
+  `--check <file>` reports how a specific file would score/remap without
+  changing anything, and `--random` picks a random candidate instead of
+  the best-scoring one. See `wallpaper-recolor --help` for details.
 
 ## The bar (Quickshell)
 `config/quickshell/shell.qml` is a Hyprland-aware status bar with right-click pickers backed directly by Quickshell's native service bindings (no shelling out to `wpctl`/`bluetoothctl`/`nmcli`):
