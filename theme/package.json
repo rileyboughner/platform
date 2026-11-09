@@ -1,0 +1,13 @@
+{
+  "name": "@platform/theme",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Rose Pine design tokens, built with Style Dictionary into Nix, Android, and CSS outputs.",
+  "scripts": {
+    "build": "style-dictionary build --config config.js"
+  },
+  "devDependencies": {
+    "style-dictionary": "^4.0.0"
+  }
+}

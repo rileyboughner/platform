@@ -1,0 +1,63 @@
+/**
+ * Do not edit directly, this file was auto-generated.
+ */
+
+:root {
+  --color-base: #191724; /** Rose Pine base */
+  --color-surface: #1f1d2e;
+  --color-overlay: #26233a;
+  --color-muted: #6e6a86;
+  --color-subtle: #908caa;
+  --color-text: #e0def4;
+  --color-love: #eb6f92;
+  --color-gold: #f6c177;
+  --color-rose: #ebbcba;
+  --color-pine: #31748f;
+  --color-foam: #9ccfd8;
+  --color-iris: #c4a7e7;
+  --color-highlight-low: #21202e;
+  --color-highlight-med: #403d52;
+  --color-highlight-high: #524f67;
+  --color-semantic-background: #191724; /** App/page background */
+  --color-semantic-surface: #1f1d2e; /** Raised panels, cards */
+  --color-semantic-overlay: #26233a; /** Modals, popovers, scrim */
+  --color-semantic-text: #e0def4; /** Primary text */
+  --color-semantic-text-muted: #6e6a86; /** Secondary text */
+  --color-semantic-text-subtle: #908caa; /** Placeholder, disabled text */
+  --color-semantic-accent: #c4a7e7; /** Primary interactive accent */
+  --color-semantic-accent-secondary: #9ccfd8; /** Secondary interactive accent */
+  --color-semantic-success: #31748f;
+  --color-semantic-warning: #f6c177;
+  --color-semantic-error: #eb6f92;
+  --color-semantic-info: #9ccfd8;
+  --color-semantic-border: #403d52;
+  --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; /** System sans stack, no webfont downloads */
+  --font-family-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; /** System mono stack, no webfont downloads */
+  --font-size-12: 12px;
+  --font-size-14: 14px;
+  --font-size-16: 16px;
+  --font-size-20: 20px;
+  --font-size-24: 24px;
+  --font-size-32: 32px;
+  --font-size-48: 48px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+  --font-line-height-tight: 1.2;
+  --font-line-height-normal: 1.5;
+  --font-line-height-loose: 1.8;
+  --spacing-0: 0px;
+  --spacing-4: 4px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-48: 48px;
+  --spacing-64: 64px;
+  --radius-none: 0px;
+  --radius-small: 4px;
+  --radius-medium: 8px;
+  --radius-large: 16px;
+  --radius-full: 9999px;
+}

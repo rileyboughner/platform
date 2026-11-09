@@ -1,0 +1,10 @@
+node_modules/
+.gradle/
+*.iml
+.DS_Store
+
+# build/ output is ignored everywhere except theme/build/, which is
+# committed so consumers don't need Node to use the generated theme outputs.
+build/
+!theme/build/
+!theme/build/**

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Do not edit directly, this file was auto-generated.
+-->
+<resources>
+  <color name="color_base">#ff191724</color><!-- Rose Pine base -->
+  <color name="color_surface">#ff1f1d2e</color>
+  <color name="color_overlay">#ff26233a</color>
+  <color name="color_muted">#ff6e6a86</color>
+  <color name="color_subtle">#ff908caa</color>
+  <color name="color_text">#ffe0def4</color>
+  <color name="color_love">#ffeb6f92</color>
+  <color name="color_gold">#fff6c177</color>
+  <color name="color_rose">#ffebbcba</color>
+  <color name="color_pine">#ff31748f</color>
+  <color name="color_foam">#ff9ccfd8</color>
+  <color name="color_iris">#ffc4a7e7</color>
+  <color name="color_highlight_low">#ff21202e</color>
+  <color name="color_highlight_med">#ff403d52</color>
+  <color name="color_highlight_high">#ff524f67</color>
+  <color name="color_semantic_background">#ff191724</color><!-- App/page background -->
+  <color name="color_semantic_surface">#ff1f1d2e</color><!-- Raised panels, cards -->
+  <color name="color_semantic_overlay">#ff26233a</color><!-- Modals, popovers, scrim -->
+  <color name="color_semantic_text">#ffe0def4</color><!-- Primary text -->
+  <color name="color_semantic_text_muted">#ff6e6a86</color><!-- Secondary text -->
+  <color name="color_semantic_text_subtle">#ff908caa</color><!-- Placeholder, disabled text -->
+  <color name="color_semantic_accent">#ffc4a7e7</color><!-- Primary interactive accent -->
+  <color name="color_semantic_accent_secondary">#ff9ccfd8</color><!-- Secondary interactive accent -->
+  <color name="color_semantic_success">#ff31748f</color>
+  <color name="color_semantic_warning">#fff6c177</color>
+  <color name="color_semantic_error">#ffeb6f92</color>
+  <color name="color_semantic_info">#ff9ccfd8</color>
+  <color name="color_semantic_border">#ff403d52</color>
+</resources>

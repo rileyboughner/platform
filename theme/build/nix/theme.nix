@@ -1,0 +1,34 @@
+# GENERATED FILE. Do not hand-edit.
+# Source: theme/tokens.json, built by Style Dictionary (see theme/config.js).
+# Import into a home-manager module, e.g.:
+#   theme = import ./theme.nix;
+{
+    color-base = "#191724";
+    color-surface = "#1f1d2e";
+    color-overlay = "#26233a";
+    color-muted = "#6e6a86";
+    color-subtle = "#908caa";
+    color-text = "#e0def4";
+    color-love = "#eb6f92";
+    color-gold = "#f6c177";
+    color-rose = "#ebbcba";
+    color-pine = "#31748f";
+    color-foam = "#9ccfd8";
+    color-iris = "#c4a7e7";
+    color-highlight-low = "#21202e";
+    color-highlight-med = "#403d52";
+    color-highlight-high = "#524f67";
+    color-semantic-background = "#191724";
+    color-semantic-surface = "#1f1d2e";
+    color-semantic-overlay = "#26233a";
+    color-semantic-text = "#e0def4";
+    color-semantic-text-muted = "#6e6a86";
+    color-semantic-text-subtle = "#908caa";
+    color-semantic-accent = "#c4a7e7";
+    color-semantic-accent-secondary = "#9ccfd8";
+    color-semantic-success = "#31748f";
+    color-semantic-warning = "#f6c177";
+    color-semantic-error = "#eb6f92";
+    color-semantic-info = "#9ccfd8";
+    color-semantic-border = "#403d52";
+}

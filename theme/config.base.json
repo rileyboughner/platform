@@ -1,0 +1,63 @@
+{
+  "source": ["tokens.json"],
+  "platforms": {
+    "nix": {
+      "transformGroup": "css",
+      "buildPath": "build/nix/",
+      "files": [
+        {
+          "destination": "theme.nix",
+          "format": "nix/attrset",
+          "filter": { "type": "color" }
+        },
+        {
+          "destination": "theme.json",
+          "format": "nix/json",
+          "filter": { "type": "color" }
+        }
+      ]
+    },
+    "android": {
+      "transformGroup": "android",
+      "buildPath": "build/android/",
+      "files": [
+        {
+          "destination": "colors.xml",
+          "format": "android/resources",
+          "filter": { "type": "color" }
+        },
+        {
+          "destination": "Theme.kt",
+          "format": "compose/theme",
+          "filter": { "type": "color" }
+        }
+      ]
+    },
+    "css": {
+      "transforms": [
+        "attribute/cti",
+        "name/kebab",
+        "time/seconds",
+        "html/icon",
+        "size/px",
+        "color/css",
+        "asset/url",
+        "fontFamily/css",
+        "cubicBezier/css",
+        "strokeStyle/css/shorthand",
+        "border/css/shorthand",
+        "typography/css/shorthand",
+        "transition/css/shorthand",
+        "shadow/css/shorthand"
+      ],
+      "buildPath": "build/css/",
+      "files": [
+        {
+          "destination": "variables.css",
+          "format": "css/variables",
+          "options": { "outputReferences": false }
+        }
+      ]
+    }
+  }
+}
