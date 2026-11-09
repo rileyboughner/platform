@@ -1,0 +1,31 @@
+{
+    "_name": "Solarized Dark",
+    "_feel": "Ethan Schoonover's precision-tuned low-contrast theme -- teal-tinted dark base with muted accent colors.",
+    "_source": "https://github.com/dexpota/kitty-themes/blob/master/themes/Solarized_Dark.conf (community port of ethanschoonover/solarized)",
+    "checksum": "None",
+    "wallpaper": "None",
+    "alpha": "100",
+    "special": {
+        "background": "#001e26",
+        "foreground": "#708183",
+        "cursor": "#708183"
+    },
+    "colors": {
+        "color0": "#002731",
+        "color1": "#d01b24",
+        "color2": "#728905",
+        "color3": "#a57705",
+        "color4": "#2075c7",
+        "color5": "#c61b6e",
+        "color6": "#259185",
+        "color7": "#e9e2cb",
+        "color8": "#001e26",
+        "color9": "#bd3612",
+        "color10": "#465a61",
+        "color11": "#52676f",
+        "color12": "#708183",
+        "color13": "#5856b9",
+        "color14": "#81908f",
+        "color15": "#fcf4dc"
+    }
+}

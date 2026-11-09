@@ -1,0 +1,31 @@
+{
+    "_name": "Graphite",
+    "_feel": "Default theme. Near-black, true monochrome (zero saturation) -- hierarchy comes from brightness/weight alone, not hue.",
+    "_source": "Custom, designed for this repo.",
+    "checksum": "None",
+    "wallpaper": "None",
+    "alpha": "100",
+    "special": {
+        "background": "#0b0b0c",
+        "foreground": "#e6e6e6",
+        "cursor": "#e6e6e6"
+    },
+    "colors": {
+        "color0": "#0b0b0c",
+        "color1": "#5e5e5e",
+        "color2": "#727272",
+        "color3": "#868686",
+        "color4": "#c9c9c9",
+        "color5": "#9a9a9a",
+        "color6": "#aeaeae",
+        "color7": "#cfcfcf",
+        "color8": "#3a3a3a",
+        "color9": "#707070",
+        "color10": "#868686",
+        "color11": "#9a9a9a",
+        "color12": "#d8d8d8",
+        "color13": "#aeaeae",
+        "color14": "#c2c2c2",
+        "color15": "#f2f2f2"
+    }
+}

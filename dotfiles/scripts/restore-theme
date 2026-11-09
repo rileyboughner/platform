@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+DOTFILES_TARGET="$HOME/.platform/dotfiles"
+# shellcheck source=lib/theme-common.sh
+. "$DOTFILES_TARGET/scripts/lib/theme-common.sh"
+
+# No pinned theme means Graphite -- it's the default, not just a
+# fallback baked in somewhere else.
+NAME=$(theme_active_name) || NAME="graphite"
+
+theme_apply "$NAME"
+theme_write_derived
+theme_reload_all

@@ -55,6 +55,11 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("kdeconnectd")
 	hl.exec_cmd("pypr")
 	hl.exec_cmd("restore-wallpaper")
+	-- restore-theme re-applies the pinned theme (or Graphite, the
+	-- default, if none is pinned) on top of whatever restore-wallpaper
+	-- just did, since restore-wallpaper only re-sets the wallpaper
+	-- image and doesn't touch pywal colors.
+	hl.exec_cmd("restore-theme")
 	-- Pre-warm Firefox so Super+F opens a window on an already-running
 	-- process instead of paying a full cold start. Firefox's own remoting
 	-- protocol makes opening a window on an already-running instance
@@ -427,6 +432,7 @@ hl.bind(
 )
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("quickshell ipc call wallpaper toggle"))
 hl.bind(mainMod .. " + ALT + W", hl.dsp.exec_cmd("random-wallpaper"))
+hl.bind(mainMod .. " + ALT + T", hl.dsp.exec_cmd("quickshell ipc call theme toggle"))
 hl.bind(mainMod .. " + F", hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd(browser .. " https://uc.instructure.com/"))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))

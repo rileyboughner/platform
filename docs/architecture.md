@@ -25,9 +25,15 @@ a generated Compose `Color` object, and CSS custom properties. Define
 once, generate N outputs, instead of hand-copying hex values across
 three ecosystems.
 
-Rosé Pine is frozen as the fixed cross-device identity. It does not
-replace pywal, which stays wallpaper-reactive, local-only flair on
-Linux desktop/laptop.
+Rosé Pine is frozen as the fixed cross-device identity for the
+launcher/web (`theme/tokens.json`). It does not replace pywal, which
+stays wallpaper-reactive, local-only flair on Linux desktop/laptop.
+The desktop also has its own switchable theme system
+(`dotfiles/config/themes/`, driven by `boner theme` / a Quickshell
+picker on `SUPER+ALT+T`) with ~11 pywal-shaped color schemes,
+including Rosé Pine as one option; its default is a custom dark
+monochrome theme ("Graphite"), not Rosé Pine. The two systems don't
+talk to each other -- see `theme/README.md` and `dotfiles/README.md`.
 
 Limits: apps the launcher only launches into (Jellyfin, Home Assistant
 Companion, Google Messages) aren't retheme-able beyond what they

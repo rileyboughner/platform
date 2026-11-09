@@ -48,6 +48,18 @@
       install -Dm755 ${../../scripts/restore-wallpaper} $out/bin/restore-wallpaper
     '')
 
+    (pkgs.runCommand "theme-set" { } ''
+      install -Dm755 ${../../scripts/theme-set} $out/bin/theme-set
+    '')
+
+    (pkgs.runCommand "theme-auto" { } ''
+      install -Dm755 ${../../scripts/theme-auto} $out/bin/theme-auto
+    '')
+
+    (pkgs.runCommand "restore-theme" { } ''
+      install -Dm755 ${../../scripts/restore-theme} $out/bin/restore-theme
+    '')
+
     (pkgs.runCommand "prewarm-scratchpads" { } ''
       install -Dm755 ${../../scripts/prewarm-scratchpads} $out/bin/prewarm-scratchpads
     '')

@@ -1,0 +1,31 @@
+{
+    "_name": "Nord",
+    "_feel": "Arctic, north-bluish theme -- muted blue-gray with icy accent colors.",
+    "_source": "https://github.com/connorholyday/nord-kitty/blob/master/nord.conf (widely-cited Nord port; nordtheme.com has no first-party kitty theme)",
+    "checksum": "None",
+    "wallpaper": "None",
+    "alpha": "100",
+    "special": {
+        "background": "#2e3440",
+        "foreground": "#d8dee9",
+        "cursor": "#81a1c1"
+    },
+    "colors": {
+        "color0": "#3b4252",
+        "color1": "#bf616a",
+        "color2": "#a3be8c",
+        "color3": "#ebcb8b",
+        "color4": "#81a1c1",
+        "color5": "#b48ead",
+        "color6": "#88c0d0",
+        "color7": "#e5e9f0",
+        "color8": "#4c566a",
+        "color9": "#bf616a",
+        "color10": "#a3be8c",
+        "color11": "#ebcb8b",
+        "color12": "#81a1c1",
+        "color13": "#b48ead",
+        "color14": "#8fbcbb",
+        "color15": "#eceff4"
+    }
+}

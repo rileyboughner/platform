@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+NAME="${1:-}"
+if [ -z "$NAME" ]; then
+    echo "Usage: theme-set <name>" >&2
+    exit 1
+fi
+
+DOTFILES_TARGET="$HOME/.platform/dotfiles"
+# shellcheck source=lib/theme-common.sh
+. "$DOTFILES_TARGET/scripts/lib/theme-common.sh"
+
+theme_apply "$NAME"
+theme_write_derived
+
+# Persisted before the reload sequence: the reload steps below depend on
+# a running Hyprland session and are expected to fail on a machine
+# without one (e.g. this repo's headless server) -- the user's choice
+# should still stick even if that happens.
+theme_save_state "$NAME"
+
+theme_reload_all

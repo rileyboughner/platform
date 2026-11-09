@@ -1,0 +1,31 @@
+{
+    "_name": "Kanagawa",
+    "_feel": "Muted, ink-wash theme inspired by Hokusai's \"The Great Wave\" -- desaturated blues/greens/reds on warm dark gray.",
+    "_source": "https://github.com/kovidgoyal/kitty-themes/blob/master/themes/kanagawa.conf (bundled with kitty, ported from rebelot/kanagawa.nvim)",
+    "checksum": "None",
+    "wallpaper": "None",
+    "alpha": "100",
+    "special": {
+        "background": "#1f1f28",
+        "foreground": "#dcd7ba",
+        "cursor": "#c8c093"
+    },
+    "colors": {
+        "color0": "#16161d",
+        "color1": "#c34043",
+        "color2": "#76946a",
+        "color3": "#c0a36e",
+        "color4": "#7e9cd8",
+        "color5": "#957fb8",
+        "color6": "#6a9589",
+        "color7": "#c8c093",
+        "color8": "#727169",
+        "color9": "#e82424",
+        "color10": "#98bb6c",
+        "color11": "#e6c384",
+        "color12": "#7fb4ca",
+        "color13": "#938aa9",
+        "color14": "#7aa89f",
+        "color15": "#dcd7ba"
+    }
+}

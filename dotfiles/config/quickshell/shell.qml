@@ -177,6 +177,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         bluetoothPopup.visible = false
         wallpaperPopup.visible = false
         calendarPopup.visible = false
+        themePopup.visible = false
 
         target.visible = !wasVisible
     }
@@ -620,6 +621,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(wallpaperPopup)
+        }
+    }
+
+    IpcHandler {
+        target: "theme"
+
+        function toggle(): void {
+            root.togglePopup(themePopup)
         }
     }
 
@@ -1969,6 +1978,312 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
                         onClicked: {
                             wallpaperPopup.applyWallpaper(fileCell.modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // Theme Picker
+    // ─────────────────────────────────────────────
+    //
+    // No rofi/wofi/similar launcher exists anywhere in this dotfiles
+    // setup (hyprlauncher is the app launcher, not a generic menu), so
+    // this follows the wallpaperPopup pattern already established just
+    // above instead of adding a new picker dependency: a PanelWindow
+    // listing `theme-set`'s targets, built the same way (flat here --
+    // themes don't have wallpaperPopup's theme/file two-level nesting).
+
+    PanelWindow {
+        id: themePopup
+
+        property var themes: []
+        property int selectedIndex: 0
+
+        readonly property var filteredThemes: themePopup.themes.filter(
+            (t) => t.toLowerCase().includes(themeSearchInput.text.toLowerCase())
+        )
+
+        function applyTheme(name) {
+            themeSetProcess.command = ["theme-set", name]
+            themeSetProcess.running = true
+            themePopup.visible = false
+        }
+
+        function moveSelection(delta) {
+            const count = themePopup.filteredThemes.length
+            if (count === 0) {
+                themePopup.selectedIndex = 0
+                return
+            }
+            let next = themePopup.selectedIndex + delta
+            if (next < 0) next = 0
+            if (next >= count) next = count - 1
+            themePopup.selectedIndex = next
+        }
+
+        function activateSelection() {
+            const name = themePopup.filteredThemes[themePopup.selectedIndex]
+            if (name) themePopup.applyTheme(name)
+        }
+
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        WlrLayershell.namespace: "theme-picker"
+
+        anchors.top: true
+        anchors.bottom: true
+        anchors.left: true
+        anchors.right: true
+
+        exclusionMode: ExclusionMode.Ignore
+
+        color: "transparent"
+        visible: false
+
+        onVisibleChanged: {
+            if (visible) {
+                themePopup.selectedIndex = 0
+                themeSearchInput.text = ""
+                themeListProcess.running = true
+                Qt.callLater(() => themeSearchInput.forceActiveFocus())
+            }
+        }
+
+        Process {
+            id: themeListProcess
+
+            // Repo themes first, then any machine-local ones under
+            // ~/.config/themes -- same resolution order as theme-common.sh's
+            // theme_list(), kept here as a plain shell one-liner (same
+            // reasoning as wallpaperThemesProcess above: no new script
+            // needed just to list files).
+            command: [
+                "sh", "-c",
+                'find "$1" "$2" -mindepth 1 -maxdepth 1 -name "*.json" -printf "%f\\n" 2>/dev/null | sed "s/\\.json$//" | sort -u',
+                "_",
+                Quickshell.env("HOME") + "/.platform/dotfiles/config/themes",
+                Quickshell.env("HOME") + "/.config/themes"
+            ]
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    themePopup.themes = text.trim().split("\n").filter((t) => t.length > 0)
+                }
+            }
+        }
+
+        Process {
+            id: themeSetProcess
+        }
+
+        MouseArea {
+            anchors.fill: parent
+
+            onClicked: themePopup.visible = false
+
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0, 0, 0, 0.35)
+            }
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+
+            width: 360
+            height: 420
+
+            radius: 10
+            color: root.colBg
+            border.color: root.colMuted
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {}
+            }
+
+            Rectangle {
+                id: themeHeader
+
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 8
+
+                height: 28
+
+                radius: 6
+                color: "transparent"
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+
+                    text: "Choose a Theme"
+
+                    color: root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize
+                        bold: true
+                    }
+                }
+            }
+
+            Rectangle {
+                id: themeSearchBox
+
+                anchors.top: themeHeader.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 8
+                anchors.topMargin: 4
+
+                height: 28
+
+                radius: 6
+                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                border.color: root.colMuted
+                border.width: 1
+
+                TextInput {
+                    id: themeSearchInput
+
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: TextInput.AlignVCenter
+
+                    color: root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize
+                    }
+
+                    onTextChanged: {
+                        themePopup.selectedIndex = 0
+                    }
+
+                    Keys.onEscapePressed: {
+                        if (themeSearchInput.text.length > 0) {
+                            themeSearchInput.text = ""
+                        } else {
+                            themePopup.visible = false
+                        }
+                    }
+
+                    Keys.onUpPressed: (event) => {
+                        themePopup.moveSelection(-1)
+                        event.accepted = true
+                    }
+
+                    Keys.onDownPressed: (event) => {
+                        themePopup.moveSelection(1)
+                        event.accepted = true
+                    }
+
+                    Keys.onTabPressed: (event) => {
+                        themePopup.moveSelection(1)
+                        event.accepted = true
+                    }
+
+                    Keys.onBacktabPressed: (event) => {
+                        themePopup.moveSelection(-1)
+                        event.accepted = true
+                    }
+
+                    Keys.onReturnPressed: (event) => {
+                        themePopup.activateSelection()
+                        event.accepted = true
+                    }
+
+                    Keys.onEnterPressed: (event) => {
+                        themePopup.activateSelection()
+                        event.accepted = true
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+
+                        visible: themeSearchInput.text.length === 0
+
+                        text: "Search themes…"
+
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+                }
+            }
+
+            ListView {
+                anchors.top: themeSearchBox.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 8
+                anchors.topMargin: 4
+
+                clip: true
+                spacing: 2
+
+                model: themePopup.filteredThemes
+                currentIndex: themePopup.selectedIndex
+
+                delegate: Rectangle {
+                    id: themePickRow
+
+                    required property string modelData
+                    required property int index
+
+                    width: ListView.view.width
+                    height: 28
+
+                    radius: 6
+                    color: (themePickRowArea.containsMouse || themePickRow.index === themePopup.selectedIndex)
+                        ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
+                        : "transparent"
+
+                    MouseArea {
+                        id: themePickRowArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+
+                        onClicked: {
+                            themePopup.applyTheme(themePickRow.modelData)
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+
+                            elide: Text.ElideRight
+
+                            text: themePickRow.modelData
+                                .replace(/[-_]/g, " ")
+                                .replace(/\b\w/g, (c) => c.toUpperCase())
+
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                            }
                         }
                     }
                 }

@@ -11,6 +11,16 @@ This is unrelated to pywal: pywal stays wallpaper-driven, local-only
 flair on the Linux desktop/laptop. These tokens are the fixed palette
 that cross-device things (launcher, dashboard) build against.
 
+Rosé Pine is frozen here as the cross-device identity, but it is no
+longer the only -- or the default -- desktop look: `dotfiles/` has its
+own switchable theme system (see `dotfiles/README.md`'s "Wallpaper &
+theming" section and `dotfiles/config/themes/`), whose default is a
+custom dark monochrome theme ("Graphite"), with Rosé Pine kept there
+as one option among ~11. That default lives entirely in the theme
+system's own files, not here -- `tokens.json` is not touched by it and
+stays Rosé Pine-only, since it serves a different, cross-device
+purpose (launcher/web) than the desktop pywal theme switcher.
+
 ## Layout
 
 - `tokens.json` — the tokens themselves, in Style Dictionary's

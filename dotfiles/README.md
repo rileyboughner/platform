@@ -58,12 +58,40 @@ Credentials (git PATs per GitHub org, Todoist/gcalcli tokens, inter-host SSH key
 | `scripts/set-wallpaper <path>` | Applies a specific wallpaper: sets it via hyprpaper, regenerates pywal colors, persists the choice to `~/.wallpaper`, and reloads every themed app (Hyprland, mako, swayosd, Quickshell, Neovim, Hyprlauncher). |
 | `scripts/random-wallpaper` | Picks a random image from `~/.wallpapers/nature` and hands it to `set-wallpaper`. |
 | `scripts/restore-wallpaper` | Reapplies the last wallpaper from `~/.wallpaper` on login, falling back to `random-wallpaper` if none is set yet. Doesn't redo the pywal/reload work, since that already happened when the wallpaper was originally chosen. |
+| `scripts/theme-set <name>` | Pins a named theme from `config/themes/*.json` (or `~/.config/themes/`): applies it through `wal --theme`, regenerates the derived HyprToolkit/qt6ct files, persists the choice to `~/.cache/theme/current`, and reloads every themed app. `boner theme set <name>` is a thin wrapper around this. |
+| `scripts/theme-auto` | Clears the pin and regenerates pywal colors from the current wallpaper, returning to pure wallpaper-driven color. `boner theme auto` wraps this. |
+| `scripts/restore-theme` | Reapplies the pinned theme (or Graphite, the default, if none is pinned) on login, after `restore-wallpaper`. |
+| `scripts/lib/theme-common.sh` | Shared shell functions (theme resolution/listing, the pywal apply call, HyprToolkit/qt6ct generation, the full reload sequence) sourced by `set-wallpaper`, `theme-set`, `theme-auto`, and `restore-theme` so none of them can drift from the others. |
 
 ## Wallpaper & theming
 - `SUPER+W` opens a centered wallpaper picker in the Quickshell bar: pick a theme folder from `~/.wallpapers`, then a wallpaper from a live-searchable, keyboard-navigable image grid.
 - `SUPER+ALT+W` picks a random wallpaper from the `nature` folder instead.
 - Whatever you pick persists across reboots via a `~/.wallpaper` symlink, restored on login by `restore-wallpaper`.
 - Every choice regenerates [pywal](https://github.com/eylles/pywal16) colors, which theme the terminal, Neovim, mako, swayosd, and the Quickshell bar via templates in `config/wal/templates/`.
+
+### Named themes (color, independent of wallpaper)
+On top of pywal's normal wallpaper-driven colors, `config/themes/*.json` holds a
+set of pywal-shaped color schemes you can pin by name instead of letting the
+wallpaper decide:
+
+- `SUPER+ALT+T` opens a Quickshell theme picker (same pattern as the wallpaper
+  picker above) listing every theme in `config/themes/` (plus any local-only
+  ones under `~/.config/themes/`).
+- `boner theme list` / `boner theme current` / `boner theme set <name>` /
+  `boner theme auto` drive the same thing from a terminal.
+- **Graphite** (near-black, true monochrome) is the default: with nothing
+  pinned, `boner theme current` reports `graphite` and login applies it.
+- Pinning a theme survives wallpaper changes -- `set-wallpaper` re-applies
+  the pinned theme after `wal -i` so a new wallpaper image doesn't clobber
+  your chosen colors. `boner theme auto` un-pins and goes back to normal
+  wallpaper-driven color.
+- Bundled themes: Graphite (default), Catppuccin Mocha, Gruvbox Dark, Tokyo
+  Night, Nord, Dracula, Everforest Dark, Kanagawa, One Dark, Rosé Pine,
+  Solarized Dark. Each `.json` file has a `_name`/`_feel`/`_source` header
+  noting where its colors came from.
+- This is unrelated to `theme/` at the repo root (the Rosé Pine design
+  tokens for the launcher/web) -- see that directory's README for how the
+  two systems differ.
 
 ## The bar (Quickshell)
 `config/quickshell/shell.qml` is a Hyprland-aware status bar with right-click pickers backed directly by Quickshell's native service bindings (no shelling out to `wpctl`/`bluetoothctl`/`nmcli`):

@@ -1,0 +1,31 @@
+{
+    "_name": "Everforest Dark",
+    "_feel": "Soft, warm forest-green theme -- low-contrast, easy on the eyes. Matches the GTK Everforest-Dark-BL-LB theme already used on this system.",
+    "_source": "https://github.com/ewal/kitty-everforest/blob/master/themes/everforest_dark_medium.conf (port of sainnhe/everforest, medium contrast)",
+    "checksum": "None",
+    "wallpaper": "None",
+    "alpha": "100",
+    "special": {
+        "background": "#2f383e",
+        "foreground": "#d3c6aa",
+        "cursor": "#d3c6aa"
+    },
+    "colors": {
+        "color0": "#374247",
+        "color1": "#e67e80",
+        "color2": "#a7c080",
+        "color3": "#dbbc7f",
+        "color4": "#7fbbb3",
+        "color5": "#d699b6",
+        "color6": "#83c092",
+        "color7": "#859289",
+        "color8": "#404c51",
+        "color9": "#e67e80",
+        "color10": "#a7c080",
+        "color11": "#dbbc7f",
+        "color12": "#7fbbb3",
+        "color13": "#d699b6",
+        "color14": "#83c092",
+        "color15": "#9da9a0"
+    }
+}

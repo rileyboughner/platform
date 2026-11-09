@@ -47,6 +47,13 @@ _rows_wallpaper() {
     _row "wallpaper warm"       "Pre-cache pywal colors for every wallpaper"
 }
 
+_rows_theme() {
+    _row "theme list"       "List available themes"
+    _row "theme current"    "Show the active theme (graphite if none is pinned)"
+    _row "theme set <name>" "Pin a theme; survives wallpaper changes until 'theme auto'"
+    _row "theme auto"       "Unpin, return to pure wallpaper-driven pywal colors"
+}
+
 _rows_secrets() {
     _row "secrets"               "List agenix secrets decryptable by this key/host"
     _row "secrets update <name>" "Edit/create a secret (opens \$EDITOR via agenix)"
@@ -66,6 +73,11 @@ _usage_wallpaper() {
 _usage_secrets() {
     printf 'Usage: boner secrets %s[update <name>]%s\n\n' "$dim" "$reset" >&2
     _rows_secrets
+}
+
+_usage_theme() {
+    printf 'Usage: boner theme %s<subcommand>%s [args]\n\n' "$dim" "$reset" >&2
+    _rows_theme
 }
 
 _usage_vm() {
@@ -157,6 +169,44 @@ cmd_secrets_update() {
         echo "" >&2
         echo "$name changed -- commit it and run 'boner rebuild' for it to take effect." >&2
     fi
+}
+
+cmd_theme() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        list) cmd_theme_list ;;
+        current) cmd_theme_current ;;
+        set)
+            shift
+            if [ -z "${1:-}" ]; then
+                _usage_theme
+                exit 1
+            fi
+            # Absolute path, not PATH lookup: the theme files and the
+            # shared theme-common.sh lib this sources both live in the
+            # repo checkout, so this works right after `git pull` with
+            # no rebuild needed (theme-set itself only needs a rebuild
+            # to be reachable by *name* from Hyprland/Quickshell).
+            exec "$DOTFILES_TARGET/scripts/theme-set" "$1"
+            ;;
+        auto) exec "$DOTFILES_TARGET/scripts/theme-auto" ;;
+        *)
+            _usage_theme
+            exit 1
+            ;;
+    esac
+}
+
+cmd_theme_list() {
+    # shellcheck source=lib/theme-common.sh
+    . "$DOTFILES_TARGET/scripts/lib/theme-common.sh"
+    theme_list
+}
+
+cmd_theme_current() {
+    # shellcheck source=lib/theme-common.sh
+    . "$DOTFILES_TARGET/scripts/lib/theme-common.sh"
+    theme_active_name || echo graphite
 }
 
 cmd_vm() {
@@ -281,6 +331,10 @@ print_usage() {
     _rows_wallpaper
     echo >&2
 
+    _section "Theme"
+    _rows_theme
+    echo >&2
+
     _section "Secrets"
     _rows_secrets
     echo >&2
@@ -298,6 +352,7 @@ case "${1:-}" in
     secrets) cmd_secrets "${@:2}" ;;
     vm) cmd_vm "${@:2}" ;;
     wallpaper) cmd_wallpaper "${@:2}" ;;
+    theme) cmd_theme "${@:2}" ;;
     help|-h|--help) print_usage ;;
     *)
         print_usage
