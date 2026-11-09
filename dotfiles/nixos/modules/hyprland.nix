@@ -80,7 +80,6 @@
     swayosd
     gcalcli
     gtk3
-    brave
     kitty
     swaybg
     wl-clipboard
