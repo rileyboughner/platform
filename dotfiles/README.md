@@ -41,10 +41,10 @@ Credentials (git PATs per GitHub org, Todoist/gcalcli tokens, inter-host SSH key
 
 ## Install
 1. Install NixOS.
-2. Clone this repo anywhere and run its install script — it moves itself to `~/.dotfiles`, stows `config/` into `~/.config` with GNU Stow, and clones a wallpaper collection into `~/.wallpapers`:
+2. Clone the platform repo anywhere and run the dotfiles install script — it moves the dotfiles directory to `~/.platform/dotfiles`, stows `config/` into `~/.config` with GNU Stow, and clones a wallpaper collection into `~/.wallpapers`:
    ```bash
-   git clone https://github.com/BonerLinux/dotfiles.git
-   ./dotfiles/scripts/boner install
+   git clone https://github.com/rileyboughner/platform.git
+   ./platform/dotfiles/scripts/boner install
    ```
 3. Rebuild the system for the current host:
    ```bash

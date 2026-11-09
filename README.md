@@ -14,12 +14,14 @@ platform/
   theme/      # design tokens (Rosé Pine) + Style Dictionary build -> Nix, Android, CSS
   launcher/   # Android launcher (phone/tablet/Google TV) - not built yet
   dashboard/  # cross-device web dashboard - not built yet
+  dotfiles/   # NixOS/home-manager machine-provisioning repo (merged with history, formerly BonerLinux/dotfiles) -> flake at dotfiles/nixos/flake.nix
   docs/       # architecture notes, device inventory, network/identity model
 ```
 
-`dotfiles` (NixOS/home-manager, separate repo) stays the
-machine-provisioning repo for server/desktop/laptop. This repo is
-cross-device app code and design assets — a different kind of thing.
+`dotfiles/` is the machine-provisioning repo for server/desktop/laptop
+(NixOS/home-manager), merged into this repo with its full git history
+now that the BonerLinux org is being retired. Its NixOS flake lives at
+`dotfiles/nixos/flake.nix`.
 
 ## Goal
 

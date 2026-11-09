@@ -56,7 +56,7 @@
       name = "vm-cyber-defence";
       desktopName = "cyber-defence (VM)";
       comment = "Connect to the cyber-defence VM hosted on server";
-      exec = "/home/${username}/.dotfiles/scripts/boner vm cyber-defence";
+      exec = "/home/${username}/.platform/dotfiles/scripts/boner vm cyber-defence";
       icon = "virt-viewer";
       terminal = false;
       categories = [ "System" ];

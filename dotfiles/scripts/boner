@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOTFILES_TARGET="$HOME/.dotfiles"
+DOTFILES_TARGET="$HOME/.platform/dotfiles"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 
@@ -33,7 +33,7 @@ _section() { printf '%s%s%s\n' "$head" "$1" "$reset" >&2; }
 _row() { printf '  %s%-22s%s%s\n' "$bold" "$1" "$reset" "$2" >&2; }
 
 _rows_setup() {
-    _row "install"  "Move dotfiles to ~/.dotfiles, stow configs, clone wallpapers"
+    _row "install"  "Move dotfiles to ~/.platform/dotfiles, stow configs, clone wallpapers"
     _row "rebuild"  "Rebuild and switch NixOS configuration"
     _row "update"   "Update flake inputs, push flake.lock, and rebuild"
     _row "push"     "Push local dotfiles commits to the remote"
@@ -74,7 +74,7 @@ _usage_vm() {
 }
 
 cmd_rebuild() {
-    sudo nixos-rebuild switch --flake "$HOME/.dotfiles/nixos#" --impure
+    sudo nixos-rebuild switch --flake "$HOME/.platform/dotfiles/nixos#" --impure
 }
 
 cmd_update() {

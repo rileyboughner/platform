@@ -520,7 +520,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         command: [
             "sh",
             "-c",
-            "if git -C \"$HOME/.dotfiles\" diff --quiet --ignore-submodules --; then echo clean; else echo unstaged; fi"
+            "if git -C \"$HOME/.platform/dotfiles\" diff --quiet --ignore-submodules --; then echo clean; else echo unstaged; fi"
         ]
 
         stdout: StdioCollector {
@@ -548,7 +548,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     Process {
         id: tasksProcess
 
-        command: [Quickshell.env("HOME") + "/.dotfiles/scripts/todo", "task", "count"]
+        command: [Quickshell.env("HOME") + "/.platform/dotfiles/scripts/todo", "task", "count"]
 
         stdout: StdioCollector {
             onStreamFinished: {
