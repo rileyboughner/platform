@@ -178,6 +178,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         wallpaperPopup.visible = false
         calendarPopup.visible = false
         themePopup.visible = false
+        lightsPopup.visible = false
 
         target.visible = !wasVisible
     }
@@ -629,6 +630,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(themePopup)
+        }
+    }
+
+    IpcHandler {
+        target: "lights"
+
+        function toggle(): void {
+            root.togglePopup(lightsPopup)
         }
     }
 
@@ -2284,6 +2293,555 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                                 family: root.fontFamily
                                 pixelSize: root.fontSize
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // Lights Picker
+    // ─────────────────────────────────────────────
+
+    PanelWindow {
+        id: lightsPopup
+
+        property var lightsState: ({})
+        property bool lightsLoading: true
+        property string lightsError: ""
+
+        property var livingRoomLights: [
+            { name: "Main Lights", entity: "light.main_lights" },
+            { name: "Living Room Lamp", entity: "light.living_room_lamp" },
+            { name: "Christmas Tree", entity: "light.living_room_floor_lamp" }
+        ]
+        property var livingRoomScenes: [
+            { name: "Chill Vibes", entity: "scene.chill_vibes" },
+            { name: "Normal", entity: "scene.living_room_normal" },
+            { name: "Movie", entity: "scene.living_room_movie" },
+            { name: "Bright", entity: "scene.living_room_bright" },
+            { name: "Red Moody", entity: "scene.living_room_red_moody" },
+            { name: "Early Morning", entity: "scene.living_room_early_morning" }
+        ]
+        property var bedroomLights: [
+            { name: "Main", entity: "light.bedroom_main_light_1" },
+            { name: "Desk", entity: "light.desk_light" },
+            { name: "Salt Lamp", entity: "light.salt_lamp_plug", hasSlider: false }
+        ]
+        property var bedroomScenes: [
+            { name: "Normal", entity: "scene.bedroom_normal" },
+            { name: "Relax", entity: "scene.bedroom_relax" },
+            { name: "Sleep", entity: "scene.bedroom_sleep" },
+            { name: "Morning", entity: "scene.bedroom_morning" },
+            { name: "Reading", entity: "scene.bedroom_reading" },
+            { name: "Night Red", entity: "scene.bedroom_night_red" },
+            { name: "Wake Up", entity: "scene.bedroom_wake_up" },
+            { name: "Cozy", entity: "scene.bedroom_cozy" }
+        ]
+
+        function fetchLightsState() {
+            lightsStatesProcess.running = true
+        }
+
+        function runLightsAction(args) {
+            lightsActionProcess.command = args
+            lightsActionProcess.running = true
+        }
+
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        WlrLayershell.namespace: "lights-picker"
+
+        anchors.top: true
+        anchors.bottom: true
+        anchors.left: true
+        anchors.right: true
+
+        exclusionMode: ExclusionMode.Ignore
+
+        color: "transparent"
+        visible: false
+
+        onVisibleChanged: {
+            if (visible) {
+                lightsPopup.lightsError = ""
+                lightsPopup.lightsLoading = true
+                lightsPopup.fetchLightsState()
+            }
+        }
+
+        Process {
+            id: lightsStatesProcess
+
+            command: ["ha-lights", "states"]
+
+            stdout: StdioCollector {
+                id: lightsStatesStdout
+            }
+            stderr: StdioCollector {
+                id: lightsStatesStderr
+            }
+
+            onExited: (exitCode) => {
+                lightsPopup.lightsLoading = false
+                if (exitCode === 0) {
+                    try {
+                        lightsPopup.lightsState = JSON.parse(lightsStatesStdout.text)
+                        lightsPopup.lightsError = ""
+                    } catch (error) {
+                        lightsPopup.lightsError = "Failed to parse lights state"
+                    }
+                } else {
+                    const firstLine = lightsStatesStderr.text.trim().split("\n")[0]
+                    lightsPopup.lightsError = firstLine || "ha-lights states failed"
+                }
+            }
+        }
+
+        Process {
+            id: lightsActionProcess
+
+            stderr: StdioCollector {
+                id: lightsActionStderr
+            }
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) {
+                    const firstLine = lightsActionStderr.text.trim().split("\n")[0]
+                    lightsPopup.lightsError = firstLine || "ha-lights action failed"
+                }
+                lightsPopup.fetchLightsState()
+            }
+        }
+
+        Component {
+            id: lightRowComponent
+
+            Rectangle {
+                id: lightRow
+
+                required property var modelData
+
+                readonly property string entityId: lightRow.modelData.entity
+                readonly property bool hasSlider: lightRow.modelData.hasSlider !== false
+                readonly property var entityState: lightsPopup.lightsState[lightRow.entityId]
+                readonly property bool known: lightRow.entityState !== undefined && lightRow.entityState !== null
+                readonly property bool isOn: lightRow.known && lightRow.entityState.state === "on"
+                readonly property int statePct: (lightRow.known
+                    && lightRow.entityState.brightness_pct !== null
+                    && lightRow.entityState.brightness_pct !== undefined)
+                    ? lightRow.entityState.brightness_pct : 0
+
+                property int dragPct: -1
+                readonly property int displayPct: lightRow.dragPct >= 0 ? lightRow.dragPct : lightRow.statePct
+
+                width: parent.width
+                height: 34
+
+                color: "transparent"
+
+                Text {
+                    id: lightRowName
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 92
+
+                    text: lightRow.modelData.name
+                    elide: Text.ElideRight
+
+                    color: lightRow.known ? root.colFg : root.colMuted
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 1
+                    }
+                }
+
+                Rectangle {
+                    id: lightToggle
+
+                    anchors.left: lightRowName.right
+                    anchors.leftMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    width: 38
+                    height: 20
+                    radius: 10
+
+                    color: (lightRow.known && lightRow.isOn) ? root.colAccent : "transparent"
+                    border.color: lightRow.known ? root.colAccent : root.colMuted
+                    border.width: 1
+
+                    Rectangle {
+                        width: 14
+                        height: 14
+                        radius: 7
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: (lightRow.known && lightRow.isOn) ? parent.width - width - 3 : 3
+
+                        color: (lightRow.known && lightRow.isOn) ? root.colBg : root.colMuted
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: lightRow.known
+
+                        onClicked: lightsPopup.runLightsAction(["ha-lights", "toggle", lightRow.entityId])
+                    }
+                }
+
+                Rectangle {
+                    id: lightSliderTrack
+
+                    visible: lightRow.hasSlider
+
+                    anchors.left: lightToggle.right
+                    anchors.leftMargin: 8
+                    anchors.right: lightSliderPct.left
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    height: 6
+                    radius: 3
+                    color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+
+                        width: Math.max(0, Math.min(lightSliderTrack.width,
+                            lightSliderTrack.width * lightRow.displayPct / 100))
+
+                        radius: 3
+                        color: lightRow.known
+                            ? (lightRow.isOn ? root.colAccent : root.colMuted)
+                            : root.colMuted
+                    }
+
+                    Rectangle {
+                        width: 12
+                        height: 12
+                        radius: 6
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: lightRow.known
+
+                        x: Math.max(0, Math.min(lightSliderTrack.width - width,
+                            lightSliderTrack.width * lightRow.displayPct / 100 - width / 2))
+
+                        color: root.colFg
+                    }
+
+                    MouseArea {
+                        id: lightSliderArea
+
+                        anchors.fill: parent
+                        enabled: lightRow.known
+
+                        onPressed: (mouse) => {
+                            const ratio = Math.max(0, Math.min(1, mouse.x / lightSliderArea.width))
+                            lightRow.dragPct = Math.round(ratio * 100)
+                        }
+
+                        onPositionChanged: (mouse) => {
+                            if (!lightSliderArea.pressed) return
+                            const ratio = Math.max(0, Math.min(1, mouse.x / lightSliderArea.width))
+                            lightRow.dragPct = Math.round(ratio * 100)
+                        }
+
+                        onReleased: (mouse) => {
+                            const ratio = Math.max(0, Math.min(1, mouse.x / lightSliderArea.width))
+                            const finalPct = Math.round(ratio * 100)
+                            lightRow.dragPct = -1
+                            lightsPopup.runLightsAction(["ha-lights", "brightness", lightRow.entityId, String(finalPct)])
+                        }
+                    }
+                }
+
+                Text {
+                    id: lightSliderPct
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 34
+
+                    horizontalAlignment: Text.AlignRight
+
+                    text: !lightRow.known
+                        ? "unknown"
+                        : (!lightRow.hasSlider
+                            ? (lightRow.isOn ? "on" : "off")
+                            : (lightRow.isOn ? (lightRow.displayPct + "%") : "off"))
+
+                    color: root.colMuted
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 2
+                    }
+                }
+            }
+        }
+
+        Component {
+            id: sceneButtonComponent
+
+            Rectangle {
+                id: sceneButton
+
+                required property var modelData
+
+                width: (parent.width - parent.columnSpacing) / 2
+                height: 26
+
+                radius: 6
+                color: sceneButtonArea.containsMouse
+                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.25)
+                    : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                border.color: root.colMuted
+                border.width: 1
+
+                MouseArea {
+                    id: sceneButtonArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    onClicked: lightsPopup.runLightsAction(["ha-lights", "scene", sceneButton.modelData.entity])
+
+                    Text {
+                        anchors.centerIn: parent
+
+                        text: sceneButton.modelData.name
+                        elide: Text.ElideRight
+
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 2
+                        }
+                    }
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+
+            onClicked: lightsPopup.visible = false
+
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0, 0, 0, 0.35)
+            }
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+
+            width: 680
+            height: 560
+
+            radius: 10
+            color: root.colBg
+            border.color: root.colMuted
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {}
+            }
+
+            Rectangle {
+                id: lightsHeader
+
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 8
+
+                height: 28
+
+                radius: 6
+                color: "transparent"
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+
+                    text: "Lights"
+
+                    color: root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize
+                        bold: true
+                    }
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 80
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+
+                    horizontalAlignment: Text.AlignRight
+
+                    visible: lightsPopup.lightsError.length > 0
+
+                    text: lightsPopup.lightsError
+                    elide: Text.ElideRight
+
+                    color: root.colRed
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 2
+                    }
+                }
+            }
+
+            Text {
+                anchors.top: lightsHeader.bottom
+                anchors.topMargin: 16
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                visible: lightsPopup.lightsLoading
+
+                text: "Loading…"
+                color: root.colMuted
+
+                font {
+                    family: root.fontFamily
+                    pixelSize: root.fontSize
+                }
+            }
+
+            Row {
+                id: lightsColumns
+
+                anchors.top: lightsHeader.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 8
+                anchors.topMargin: 4
+
+                visible: !lightsPopup.lightsLoading
+                spacing: 16
+
+                Column {
+                    id: livingRoomColumn
+
+                    width: (lightsColumns.width - lightsColumns.spacing) / 2
+                    spacing: 6
+
+                    Text {
+                        text: "Living Room"
+                        color: root.colAccent
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Repeater {
+                        model: lightsPopup.livingRoomLights
+                        delegate: lightRowComponent
+                    }
+
+                    Rectangle {
+                        width: livingRoomColumn.width
+                        height: 1
+                        color: root.colMuted
+                        opacity: 0.4
+                    }
+
+                    Text {
+                        text: "Scenes"
+                        topPadding: 6
+                        bottomPadding: 2
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 2
+                            bold: true
+                        }
+                    }
+
+                    Grid {
+                        width: livingRoomColumn.width
+                        columns: 2
+                        columnSpacing: 6
+                        rowSpacing: 6
+
+                        Repeater {
+                            model: lightsPopup.livingRoomScenes
+                            delegate: sceneButtonComponent
+                        }
+                    }
+                }
+
+                Column {
+                    id: bedroomColumn
+
+                    width: (lightsColumns.width - lightsColumns.spacing) / 2
+                    spacing: 6
+
+                    Text {
+                        text: "Bedroom"
+                        color: root.colAccent
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Repeater {
+                        model: lightsPopup.bedroomLights
+                        delegate: lightRowComponent
+                    }
+
+                    Rectangle {
+                        width: bedroomColumn.width
+                        height: 1
+                        color: root.colMuted
+                        opacity: 0.4
+                    }
+
+                    Text {
+                        text: "Scenes"
+                        topPadding: 6
+                        bottomPadding: 2
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 2
+                            bold: true
+                        }
+                    }
+
+                    Grid {
+                        width: bedroomColumn.width
+                        columns: 2
+                        columnSpacing: 6
+                        rowSpacing: 6
+
+                        Repeater {
+                            model: lightsPopup.bedroomScenes
+                            delegate: sceneButtonComponent
                         }
                     }
                 }

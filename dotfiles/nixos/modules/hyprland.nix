@@ -64,6 +64,10 @@
       install -Dm755 ${../../scripts/wallpaper-recolor} $out/bin/wallpaper-recolor
     '')
 
+    (pkgs.runCommand "ha-lights" { } ''
+      install -Dm755 ${../../scripts/ha-lights} $out/bin/ha-lights
+    '')
+
     (pkgs.makeDesktopItem {
       name = "vm-cyber-defence";
       desktopName = "cyber-defence (VM)";

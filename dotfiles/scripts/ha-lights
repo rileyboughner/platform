@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN_FILE="$HOME/.local/share/home-assistant/token"
+HA_URL="${HA_URL:-https://home.rileyboughner.dev}"
+
+LIGHT_ENTITIES=(
+    light.main_lights
+    light.living_room_lamp
+    light.living_room_floor_lamp
+    light.bedroom_main_light_1
+    light.desk_light
+    light.salt_lamp_plug
+)
+
+die() {
+    echo "ha-lights: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: ha-lights <command> [args]
+
+Commands:
+  states                         Print JSON state of all tracked lights
+  toggle <entity_id>              Toggle a light on/off
+  brightness <entity_id> <0-100>  Set brightness percent
+  scene <entity_id>                Activate a scene
+EOF
+}
+
+load_token() {
+    [ -f "$TOKEN_FILE" ] || die "no token file at $TOKEN_FILE"
+    TOKEN=$(head -n1 "$TOKEN_FILE" | tr -d '\r' | tr -d '[:space:]')
+    [ -n "$TOKEN" ] || die "token file at $TOKEN_FILE is empty"
+}
+
+ha_get() {
+    local path="$1"
+    curl -fsS --max-time 10 \
+        -H "Authorization: Bearer $TOKEN" \
+        "$HA_URL$path"
+}
+
+ha_post() {
+    local path="$1" body="$2"
+    curl -fsS --max-time 10 \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$body" \
+        "$HA_URL$path" >/dev/null
+}
+
+cmd_states() {
+    load_token
+
+    local result="{}"
+    local entity resp state pct
+
+    for entity in "${LIGHT_ENTITIES[@]}"; do
+        resp=$(ha_get "/api/states/$entity") \
+            || die "failed to fetch state for $entity (Home Assistant unreachable?)"
+
+        state=$(jq -r '.state' <<<"$resp") || die "failed to parse state for $entity"
+        pct=$(jq -r '
+            if (.attributes.brightness // null) == null then "null"
+            else (.attributes.brightness / 255 * 100 | round)
+            end
+        ' <<<"$resp") || die "failed to parse brightness for $entity"
+
+        result=$(jq --arg e "$entity" --arg s "$state" --argjson b "$pct" \
+            '. + {($e): {state: $s, brightness_pct: $b}}' <<<"$result") \
+            || die "failed to build state JSON for $entity"
+    done
+
+    echo "$result"
+}
+
+cmd_toggle() {
+    local entity="${1:-}"
+    [ -n "$entity" ] || { usage; exit 1; }
+    load_token
+    ha_post "/api/services/light/toggle" "$(jq -n --arg e "$entity" '{entity_id: $e}')" \
+        || die "failed to toggle $entity"
+}
+
+cmd_brightness() {
+    local entity="${1:-}" pct="${2:-}"
+    [ -n "$entity" ] && [ -n "$pct" ] || { usage; exit 1; }
+    [[ "$pct" =~ ^[0-9]+$ ]] && [ "$pct" -ge 0 ] && [ "$pct" -le 100 ] \
+        || die "brightness percent must be an integer 0-100"
+    load_token
+    ha_post "/api/services/light/turn_on" \
+        "$(jq -n --arg e "$entity" --argjson b "$pct" '{entity_id: $e, brightness_pct: $b}')" \
+        || die "failed to set brightness for $entity"
+}
+
+cmd_scene() {
+    local entity="${1:-}"
+    [ -n "$entity" ] || { usage; exit 1; }
+    load_token
+    ha_post "/api/services/scene/turn_on" "$(jq -n --arg e "$entity" '{entity_id: $e}')" \
+        || die "failed to activate scene $entity"
+}
+
+case "${1:-}" in
+    states)
+        shift
+        cmd_states "$@"
+        ;;
+    toggle)
+        shift
+        cmd_toggle "$@"
+        ;;
+    brightness)
+        shift
+        cmd_brightness "$@"
+        ;;
+    scene)
+        shift
+        cmd_scene "$@"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
