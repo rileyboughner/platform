@@ -183,24 +183,6 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         target.visible = !wasVisible
     }
 
-    function openSidePanelSection(section) {
-        const alreadyOpenOnSection = sidePanel.visible && sidePanel.currentSection === section
-
-        audioPopup.visible = false
-        wifiPopup.visible = false
-        bluetoothPopup.visible = false
-        wallpaperPopup.visible = false
-        calendarPopup.visible = false
-        themePopup.visible = false
-
-        if (alreadyOpenOnSection) {
-            sidePanel.visible = false
-        } else {
-            sidePanel.currentSection = section
-            sidePanel.visible = true
-        }
-    }
-
     anchors.top: true
     anchors.left: true
     anchors.right: true
@@ -654,28 +636,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     IpcHandler {
         target: "sidepanel"
 
-        function lights(): void {
-            root.openSidePanelSection("lights")
-        }
-
-        function wifi(): void {
-            root.openSidePanelSection("wifi")
-        }
-
-        function bluetooth(): void {
-            root.openSidePanelSection("bluetooth")
-        }
-
-        function sound(): void {
-            root.openSidePanelSection("sound")
-        }
-
-        function settings(): void {
-            root.openSidePanelSection("settings")
-        }
-
         function toggle(): void {
-            root.openSidePanelSection(sidePanel.currentSection)
+            root.togglePopup(sidePanel)
         }
     }
 
@@ -2345,21 +2307,6 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     PanelWindow {
         id: sidePanel
 
-        property string currentSection: "lights"
-        readonly property var sections: ["lights", "wifi", "bluetooth", "sound", "settings"]
-        readonly property var sectionLabels: ({
-            lights: "Lights",
-            wifi: "WiFi",
-            bluetooth: "Bluetooth",
-            sound: "Sound",
-            settings: "Settings"
-        })
-
-        readonly property bool lightsSectionActive: sidePanel.visible && sidePanel.currentSection === "lights"
-        readonly property bool wifiSectionActive: sidePanel.visible && sidePanel.currentSection === "wifi"
-        readonly property bool bluetoothSectionActive: sidePanel.visible && sidePanel.currentSection === "bluetooth"
-        readonly property bool settingsSectionActive: sidePanel.visible && sidePanel.currentSection === "settings"
-
         // ---- Lights state (migrated verbatim from the old lightsPopup) ----
 
         property var lightsState: ({})
@@ -2404,27 +2351,6 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             lightsActionProcess.running = true
         }
 
-        // ---- Settings (theme/wallpaper) state ----
-
-        property var themeList: []
-        property string currentTheme: ""
-        property string currentWallpaperName: ""
-        property string settingsError: ""
-
-        function refreshThemeList() {
-            settingsThemeListProcess.running = true
-            settingsThemeCurrentProcess.running = true
-        }
-
-        function refreshCurrentWallpaper() {
-            settingsWallpaperNameProcess.running = true
-        }
-
-        function applyTheme(name) {
-            settingsThemeSetProcess.command = ["boner", "theme", "set", name]
-            settingsThemeSetProcess.running = true
-        }
-
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         WlrLayershell.namespace: "side-panel"
@@ -2440,66 +2366,10 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         visible: false
 
         onVisibleChanged: {
-            if (!visible) {
-                root.wifiPasswordTarget = null
-                sidePanelWifiPasswordInput.text = ""
-            }
-        }
-
-        onLightsSectionActiveChanged: {
-            if (sidePanel.lightsSectionActive) {
+            if (visible) {
                 sidePanel.lightsError = ""
                 sidePanel.lightsLoading = true
                 sidePanel.fetchLightsState()
-            }
-        }
-
-        onWifiSectionActiveChanged: {
-            const device = Networking.devices.values.find((d) => d.type === DeviceType.Wifi)
-            if (device) device.scannerEnabled = sidePanel.wifiSectionActive
-
-            if (!sidePanel.wifiSectionActive) {
-                root.wifiPasswordTarget = null
-                sidePanelWifiPasswordInput.text = ""
-            }
-        }
-
-        onBluetoothSectionActiveChanged: {
-            const adapter = Bluetooth.defaultAdapter
-            if (adapter && adapter.enabled) adapter.discovering = sidePanel.bluetoothSectionActive
-        }
-
-        onSettingsSectionActiveChanged: {
-            if (sidePanel.settingsSectionActive) {
-                sidePanel.settingsError = ""
-                sidePanel.refreshThemeList()
-                sidePanel.refreshCurrentWallpaper()
-            }
-        }
-
-        Connections {
-            target: Bluetooth.defaultAdapter
-
-            function onStateChanged() {
-                const adapter = Bluetooth.defaultAdapter
-                if (adapter
-                    && adapter.state === BluetoothAdapterState.Enabled
-                    && sidePanel.bluetoothSectionActive) {
-                    adapter.discovering = true
-                }
-            }
-        }
-
-        PwObjectTracker {
-            objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource].filter((n) => n !== null)
-        }
-
-        Timer {
-            id: wifiRescanTimer
-            interval: 150
-            onTriggered: {
-                const device = Networking.devices.values.find((d) => d.type === DeviceType.Wifi)
-                if (device) device.scannerEnabled = sidePanel.wifiSectionActive
             }
         }
 
@@ -2546,109 +2416,6 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     sidePanel.lightsError = firstLine || "ha-lights action failed"
                 }
                 sidePanel.fetchLightsState()
-            }
-        }
-
-        // ---- Settings backend (boner theme/wallpaper subcommands) ----
-
-        Process {
-            id: settingsThemeListProcess
-
-            command: ["boner", "theme", "list"]
-
-            stdout: StdioCollector {
-                id: settingsThemeListStdout
-            }
-            stderr: StdioCollector {
-                id: settingsThemeListStderr
-            }
-
-            onExited: (exitCode) => {
-                if (exitCode === 0) {
-                    sidePanel.themeList = settingsThemeListStdout.text.trim().split("\n").filter((t) => t.length > 0)
-                } else {
-                    const firstLine = settingsThemeListStderr.text.trim().split("\n")[0]
-                    sidePanel.settingsError = firstLine || "boner theme list failed"
-                }
-            }
-        }
-
-        Process {
-            id: settingsThemeCurrentProcess
-
-            command: ["boner", "theme", "current"]
-
-            stdout: StdioCollector {
-                onStreamFinished: {
-                    sidePanel.currentTheme = text.trim()
-                }
-            }
-        }
-
-        Process {
-            id: settingsThemeSetProcess
-
-            stderr: StdioCollector {
-                id: settingsThemeSetStderr
-            }
-
-            onExited: (exitCode) => {
-                if (exitCode !== 0) {
-                    const firstLine = settingsThemeSetStderr.text.trim().split("\n")[0]
-                    sidePanel.settingsError = firstLine || "boner theme set failed"
-                }
-                settingsThemeCurrentProcess.running = true
-            }
-        }
-
-        Process {
-            id: settingsWallpaperRandomProcess
-
-            command: ["boner", "wallpaper", "random"]
-
-            stderr: StdioCollector {
-                id: settingsWallpaperRandomStderr
-            }
-
-            onExited: (exitCode) => {
-                if (exitCode !== 0) {
-                    const firstLine = settingsWallpaperRandomStderr.text.trim().split("\n")[0]
-                    sidePanel.settingsError = firstLine || "boner wallpaper random failed"
-                }
-                sidePanel.refreshCurrentWallpaper()
-            }
-        }
-
-        Process {
-            id: settingsWallpaperRecolorProcess
-
-            command: ["boner", "wallpaper", "recolor"]
-
-            stderr: StdioCollector {
-                id: settingsWallpaperRecolorStderr
-            }
-
-            onExited: (exitCode) => {
-                if (exitCode !== 0) {
-                    const firstLine = settingsWallpaperRecolorStderr.text.trim().split("\n")[0]
-                    sidePanel.settingsError = firstLine || "boner wallpaper recolor failed"
-                }
-                sidePanel.refreshCurrentWallpaper()
-            }
-        }
-
-        // Reads the symlink wallpaper-recolor/set-wallpaper keep at
-        // ~/.wallpaper -- the only place a "current wallpaper" name exists
-        // on this system -- rather than adding a new helper just to print it.
-        Process {
-            id: settingsWallpaperNameProcess
-
-            command: ["sh", "-c", 'name=$(readlink -f "$HOME/.wallpaper" 2>/dev/null) && basename "$name"']
-
-            stdout: StdioCollector {
-                onStreamFinished: {
-                    sidePanel.currentWallpaperName = text.trim() || "None set"
-                }
             }
         }
 
@@ -2886,262 +2653,28 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
             spacing: 8
 
-            RowLayout {
-                id: sectionTabs
-
-                Layout.fillWidth: true
-                spacing: 4
-
-                Repeater {
-                    model: sidePanel.sections
-
-                    delegate: Rectangle {
-                        id: tabButton
-
-                        required property string modelData
-
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-
-                        radius: 6
-                        color: sidePanel.currentSection === tabButton.modelData
-                            ? root.colAccent
-                            : (tabArea.containsMouse
-                                ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                : "transparent")
-
-                        MouseArea {
-                            id: tabArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-
-                            onClicked: sidePanel.currentSection = tabButton.modelData
-
-                            Text {
-                                anchors.centerIn: parent
-                                width: parent.width - 4
-
-                                horizontalAlignment: Text.AlignHCenter
-                                elide: Text.ElideRight
-
-                                text: sidePanel.sectionLabels[tabButton.modelData]
-
-                                color: sidePanel.currentSection === tabButton.modelData ? root.colBg : root.colFg
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 4
-                                    bold: true
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: root.colMuted
-                opacity: 0.4
-            }
-
-            Item {
-                id: sectionContainer
+            Flickable {
+                id: lightsFlick
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                // ============ LIGHTS ============
+                contentWidth: width
+                contentHeight: lightsContent.implicitHeight
+                clip: true
 
-                Flickable {
-                    id: lightsFlick
+                Column {
+                    id: lightsContent
 
-                    anchors.fill: parent
-                    visible: sidePanel.currentSection === "lights"
+                    width: lightsFlick.width
+                    spacing: 6
 
-                    contentWidth: width
-                    contentHeight: lightsContent.implicitHeight
-                    clip: true
-
-                    Column {
-                        id: lightsContent
-
-                        width: lightsFlick.width
-                        spacing: 6
-
-                        Row {
-                            width: lightsContent.width
-                            spacing: 8
-
-                            Text {
-                                text: "Lights"
-                                color: root.colFg
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize
-                                    bold: true
-                                }
-                            }
-
-                            Text {
-                                visible: sidePanel.lightsError.length > 0
-                                width: lightsContent.width - 60
-                                elide: Text.ElideRight
-
-                                text: sidePanel.lightsError
-                                color: root.colRed
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                }
-                            }
-                        }
+                    Row {
+                        width: lightsContent.width
+                        spacing: 8
 
                         Text {
-                            visible: sidePanel.lightsLoading
-                            text: "Loading…"
-                            color: root.colMuted
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize
-                            }
-                        }
-
-                        Column {
-                            visible: !sidePanel.lightsLoading
-                            width: lightsContent.width
-                            spacing: 6
-
-                            Text {
-                                text: "Living Room"
-                                color: root.colAccent
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize
-                                    bold: true
-                                }
-                            }
-
-                            Repeater {
-                                model: sidePanel.livingRoomLights
-                                delegate: lightRowComponent
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Text {
-                                text: "Scenes"
-                                topPadding: 6
-                                bottomPadding: 2
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                    bold: true
-                                }
-                            }
-
-                            Grid {
-                                width: parent.width
-                                columns: 2
-                                columnSpacing: 6
-                                rowSpacing: 6
-
-                                Repeater {
-                                    model: sidePanel.livingRoomScenes
-                                    delegate: sceneButtonComponent
-                                }
-                            }
-
-                            Text {
-                                text: "Bedroom"
-                                topPadding: 10
-                                color: root.colAccent
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize
-                                    bold: true
-                                }
-                            }
-
-                            Repeater {
-                                model: sidePanel.bedroomLights
-                                delegate: lightRowComponent
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Text {
-                                text: "Scenes"
-                                topPadding: 6
-                                bottomPadding: 2
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                    bold: true
-                                }
-                            }
-
-                            Grid {
-                                width: parent.width
-                                columns: 2
-                                columnSpacing: 6
-                                rowSpacing: 6
-
-                                Repeater {
-                                    model: sidePanel.bedroomScenes
-                                    delegate: sceneButtonComponent
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ============ WIFI ============
-
-                Flickable {
-                    id: wifiFlick
-
-                    anchors.fill: parent
-                    visible: sidePanel.currentSection === "wifi"
-
-                    contentWidth: width
-                    contentHeight: wifiContent.implicitHeight
-                    clip: true
-
-                    Column {
-                        id: wifiContent
-
-                        width: wifiFlick.width
-                        spacing: 2
-
-                        property var wifiDevice: Networking.devices.values.find(
-                            (d) => d.type === DeviceType.Wifi
-                        ) || null
-
-                        Text {
-                            text: "WiFi"
-                            bottomPadding: 4
+                            text: "Lights"
                             color: root.colFg
 
                             font {
@@ -3152,1011 +2685,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
 
                         Text {
-                            visible: wifiContent.wifiDevice === null
-                            text: "No Wi-Fi device found"
-                            color: root.colMuted
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize - 1
-                            }
-                        }
-
-                        Column {
-                            visible: wifiContent.wifiDevice !== null
-                            width: wifiContent.width
-                            spacing: 2
-
-                            Rectangle {
-                                width: parent.width
-                                height: 28
-
-                                radius: 6
-                                color: spWifiToggleArea.containsMouse
-                                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                    : "transparent"
-
-                                MouseArea {
-                                    id: spWifiToggleArea
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-
-                                    onClicked: Networking.wifiEnabled = !Networking.wifiEnabled
-
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-
-                                        text: "Wi-Fi: " + (Networking.wifiEnabled ? "On" : "Off")
-                                        color: root.colFg
-
-                                        font {
-                                            family: root.fontFamily
-                                            pixelSize: root.fontSize
-                                            bold: true
-                                        }
-                                    }
-                                }
-                            }
-
-                            Text {
-                                visible: root.connectedWifiNetwork !== null
-                                anchors.left: parent.left
-                                anchors.leftMargin: 8
-                                topPadding: 2
-                                bottomPadding: 2
-
-                                text: root.connectedWifiNetwork
-                                    ? "Connected: " + root.connectedWifiNetwork.name
-                                        + " (" + Math.round(root.connectedWifiNetwork.signalStrength * 100) + "%)"
-                                    : ""
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 1
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 28
-
-                                radius: 6
-                                color: wifiRescanArea.containsMouse
-                                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                    : "transparent"
-
-                                MouseArea {
-                                    id: wifiRescanArea
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-
-                                    onClicked: {
-                                        if (wifiContent.wifiDevice) {
-                                            wifiContent.wifiDevice.scannerEnabled = false
-                                            wifiRescanTimer.restart()
-                                        }
-                                    }
-
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-
-                                        text: "󰑐 Rescan"
-                                        color: root.colFg
-
-                                        font {
-                                            family: root.fontFamily
-                                            pixelSize: root.fontSize
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Repeater {
-                                model: {
-                                    if (!wifiContent.wifiDevice) return []
-                                    return [...wifiContent.wifiDevice.networks.values].sort(
-                                        (a, b) => b.signalStrength - a.signalStrength
-                                    )
-                                }
-
-                                delegate: Rectangle {
-                                    id: spNetRow
-
-                                    required property var modelData
-
-                                    width: wifiContent.width
-                                    height: 28
-
-                                    radius: 6
-                                    color: spNetArea.containsMouse
-                                        ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                        : "transparent"
-
-                                    MouseArea {
-                                        id: spNetArea
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-
-                                        onClicked: {
-                                            const net = spNetRow.modelData
-
-                                            if (net.connected) {
-                                                net.disconnect()
-                                            } else if (net.known || net.security === WifiSecurityType.Open) {
-                                                root.wifiPasswordTarget = null
-                                                net.connect()
-                                            } else {
-                                                root.wifiPasswordTarget = net
-                                                sidePanelWifiPasswordInput.forceActiveFocus()
-                                            }
-                                        }
-
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-
-                                            elide: Text.ElideRight
-
-                                            text: {
-                                                const net = spNetRow.modelData
-                                                const signalIcon = root.wifiIconFor(net)
-                                                const lock = net.security === WifiSecurityType.Open ? "" : " 󰌾"
-                                                const status = net.stateChanging
-                                                    ? " …"
-                                                    : (net.connected ? " 󰄬" : "")
-
-                                                return signalIcon + " " + net.name + lock + status
-                                            }
-
-                                            color: root.colFg
-
-                                            font {
-                                                family: root.fontFamily
-                                                pixelSize: root.fontSize
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: wifiContent.width
-                                height: root.wifiPasswordTarget !== null ? 1 : 0
-                                visible: root.wifiPasswordTarget !== null
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Item {
-                                width: wifiContent.width
-                                height: root.wifiPasswordTarget !== null ? 32 : 0
-                                visible: root.wifiPasswordTarget !== null
-                                clip: true
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    anchors.topMargin: 4
-
-                                    radius: 6
-                                    color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
-                                    border.color: root.colMuted
-                                    border.width: 1
-
-                                    TextInput {
-                                        id: sidePanelWifiPasswordInput
-
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-                                        verticalAlignment: TextInput.AlignVCenter
-
-                                        echoMode: TextInput.Password
-                                        color: root.colFg
-
-                                        font {
-                                            family: root.fontFamily
-                                            pixelSize: root.fontSize
-                                        }
-
-                                        Keys.onReturnPressed: {
-                                            if (root.wifiPasswordTarget) {
-                                                root.wifiPasswordTarget.connectWithPsk(sidePanelWifiPasswordInput.text)
-                                            }
-                                            sidePanelWifiPasswordInput.text = ""
-                                            root.wifiPasswordTarget = null
-                                        }
-
-                                        Keys.onEscapePressed: {
-                                            sidePanelWifiPasswordInput.text = ""
-                                            root.wifiPasswordTarget = null
-                                        }
-
-                                        Text {
-                                            visible: sidePanelWifiPasswordInput.text.length === 0
-                                            text: "Password, then Enter"
-                                            color: root.colMuted
-
-                                            font {
-                                                family: root.fontFamily
-                                                pixelSize: root.fontSize
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ============ BLUETOOTH ============
-
-                Flickable {
-                    id: bluetoothFlick
-
-                    anchors.fill: parent
-                    visible: sidePanel.currentSection === "bluetooth"
-
-                    contentWidth: width
-                    contentHeight: bluetoothContent.implicitHeight
-                    clip: true
-
-                    Column {
-                        id: bluetoothContent
-
-                        width: bluetoothFlick.width
-                        spacing: 2
-
-                        Text {
-                            text: "Bluetooth"
-                            bottomPadding: 4
-                            color: root.colFg
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize
-                                bold: true
-                            }
-                        }
-
-                        Text {
-                            visible: Bluetooth.defaultAdapter === null
-                            text: "No Bluetooth adapter found"
-                            color: root.colMuted
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize - 1
-                            }
-                        }
-
-                        Column {
-                            visible: Bluetooth.defaultAdapter !== null
-                            width: bluetoothContent.width
-                            spacing: 2
-
-                            Rectangle {
-                                width: parent.width
-                                height: 28
-
-                                radius: 6
-                                color: spAdapterToggleArea.containsMouse
-                                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                    : "transparent"
-
-                                MouseArea {
-                                    id: spAdapterToggleArea
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-
-                                    onClicked: {
-                                        const adapter = Bluetooth.defaultAdapter
-                                        if (adapter) adapter.enabled = !adapter.enabled
-                                    }
-
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-
-                                        text: {
-                                            const adapter = Bluetooth.defaultAdapter
-                                            return "Bluetooth: " + (adapter && adapter.enabled ? "On" : "Off")
-                                        }
-
-                                        color: root.colFg
-
-                                        font {
-                                            family: root.fontFamily
-                                            pixelSize: root.fontSize
-                                            bold: true
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 28
-
-                                visible: Bluetooth.defaultAdapter !== null && Bluetooth.defaultAdapter.enabled
-
-                                radius: 6
-                                color: btScanArea.containsMouse
-                                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                    : "transparent"
-
-                                MouseArea {
-                                    id: btScanArea
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-
-                                    onClicked: {
-                                        const adapter = Bluetooth.defaultAdapter
-                                        if (adapter) adapter.discovering = !adapter.discovering
-                                    }
-
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-
-                                        text: {
-                                            const adapter = Bluetooth.defaultAdapter
-                                            return "Scanning: " + (adapter && adapter.discovering ? "On" : "Off")
-                                        }
-
-                                        color: root.colMuted
-
-                                        font {
-                                            family: root.fontFamily
-                                            pixelSize: root.fontSize - 1
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Repeater {
-                                model: {
-                                    const adapter = Bluetooth.defaultAdapter
-                                    if (!adapter) return []
-                                    const macAddress = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i
-                                    return [...adapter.devices.values]
-                                        .filter((d) => d.name && d.name.length > 0 && !macAddress.test(d.name))
-                                        .sort((a, b) => {
-                                            if (a.connected !== b.connected) return a.connected ? -1 : 1
-                                            if (a.paired !== b.paired) return a.paired ? -1 : 1
-                                            return a.name.localeCompare(b.name)
-                                        })
-                                }
-
-                                delegate: Rectangle {
-                                    id: spBtRow
-
-                                    required property var modelData
-
-                                    width: bluetoothContent.width
-                                    height: 28
-
-                                    radius: 6
-                                    color: spBtArea.containsMouse
-                                        ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                        : "transparent"
-
-                                    MouseArea {
-                                        id: spBtArea
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-
-                                        onClicked: {
-                                            const dev = spBtRow.modelData
-                                            if (dev.connected) {
-                                                dev.disconnect()
-                                            } else if (dev.paired) {
-                                                dev.connect()
-                                            } else {
-                                                dev.pair()
-                                            }
-                                        }
-
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-
-                                            elide: Text.ElideRight
-
-                                            text: {
-                                                const dev = spBtRow.modelData
-                                                const battery = dev.batteryAvailable
-                                                    ? " (" + Math.round(dev.battery * 100) + "%)"
-                                                    : ""
-
-                                                let status = ""
-                                                if (dev.pairing
-                                                    || dev.state === BluetoothDeviceState.Connecting
-                                                    || dev.state === BluetoothDeviceState.Disconnecting) {
-                                                    status = " …"
-                                                } else if (dev.connected) {
-                                                    status = " 󰄬"
-                                                } else if (!dev.paired) {
-                                                    status = " (tap to pair)"
-                                                }
-
-                                                return dev.name + battery + status
-                                            }
-
-                                            color: root.colFg
-
-                                            font {
-                                                family: root.fontFamily
-                                                pixelSize: root.fontSize
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ============ SOUND ============
-
-                Flickable {
-                    id: soundFlick
-
-                    anchors.fill: parent
-                    visible: sidePanel.currentSection === "sound"
-
-                    contentWidth: width
-                    contentHeight: soundContent.implicitHeight
-                    clip: true
-
-                    Column {
-                        id: soundContent
-
-                        width: soundFlick.width
-                        spacing: 2
-
-                        Text {
-                            text: "Sound"
-                            bottomPadding: 4
-                            color: root.colFg
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize
-                                bold: true
-                            }
-                        }
-
-                        Text {
-                            visible: Pipewire.defaultAudioSink === null
-                            text: "PipeWire unreachable or no audio sink"
-                            color: root.colMuted
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize - 1
-                            }
-                        }
-
-                        Column {
-                            visible: Pipewire.defaultAudioSink !== null
-                            width: soundContent.width
-                            spacing: 2
-
-                            Text {
-                                text: "Output Volume"
-                                bottomPadding: 2
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                    bold: true
-                                }
-                            }
-
-                            Item {
-                                id: outVolumeRow
-
-                                width: parent.width
-                                height: 28
-
-                                property int dragPct: -1
-                                readonly property int statePct: (Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.audio)
-                                    ? Math.round(Pipewire.defaultAudioSink.audio.volume * 100) : 0
-                                readonly property bool muted: (Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.audio)
-                                    ? Pipewire.defaultAudioSink.audio.muted : false
-                                readonly property int displayPct: outVolumeRow.dragPct >= 0 ? outVolumeRow.dragPct : outVolumeRow.statePct
-
-                                Rectangle {
-                                    id: outMuteToggle
-
-                                    anchors.left: parent.left
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    width: 38
-                                    height: 20
-                                    radius: 10
-
-                                    color: outVolumeRow.muted ? root.colRed : "transparent"
-                                    border.color: outVolumeRow.muted ? root.colRed : root.colMuted
-                                    border.width: 1
-
-                                    Rectangle {
-                                        width: 14
-                                        height: 14
-                                        radius: 7
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        x: outVolumeRow.muted ? parent.width - width - 3 : 3
-                                        color: outVolumeRow.muted ? root.colBg : root.colMuted
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: {
-                                            if (Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.audio) {
-                                                Pipewire.defaultAudioSink.audio.muted = !Pipewire.defaultAudioSink.audio.muted
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    id: outVolumeTrack
-
-                                    anchors.left: outMuteToggle.right
-                                    anchors.leftMargin: 8
-                                    anchors.right: outVolumePct.left
-                                    anchors.rightMargin: 6
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    height: 6
-                                    radius: 3
-                                    color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
-
-                                    Rectangle {
-                                        anchors.left: parent.left
-                                        anchors.top: parent.top
-                                        anchors.bottom: parent.bottom
-
-                                        width: Math.max(0, Math.min(outVolumeTrack.width,
-                                            outVolumeTrack.width * outVolumeRow.displayPct / 100))
-
-                                        radius: 3
-                                        color: root.colAccent
-                                    }
-
-                                    Rectangle {
-                                        width: 12
-                                        height: 12
-                                        radius: 6
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        x: Math.max(0, Math.min(outVolumeTrack.width - width,
-                                            outVolumeTrack.width * outVolumeRow.displayPct / 100 - width / 2))
-
-                                        color: root.colFg
-                                    }
-
-                                    MouseArea {
-                                        id: outVolumeArea
-
-                                        anchors.fill: parent
-
-                                        onPressed: (mouse) => {
-                                            const ratio = Math.max(0, Math.min(1, mouse.x / outVolumeArea.width))
-                                            outVolumeRow.dragPct = Math.round(ratio * 100)
-                                        }
-
-                                        onPositionChanged: (mouse) => {
-                                            if (!outVolumeArea.pressed) return
-                                            const ratio = Math.max(0, Math.min(1, mouse.x / outVolumeArea.width))
-                                            outVolumeRow.dragPct = Math.round(ratio * 100)
-                                        }
-
-                                        onReleased: (mouse) => {
-                                            const ratio = Math.max(0, Math.min(1, mouse.x / outVolumeArea.width))
-                                            const finalPct = Math.round(ratio * 100)
-                                            outVolumeRow.dragPct = -1
-                                            if (Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.audio) {
-                                                Pipewire.defaultAudioSink.audio.volume = finalPct / 100
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    id: outVolumePct
-
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 40
-
-                                    horizontalAlignment: Text.AlignRight
-
-                                    text: outVolumeRow.muted ? "muted" : (outVolumeRow.displayPct + "%")
-                                    color: root.colMuted
-
-                                    font {
-                                        family: root.fontFamily
-                                        pixelSize: root.fontSize - 2
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Text {
-                                text: "Output Device"
-                                topPadding: 4
-                                bottomPadding: 2
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                    bold: true
-                                }
-                            }
-
-                            Repeater {
-                                model: Pipewire.nodes.values.filter(
-                                    (node) => node.isSink && !node.isStream
-                                )
-
-                                delegate: Rectangle {
-                                    id: spSinkRow
-
-                                    required property var modelData
-
-                                    width: soundContent.width
-                                    height: 28
-
-                                    radius: 6
-                                    color: spSinkArea.containsMouse
-                                        ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                        : "transparent"
-
-                                    MouseArea {
-                                        id: spSinkArea
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-
-                                        onClicked: Pipewire.preferredDefaultAudioSink = spSinkRow.modelData
-
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-
-                                            elide: Text.ElideRight
-
-                                            text: {
-                                                const label = spSinkRow.modelData.description
-                                                    || spSinkRow.modelData.nickname
-                                                    || spSinkRow.modelData.name
-                                                const isDefault = Pipewire.defaultAudioSink !== null
-                                                    && Pipewire.defaultAudioSink.id === spSinkRow.modelData.id
-                                                return (isDefault ? "󰄬 " : "   ") + label
-                                            }
-
-                                            color: root.colFg
-
-                                            font {
-                                                family: root.fontFamily
-                                                pixelSize: root.fontSize
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Text {
-                                text: "Input Volume"
-                                topPadding: 8
-                                bottomPadding: 2
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                    bold: true
-                                }
-                            }
-
-                            Item {
-                                id: inVolumeRow
-
-                                width: parent.width
-                                height: 28
-
-                                property int dragPct: -1
-                                readonly property int statePct: (Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.audio)
-                                    ? Math.round(Pipewire.defaultAudioSource.audio.volume * 100) : 0
-                                readonly property bool muted: (Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.audio)
-                                    ? Pipewire.defaultAudioSource.audio.muted : false
-                                readonly property int displayPct: inVolumeRow.dragPct >= 0 ? inVolumeRow.dragPct : inVolumeRow.statePct
-
-                                Rectangle {
-                                    id: inMuteToggle
-
-                                    anchors.left: parent.left
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    width: 38
-                                    height: 20
-                                    radius: 10
-
-                                    color: inVolumeRow.muted ? root.colRed : "transparent"
-                                    border.color: inVolumeRow.muted ? root.colRed : root.colMuted
-                                    border.width: 1
-
-                                    Rectangle {
-                                        width: 14
-                                        height: 14
-                                        radius: 7
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        x: inVolumeRow.muted ? parent.width - width - 3 : 3
-                                        color: inVolumeRow.muted ? root.colBg : root.colMuted
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: {
-                                            if (Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.audio) {
-                                                Pipewire.defaultAudioSource.audio.muted = !Pipewire.defaultAudioSource.audio.muted
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    id: inVolumeTrack
-
-                                    anchors.left: inMuteToggle.right
-                                    anchors.leftMargin: 8
-                                    anchors.right: inVolumePct.left
-                                    anchors.rightMargin: 6
-                                    anchors.verticalCenter: parent.verticalCenter
-
-                                    height: 6
-                                    radius: 3
-                                    color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.12)
-
-                                    Rectangle {
-                                        anchors.left: parent.left
-                                        anchors.top: parent.top
-                                        anchors.bottom: parent.bottom
-
-                                        width: Math.max(0, Math.min(inVolumeTrack.width,
-                                            inVolumeTrack.width * inVolumeRow.displayPct / 100))
-
-                                        radius: 3
-                                        color: root.colAccent
-                                    }
-
-                                    Rectangle {
-                                        width: 12
-                                        height: 12
-                                        radius: 6
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        x: Math.max(0, Math.min(inVolumeTrack.width - width,
-                                            inVolumeTrack.width * inVolumeRow.displayPct / 100 - width / 2))
-
-                                        color: root.colFg
-                                    }
-
-                                    MouseArea {
-                                        id: inVolumeArea
-
-                                        anchors.fill: parent
-
-                                        onPressed: (mouse) => {
-                                            const ratio = Math.max(0, Math.min(1, mouse.x / inVolumeArea.width))
-                                            inVolumeRow.dragPct = Math.round(ratio * 100)
-                                        }
-
-                                        onPositionChanged: (mouse) => {
-                                            if (!inVolumeArea.pressed) return
-                                            const ratio = Math.max(0, Math.min(1, mouse.x / inVolumeArea.width))
-                                            inVolumeRow.dragPct = Math.round(ratio * 100)
-                                        }
-
-                                        onReleased: (mouse) => {
-                                            const ratio = Math.max(0, Math.min(1, mouse.x / inVolumeArea.width))
-                                            const finalPct = Math.round(ratio * 100)
-                                            inVolumeRow.dragPct = -1
-                                            if (Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.audio) {
-                                                Pipewire.defaultAudioSource.audio.volume = finalPct / 100
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    id: inVolumePct
-
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 40
-
-                                    horizontalAlignment: Text.AlignRight
-
-                                    text: inVolumeRow.muted ? "muted" : (inVolumeRow.displayPct + "%")
-                                    color: root.colMuted
-
-                                    font {
-                                        family: root.fontFamily
-                                        pixelSize: root.fontSize - 2
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: root.colMuted
-                                opacity: 0.4
-                            }
-
-                            Text {
-                                text: "Input Device"
-                                topPadding: 4
-                                bottomPadding: 2
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                    bold: true
-                                }
-                            }
-
-                            Repeater {
-                                model: Pipewire.nodes.values.filter(
-                                    (node) => (node.type & PwNodeType.Source) !== 0
-                                        && !node.isStream
-                                        && !node.name.endsWith(".monitor")
-                                )
-
-                                delegate: Rectangle {
-                                    id: spSourceRow
-
-                                    required property var modelData
-
-                                    width: soundContent.width
-                                    height: 28
-
-                                    radius: 6
-                                    color: spSourceArea.containsMouse
-                                        ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                        : "transparent"
-
-                                    MouseArea {
-                                        id: spSourceArea
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-
-                                        onClicked: Pipewire.preferredDefaultAudioSource = spSourceRow.modelData
-
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-
-                                            elide: Text.ElideRight
-
-                                            text: {
-                                                const label = spSourceRow.modelData.description
-                                                    || spSourceRow.modelData.nickname
-                                                    || spSourceRow.modelData.name
-                                                const isDefault = Pipewire.defaultAudioSource !== null
-                                                    && Pipewire.defaultAudioSource.id === spSourceRow.modelData.id
-                                                return (isDefault ? "󰄬 " : "   ") + label
-                                            }
-
-                                            color: root.colFg
-
-                                            font {
-                                                family: root.fontFamily
-                                                pixelSize: root.fontSize
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ============ SETTINGS ============
-
-                Flickable {
-                    id: settingsFlick
-
-                    anchors.fill: parent
-                    visible: sidePanel.currentSection === "settings"
-
-                    contentWidth: width
-                    contentHeight: settingsContent.implicitHeight
-                    clip: true
-
-                    Column {
-                        id: settingsContent
-
-                        width: settingsFlick.width
-                        spacing: 2
-
-                        Text {
-                            text: "Settings"
-                            bottomPadding: 4
-                            color: root.colFg
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize
-                                bold: true
-                            }
-                        }
-
-                        Text {
-                            visible: sidePanel.settingsError.length > 0
-                            width: settingsContent.width
+                            visible: sidePanel.lightsError.length > 0
+                            width: lightsContent.width - 60
                             elide: Text.ElideRight
-                            bottomPadding: 4
 
-                            text: sidePanel.settingsError
+                            text: sidePanel.lightsError
                             color: root.colRed
 
                             font {
@@ -4164,10 +2697,26 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                                 pixelSize: root.fontSize - 2
                             }
                         }
+                    }
+
+                    Text {
+                        visible: sidePanel.lightsLoading
+                        text: "Loading…"
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Column {
+                        visible: !sidePanel.lightsLoading
+                        width: lightsContent.width
+                        spacing: 6
 
                         Text {
-                            text: "Theme"
-                            bottomPadding: 2
+                            text: "Living Room"
                             color: root.colAccent
 
                             font {
@@ -4178,67 +2727,45 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
 
                         Repeater {
-                            model: sidePanel.themeList
-
-                            delegate: Rectangle {
-                                id: spThemeRow
-
-                                required property string modelData
-
-                                width: settingsContent.width
-                                height: 28
-
-                                radius: 6
-                                color: themeRowArea.containsMouse
-                                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                    : "transparent"
-
-                                MouseArea {
-                                    id: themeRowArea
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-
-                                    onClicked: sidePanel.applyTheme(spThemeRow.modelData)
-
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-
-                                        elide: Text.ElideRight
-
-                                        text: {
-                                            const label = spThemeRow.modelData
-                                                .replace(/[-_]/g, " ")
-                                                .replace(/\b\w/g, (c) => c.toUpperCase())
-                                            return (sidePanel.currentTheme === spThemeRow.modelData ? "󰄬 " : "   ") + label
-                                        }
-
-                                        color: root.colFg
-
-                                        font {
-                                            family: root.fontFamily
-                                            pixelSize: root.fontSize
-                                        }
-                                    }
-                                }
-                            }
+                            model: sidePanel.livingRoomLights
+                            delegate: lightRowComponent
                         }
 
                         Rectangle {
-                            width: settingsContent.width
+                            width: parent.width
                             height: 1
                             color: root.colMuted
                             opacity: 0.4
                         }
 
                         Text {
-                            text: "Wallpaper"
-                            topPadding: 10
+                            text: "Scenes"
+                            topPadding: 6
                             bottomPadding: 2
+                            color: root.colMuted
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 2
+                                bold: true
+                            }
+                        }
+
+                        Grid {
+                            width: parent.width
+                            columns: 2
+                            columnSpacing: 6
+                            rowSpacing: 6
+
+                            Repeater {
+                                model: sidePanel.livingRoomScenes
+                                delegate: sceneButtonComponent
+                            }
+                        }
+
+                        Text {
+                            text: "Bedroom"
+                            topPadding: 10
                             color: root.colAccent
 
                             font {
@@ -4248,122 +2775,40 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                             }
                         }
 
-                        Text {
-                            width: settingsContent.width
-                            elide: Text.ElideRight
-                            bottomPadding: 4
+                        Repeater {
+                            model: sidePanel.bedroomLights
+                            delegate: lightRowComponent
+                        }
 
-                            text: "Current: " + (sidePanel.currentWallpaperName || "Unknown")
+                        Rectangle {
+                            width: parent.width
+                            height: 1
+                            color: root.colMuted
+                            opacity: 0.4
+                        }
+
+                        Text {
+                            text: "Scenes"
+                            topPadding: 6
+                            bottomPadding: 2
                             color: root.colMuted
 
                             font {
                                 family: root.fontFamily
-                                pixelSize: root.fontSize - 1
+                                pixelSize: root.fontSize - 2
+                                bold: true
                             }
                         }
 
-                        Rectangle {
-                            id: wpRandomRow
+                        Grid {
+                            width: parent.width
+                            columns: 2
+                            columnSpacing: 6
+                            rowSpacing: 6
 
-                            width: settingsContent.width
-                            height: 28
-
-                            radius: 6
-                            color: wpRandomArea.containsMouse
-                                ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                : "transparent"
-                            border.color: root.colMuted
-                            border.width: 1
-
-                            MouseArea {
-                                id: wpRandomArea
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-
-                                onClicked: settingsWallpaperRandomProcess.running = true
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Random Wallpaper"
-                                    color: root.colFg
-
-                                    font {
-                                        family: root.fontFamily
-                                        pixelSize: root.fontSize - 1
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            id: wpRecolorRow
-
-                            width: settingsContent.width
-                            height: 28
-
-                            radius: 6
-                            color: wpRecolorArea.containsMouse
-                                ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                : "transparent"
-                            border.color: root.colMuted
-                            border.width: 1
-
-                            MouseArea {
-                                id: wpRecolorArea
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-
-                                onClicked: settingsWallpaperRecolorProcess.running = true
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Recolor Current Wallpaper"
-                                    color: root.colFg
-
-                                    font {
-                                        family: root.fontFamily
-                                        pixelSize: root.fontSize - 1
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            id: wpBrowseRow
-
-                            width: settingsContent.width
-                            height: 28
-
-                            radius: 6
-                            color: wpBrowseArea.containsMouse
-                                ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.2)
-                                : "transparent"
-                            border.color: root.colMuted
-                            border.width: 1
-
-                            MouseArea {
-                                id: wpBrowseArea
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-
-                                onClicked: {
-                                    sidePanel.visible = false
-                                    wallpaperPopup.visible = true
-                                }
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Browse Wallpapers…"
-                                    color: root.colFg
-
-                                    font {
-                                        family: root.fontFamily
-                                        pixelSize: root.fontSize - 1
-                                    }
-                                }
+                            Repeater {
+                                model: sidePanel.bedroomScenes
+                                delegate: sceneButtonComponent
                             }
                         }
                     }
