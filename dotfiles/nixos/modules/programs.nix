@@ -6,6 +6,7 @@ in
   environment.systemPackages = with pkgs; [
     mpv
     firefox
+    vivaldi
     libreoffice
     nautilus
     home-manager

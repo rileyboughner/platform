@@ -163,11 +163,11 @@ hl.config({
 	},
 })
 
--- Disable animations for Brave Pyprland scratchpads
+-- Disable animations for Vivaldi Pyprland scratchpads
 hl.window_rule({
 	name = "no-animation-brave-scratchpads",
 	match = {
-		class = "^brave-.*-Default$",
+		class = "^vivaldi-.*-Default$",
 	},
   float = true,
 	no_anim = true,

@@ -18,8 +18,8 @@ animation = ""
 lazy = true
 
 [scratchpads.claude]
-command = "brave --app=https://claude.ai"
-class = "brave-claude.ai__-Default"
+command = "vivaldi --app=https://claude.ai"
+class = "vivaldi-claude.ai__-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
@@ -27,8 +27,8 @@ process_tracking = false
 lazy = true
 
 [scratchpads.homeassistant]
-command = "brave --app=https://home.virtualpicklenetwork.com"
-class = "brave-home.virtualpicklenetwork.com__-Default"
+command = "vivaldi --app=https://home.virtualpicklenetwork.com"
+class = "vivaldi-home.virtualpicklenetwork.com__-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
@@ -36,8 +36,8 @@ process_tracking = false
 lazy = true
 
 [scratchpads.zoho]
-command = "brave --app=https://mail.zoho.com"
-class = "brave-mail.zoho.com__-Default"
+command = "vivaldi --app=https://mail.zoho.com"
+class = "vivaldi-mail.zoho.com__-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
@@ -45,8 +45,8 @@ process_tracking = false
 lazy = true
 
 [scratchpads.outlook]
-command = "brave --app=https://outlook.office.com"
-class = "brave-outlook.office.com__-Default"
+command = "vivaldi --app=https://outlook.office.com"
+class = "vivaldi-outlook.office.com__-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
@@ -62,8 +62,8 @@ animation = ""
 lazy = false
 
 [scratchpads.calendar]
-command = "brave --app=https://calendar.google.com"
-class = "brave-calendar.google.com__-Default"
+command = "vivaldi --app=https://calendar.google.com"
+class = "vivaldi-calendar.google.com__-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
@@ -71,8 +71,8 @@ process_tracking = false
 lazy = true
 
 [scratchpads.messages]
-command = "brave --app=https://messages.google.com/web/conversations"
-class = "brave-messages.google.com__web_conversations-Default"
+command = "vivaldi --app=https://messages.google.com/web/conversations"
+class = "vivaldi-messages.google.com__web_conversations-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
