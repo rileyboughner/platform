@@ -38,7 +38,7 @@ hl.monitor({
 
 -- Set programs that you use
 local terminal = "kitty"
-local browser = "firefox"
+local browser = "vivaldi"
 local menu = "hyprlauncher"
 local fileManager = "nautilus"
 
@@ -212,11 +212,6 @@ hl.animation({ leaf = "zoomFactor", enabled = true, speed = 7, bezier = "quick" 
 
 -- "Smart gaps" / "No gaps when only"
 -- uncomment all if you wish to use that.
-
-hl.window_rule({
-	match = { class = "firefox" },
-	opacity = "1.0 override 1 override 0.8 override",
-})
 
 hl.workspace_rule({ workspace = "w[tv1]", gaps_out = 0, gaps_in = 0 })
 hl.workspace_rule({ workspace = "f[1]", gaps_out = 0, gaps_in = 0 })
@@ -392,6 +387,7 @@ hl.bind(mainMod .. " + ALT + B", hl.dsp.exec_cmd("quickshell ipc call barBottom 
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
+hl.bind(mainMod .. " + ALT + Return", hl.dsp.exec_cmd("vivaldi"))
 hl.bind(mainMod .. " + Backspace", hl.dsp.window.close())
 hl.bind(
 	mainMod .. " + Q",
@@ -400,7 +396,6 @@ hl.bind(
 hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("quickshell ipc call wallpaper toggle"))
 hl.bind(mainMod .. " + ALT + W", hl.dsp.exec_cmd("random-wallpaper"))
 hl.bind(mainMod .. " + ALT + T", hl.dsp.exec_cmd("quickshell ipc call theme toggle"))
-hl.bind(mainMod .. " + F", hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd(browser .. " https://uc.instructure.com/"))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
 hl.bind(mainMod .. " + Tab", hl.dsp.window.float({ action = "toggle" }))
