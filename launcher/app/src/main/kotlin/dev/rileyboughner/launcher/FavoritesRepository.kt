@@ -16,8 +16,6 @@ object FavoritesRepository {
         "com.google.android.apps.messaging",
         "com.android.mms",
         // Browser
-        "com.android.chrome",
-        "org.mozilla.firefox",
         "com.vivaldi.browser",
         // Camera
         "com.google.android.GoogleCamera",
@@ -25,7 +23,6 @@ object FavoritesRepository {
         // A few other common ones
         "com.google.android.gm",
         "com.google.android.apps.photos",
-        "com.google.android.calendar",
     )
 
     fun resolveFavorites(allApps: List<LauncherAppInfo>): List<LauncherAppInfo> {

@@ -1,9 +1,14 @@
 package dev.rileyboughner.launcher.ui
 
 import android.Manifest
+import android.content.ContentUris
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,7 +27,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.rileyboughner.launcher.calendar.CalendarEvent
@@ -35,7 +47,8 @@ import java.time.format.DateTimeFormatter
 /**
  * The Calendar page (right of Apps in the pager). Requests `READ_CALENDAR`
  * the first time this page is shown; shows a plain explanation if denied.
- * Read-only — no event creation or editing anywhere here.
+ * Read-only — no event creation or editing anywhere here; tapping an event
+ * hands off to the system calendar app instead.
  */
 @Composable
 fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = Modifier) {
@@ -49,6 +62,39 @@ fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = 
     var permissionWasRequested by rememberSaveable { mutableStateOf(false) }
     var events by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+
+    // Pull-down-to-toggle filter state. Defaults to "Today only". The pull
+    // only takes effect via the nested-scroll connection below, which lets
+    // it through only once the event list is already scrolled to its top —
+    // otherwise this is indistinguishable from a normal scroll-up gesture.
+    var showAllEvents by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    var pullDistancePx by remember { mutableStateOf(0f) }
+    val pullThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
+
+    val pullToggleConnection = remember(listState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                if (atTop && available.y > 0f) {
+                    pullDistancePx += available.y
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullDistancePx > 0f) {
+                    if (pullDistancePx > pullThresholdPx) {
+                        showAllEvents = !showAllEvents
+                    }
+                    pullDistancePx = 0f
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -71,21 +117,29 @@ fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = 
         }
     }
 
+    val today = LocalDate.now()
+    val visibleEvents = if (showAllEvents) events else events.filter { eventDay(it).isEqual(today) }
+
     Column(modifier = modifier.fillMaxSize()) {
+        FilterModeHeader(showAllEvents)
         when {
             !permissionGranted && permissionWasRequested -> EmptyCalendarState(
                 "Calendar access was denied. Grant READ_CALENDAR in system Settings to see upcoming events here.",
             )
             !permissionGranted -> EmptyCalendarState("Waiting for calendar permission…")
             isLoading && events.isEmpty() -> EmptyCalendarState("Loading…")
-            events.isEmpty() -> EmptyCalendarState("No upcoming events.")
+            visibleEvents.isEmpty() && showAllEvents -> EmptyCalendarState("No upcoming events.")
+            visibleEvents.isEmpty() -> EmptyCalendarState("No events today.")
             else -> {
-                val grouped = groupByDay(events)
-                LazyColumn {
+                val grouped = groupByDay(visibleEvents)
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.nestedScroll(pullToggleConnection),
+                ) {
                     grouped.forEach { (day, dayEvents) ->
                         item { DayHeader(day) }
                         items(dayEvents, key = { it.id to it.startMillis }) { event ->
-                            EventRow(event)
+                            EventRow(event, onClick = { openCalendarEvent(context, event) })
                             HairlineDivider()
                         }
                     }
@@ -93,6 +147,18 @@ fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = 
             }
         }
     }
+}
+
+@Composable
+private fun FilterModeHeader(showAllEvents: Boolean, modifier: Modifier = Modifier) {
+    Text(
+        text = if (showAllEvents) "All events" else "Today only",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
@@ -108,10 +174,11 @@ private fun DayHeader(day: LocalDate, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EventRow(event: CalendarEvent, modifier: Modifier = Modifier) {
+private fun EventRow(event: CalendarEvent, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 10.dp),
     ) {
         Text(
@@ -138,6 +205,30 @@ private fun EmptyCalendarState(message: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Opens the event in the system calendar app via `ACTION_VIEW` on the
+ * event's content URI. If nothing can resolve that (no calendar app, or the
+ * URI is otherwise unresolvable), falls back to opening the calendar app's
+ * main view at the event's start time instead of silently doing nothing.
+ */
+private fun openCalendarEvent(context: Context, event: CalendarEvent) {
+    val eventUri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, event.id)
+    val eventIntent = Intent(Intent.ACTION_VIEW, eventUri)
+    if (eventIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(eventIntent)
+        return
+    }
+
+    val fallbackUri = CalendarContract.CONTENT_URI.buildUpon()
+        .appendPath("time")
+        .appendPath(event.startMillis.toString())
+        .build()
+    val fallbackIntent = Intent(Intent.ACTION_VIEW, fallbackUri)
+    if (fallbackIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(fallbackIntent)
+    }
+}
+
 private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
 
 // All-day instances are stored by CalendarContract in UTC regardless of the
@@ -145,9 +236,12 @@ private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
 // instead of shifting a day near midnight.
 private fun eventZone(event: CalendarEvent): ZoneId = if (event.allDay) ZoneOffset.UTC else ZoneId.systemDefault()
 
+private fun eventDay(event: CalendarEvent): LocalDate =
+    Instant.ofEpochMilli(event.startMillis).atZone(eventZone(event)).toLocalDate()
+
 private fun groupByDay(events: List<CalendarEvent>): List<Pair<LocalDate, List<CalendarEvent>>> =
     events
-        .groupBy { Instant.ofEpochMilli(it.startMillis).atZone(eventZone(it)).toLocalDate() }
+        .groupBy(::eventDay)
         .toSortedMap()
         .map { (day, dayEvents) -> day to dayEvents }
 
