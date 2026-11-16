@@ -28,12 +28,15 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.Launcher">
 
-        <!-- Phone / tablet entry point: default-home candidate. -->
+        <!-- Phone / tablet entry point: default-home candidate. Uses the
+             wallpaper-showing theme variant (see themes.xml) so the Apps
+             page can show the real system wallpaper; SettingsActivity and
+             TvMainActivity below stay on the plain opaque Theme.Launcher. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.Launcher">
+            android:theme="@style/Theme.Launcher.Wallpaper">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />

@@ -2,6 +2,7 @@ package dev.rileyboughner.launcher
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import dev.rileyboughner.launcher.calendar.CalendarRepository
@@ -32,6 +33,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Belt-and-suspenders alongside Theme.Launcher.Wallpaper's
+        // android:windowShowWallpaper — some OEM skins have been known to
+        // ignore the theme attribute alone, but respect the window flag.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         val settingsRepository = SettingsRepository(applicationContext)
         appListRepository = AppListRepository(applicationContext)
         calendarRepository = CalendarRepository(applicationContext)

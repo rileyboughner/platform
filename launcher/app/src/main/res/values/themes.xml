@@ -13,4 +13,23 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">true</item>
     </style>
+
+    <!--
+      MainActivity only. Lets the system compositor draw the real device
+      wallpaper (including live wallpapers) directly behind this window,
+      instead of this app reading WallpaperManager's drawable into a Bitmap
+      itself — that read came back null on Riley's Pixel, so the Apps page
+      was solid black. android:windowIsTranslucent is required alongside
+      windowShowWallpaper: without it the opaque windowBackground below
+      still paints over the wallpaper surface. The Apps page (AppsPageScreen)
+      is the only pager page that leaves part of the window undrawn (behind
+      its dark scrim) for this to show through — every other page paints
+      its own fully opaque background on top, so they stay solid black
+      unaffected by this theme change.
+    -->
+    <style name="Theme.Launcher.Wallpaper" parent="Theme.Launcher">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>
