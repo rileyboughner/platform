@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/theme-variables.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="page-header">
+    <h1>Dashboard</h1>
+    <span id="last-updated" class="muted"></span>
+  </header>
+
+  <main class="grid">
+    <section class="card" id="card-jellyfin">
+      <h2>Continue watching</h2>
+      <div class="card-body loading">Loading…</div>
+    </section>
+
+    <section class="card" id="card-seerr">
+      <h2>Requests</h2>
+      <div class="card-body loading">Loading…</div>
+    </section>
+
+    <section class="card" id="card-homeassistant">
+      <h2>Home</h2>
+      <div class="card-body loading">Loading…</div>
+    </section>
+
+    <section class="card card-wide" id="card-server">
+      <h2>Server</h2>
+      <div class="card-body loading">Loading…</div>
+    </section>
+
+    <section class="card card-wide" id="card-links">
+      <h2>Links</h2>
+      <div class="card-body loading">Loading…</div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

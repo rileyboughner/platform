@@ -1,0 +1,35 @@
+services:
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
+    container_name: dashboard
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    environment:
+      - HA_TOKEN=${HA_TOKEN:-}
+      - HA_URL=${HA_URL:-http://homeassistant:8123}
+      - JELLYFIN_URL=${JELLYFIN_URL:-http://192.168.1.2:30960}
+      - JELLYFIN_USERNAME=${JELLYFIN_USERNAME:-rileyboughner}
+      - SEERR_URL=${SEERR_URL:-http://seerr:5055}
+      - CADVISOR_URL=${CADVISOR_URL:-}
+    volumes:
+      # Jellyfin's sqlite db holds the API key this dashboard reads server-side.
+      - /mnt/tank/config/jellyfin/data:/mnt/tank/config/jellyfin/data:ro
+      # Seerr's API key.
+      - /mnt/tank/services/jellyseer/settings.json:/mnt/tank/services/jellyseer/settings.json:ro
+      # Canonical hostnames for the links section.
+      - /mnt/tank/services/cloudflared/config.yml:/mnt/tank/services/cloudflared/config.yml:ro
+      # Read-only Docker API access for per-container state (cAdvisor covers the stats).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/uptime:/host/proc-uptime:ro
+    networks:
+      - proxy_net
+      - arr_net
+
+networks:
+  proxy_net:
+    external: true
+  arr_net:
+    external: true
