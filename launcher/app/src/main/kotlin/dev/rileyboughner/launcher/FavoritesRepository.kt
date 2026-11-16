@@ -5,8 +5,16 @@ package dev.rileyboughner.launcher
  * a real "customize favorites" UI exists. To change the defaults, edit
  * [DEFAULT_FAVORITE_PACKAGES] — order here is the order shown on the Apps
  * page. Entries for apps that aren't installed are silently skipped.
+ *
+ * The lift-log app is resolved differently: its package name isn't known
+ * ahead of time, so it's matched by label at runtime (see
+ * [resolveLiftLogApp]) and appended after the pinned-by-package favorites,
+ * shown as "workout" instead of its own label. Same silent-skip behavior
+ * if no match is installed.
  */
 object FavoritesRepository {
+
+    private const val LIFT_LOG_DISPLAY_LABEL = "workout"
 
     val DEFAULT_FAVORITE_PACKAGES: List<String> = listOf(
         // Phone
@@ -27,6 +35,15 @@ object FavoritesRepository {
 
     fun resolveFavorites(allApps: List<LauncherAppInfo>): List<LauncherAppInfo> {
         val byPackage = allApps.associateBy { it.packageName }
-        return DEFAULT_FAVORITE_PACKAGES.mapNotNull { byPackage[it] }
+        val pinned = DEFAULT_FAVORITE_PACKAGES.mapNotNull { byPackage[it] }
+        val liftLog = resolveLiftLogApp(allApps)?.copy(label = LIFT_LOG_DISPLAY_LABEL)
+        return if (liftLog != null) pinned + liftLog else pinned
+    }
+
+    /** Matches by label containing "lift" (case-insensitive), preferring one containing "lift log". */
+    private fun resolveLiftLogApp(allApps: List<LauncherAppInfo>): LauncherAppInfo? {
+        val candidates = allApps.filter { it.label.contains("lift", ignoreCase = true) }
+        return candidates.firstOrNull { it.label.contains("lift log", ignoreCase = true) }
+            ?: candidates.firstOrNull()
     }
 }

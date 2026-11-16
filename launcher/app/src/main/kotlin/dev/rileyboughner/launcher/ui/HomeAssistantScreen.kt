@@ -1,11 +1,13 @@
 package dev.rileyboughner.launcher.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -18,9 +20,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantLight
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
@@ -33,13 +37,17 @@ import kotlin.math.roundToInt
 
 /**
  * The Home Assistant page, between Dashboard and Apps in the pager: real
- * presence, light toggles/brightness, and scenes via the HA REST API — see
- * [HomeAssistantRepository]. Text-first per the monochrome restyle; the
- * only non-text controls are the per-light switch and brightness slider.
+ * presence plus one room at a time (lights/brightness, scenes) via the HA
+ * REST API — see [HomeAssistantRepository]. Rooms are switched with tap-only
+ * tabs just below the presence line — deliberately not a nested horizontal
+ * swipe, which would fight the outer pager's own swipe gesture. Text-first
+ * per the monochrome restyle; the only non-text controls are the per-light
+ * switch and brightness slider.
  */
 @Composable
 fun HomeAssistantScreen(homeAssistantRepository: HomeAssistantRepository, modifier: Modifier = Modifier) {
     var result by remember { mutableStateOf<HomeAssistantResult<HomeAssistantSnapshot>?>(null) }
+    var selectedRoomIndex by rememberSaveable { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -52,6 +60,7 @@ fun HomeAssistantScreen(homeAssistantRepository: HomeAssistantRepository, modifi
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding()
             .verticalScroll(rememberScrollState()),
     ) {
         Text(
@@ -76,8 +85,15 @@ fun HomeAssistantScreen(homeAssistantRepository: HomeAssistantRepository, modifi
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                 )
 
-                snapshot.rooms.forEach { room ->
-                    HairlineDivider()
+                HairlineDivider()
+                RoomTabRow(
+                    roomNames = snapshot.rooms.map { it.name },
+                    selectedIndex = selectedRoomIndex,
+                    onSelect = { selectedRoomIndex = it },
+                )
+                HairlineDivider()
+
+                snapshot.rooms.getOrNull(selectedRoomIndex)?.let { room ->
                     RoomSection(
                         room = room,
                         onToggleLight = { entityId ->
@@ -98,6 +114,35 @@ fun HomeAssistantScreen(homeAssistantRepository: HomeAssistantRepository, modifi
                     )
                 }
             }
+        }
+    }
+}
+
+/** Tap-only room tabs — no swipe gesture here, so it never fights the pager's own horizontal swipe. */
+@Composable
+private fun RoomTabRow(
+    roomNames: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
+        roomNames.forEachIndexed { index, name ->
+            val selected = index == selectedIndex
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                ),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onBackground
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .clickable(onClick = { onSelect(index) })
+                    .padding(end = 24.dp),
+            )
         }
     }
 }

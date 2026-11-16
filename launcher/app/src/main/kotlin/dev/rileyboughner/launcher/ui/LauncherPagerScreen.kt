@@ -2,14 +2,20 @@ package dev.rileyboughner.launcher.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.calendar.CalendarRepository
+import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.todoist.TodoistRepository
@@ -47,6 +54,7 @@ fun LauncherPagerScreen(
     todoistRepository: TodoistRepository,
     jellyfinRepository: JellyfinRepository,
     homeAssistantRepository: HomeAssistantRepository,
+    dashboardRepository: DashboardRepository,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -58,7 +66,11 @@ fun LauncherPagerScreen(
             modifier = Modifier.fillMaxSize().weight(1f),
         ) { page ->
             when (page) {
-                PAGE_DASHBOARD -> DashboardScreen(jellyfinRepository, modifier = Modifier.fillMaxSize())
+                PAGE_DASHBOARD -> DashboardScreen(
+                    dashboardRepository = dashboardRepository,
+                    jellyfinRepository = jellyfinRepository,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 PAGE_HOME_ASSISTANT -> HomeAssistantScreen(homeAssistantRepository, modifier = Modifier.fillMaxSize())
                 PAGE_APPS -> AppsPageScreen(
                     appListRepository = appListRepository,
@@ -75,17 +87,27 @@ fun LauncherPagerScreen(
                 )
             }
         }
-        PageIndicator(pageCount = PAGE_COUNT, currentPage = pagerState.currentPage)
+        PageIndicator(
+            pageCount = PAGE_COUNT,
+            currentPage = pagerState.currentPage,
+            onClick = onOpenSettings,
+        )
     }
 }
 
-/** Minimal dot indicator — small dots, no labels, no animation. */
+/**
+ * Minimal dot indicator — small dots, no labels, no animation. Tapping
+ * anywhere on the strip opens Settings (Riley's feedback: the dots were
+ * otherwise dead space).
+ */
 @Composable
-private fun PageIndicator(pageCount: Int, currentPage: Int, modifier: Modifier = Modifier) {
+private fun PageIndicator(pageCount: Int, currentPage: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
+            .clickable(onClick = onClick)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
     ) {

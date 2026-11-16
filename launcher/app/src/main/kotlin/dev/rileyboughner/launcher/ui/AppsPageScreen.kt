@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -52,9 +53,10 @@ import java.time.format.DateTimeFormatter
  * The Apps page — center page of the pager, and the default/start page.
  * Restyled to look like Olauncher (minimal AF launcher): a large clock +
  * date at the top over the system wallpaper, then plain left-aligned
- * favorite rows with generous spacing (no icons, no dividers), then "All
- * apps" and "Settings" nav rows. Tapping "All apps" swaps in
- * [AllAppsScreen] in place (not a separate pager page).
+ * favorite rows with generous spacing (no icons, no dividers), then a
+ * "Settings" nav row. There's no separate "All apps" row — swipe down
+ * already opens [AllAppsScreen] in place (not a separate pager page), so
+ * the button was redundant.
  *
  * Gestures on this page (Riley's phone feedback):
  * - Swipe down opens [AllAppsScreen] with the search field focused/keyboard
@@ -174,6 +176,7 @@ fun AppsPageScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .safeDrawingPadding()
                 .nestedScroll(swipeConnection)
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp),
@@ -192,7 +195,6 @@ fun AppsPageScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            FavoriteRow(label = "All apps", onClick = { showAllApps = true })
             FavoriteRow(label = "Settings", onClick = onOpenSettings)
 
             Spacer(modifier = Modifier.height(32.dp))

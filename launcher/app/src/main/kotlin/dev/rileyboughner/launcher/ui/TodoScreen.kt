@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
@@ -60,7 +61,7 @@ fun TodoScreen(todoistRepository: TodoistRepository, modifier: Modifier = Modifi
 
     LaunchedEffect(Unit) { refresh() }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize().safeDrawingPadding()) {
         AppTextRow(label = "↻ Refresh", onClick = { refresh() })
         HairlineDivider()
 
