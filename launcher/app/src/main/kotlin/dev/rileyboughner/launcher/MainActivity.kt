@@ -1,12 +1,12 @@
 package dev.rileyboughner.launcher
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
         // android:windowShowWallpaper — some OEM skins have been known to
         // ignore the theme attribute alone, but respect the window flag.
         window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-        hideSystemBars()
+        enableEdgeToEdge()
         val settingsRepository = SettingsRepository(applicationContext)
         appListRepository = AppListRepository(applicationContext)
         calendarRepository = CalendarRepository(applicationContext)
@@ -66,23 +66,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Edge-to-edge immersive mode: content draws behind where the status/nav
-    // bars would be (decorFitsSystemWindow = false), and the bars themselves
-    // stay hidden until a swipe from the edge reveals them transiently
-    // without resizing the layout underneath.
-    private fun hideSystemBars() {
+    // True edge-to-edge: content (and the wallpaper, via the Wallpaper theme
+    // variant) draws the full window including behind the status/nav bars
+    // (decorFitsSystemWindow = false), and the bars themselves stay shown
+    // but transparent rather than hidden. v8 tried hiding the bars outright
+    // via WindowInsetsController, but that legacy-adjacent approach (plus
+    // the theme's android:windowFullscreen=true) left a solid opaque band
+    // where the status bar sits instead of actually hiding or showing
+    // through it — see themes.xml for the fuller explanation. Every pager
+    // page already applies its own safeDrawingPadding(), so switching to
+    // "shown but transparent" doesn't require any page-content changes.
+    private fun enableEdgeToEdge() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
     }
 
-    // Re-applies the hide on every focus regain — some OEM skins (and
-    // returning from a system dialog/share sheet) otherwise leave the bars
-    // permanently shown again instead of just transiently revealed.
+    // Re-applies on every focus regain — some OEM skins (and returning from
+    // a system dialog/share sheet) otherwise reset the bar colors back to
+    // opaque instead of leaving them transparent.
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemBars()
+        if (hasFocus) enableEdgeToEdge()
     }
 }

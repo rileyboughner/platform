@@ -53,10 +53,13 @@ import java.time.format.DateTimeFormatter
  * The Apps page — center page of the pager, and the default/start page.
  * Restyled to look like Olauncher (minimal AF launcher): a large clock +
  * date at the top over the system wallpaper, then plain left-aligned
- * favorite rows with generous spacing (no icons, no dividers), then a
- * "Settings" nav row. There's no separate "All apps" row — swipe down
- * already opens [AllAppsScreen] in place (not a separate pager page), so
- * the button was redundant.
+ * favorite rows with generous spacing (no icons, no dividers). There's no
+ * separate "All apps" row — swipe down already opens [AllAppsScreen] in
+ * place (not a separate pager page), so the button was redundant. There's
+ * also no "Settings" row — tapping the page-dot strip at the bottom of
+ * [dev.rileyboughner.launcher.ui.LauncherPagerScreen] already opens
+ * Settings, so a second entry point here was redundant too (Riley's phone
+ * feedback on v8).
  *
  * Gestures on this page (Riley's phone feedback):
  * - Swipe down opens [AllAppsScreen] with the search field focused/keyboard
@@ -67,7 +70,6 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun AppsPageScreen(
     appListRepository: AppListRepository,
-    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -192,10 +194,6 @@ fun AppsPageScreen(
                     FavoriteRow(label = app.label, onClick = { appListRepository.launchApp(app.packageName) })
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            FavoriteRow(label = "Settings", onClick = onOpenSettings)
 
             Spacer(modifier = Modifier.height(32.dp))
         }

@@ -45,9 +45,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Settings screen: reached only from the "Settings" text row on
-             the Apps page, to paste in a Todoist API token. Not a launcher
-             entry point, not exported. -->
+        <!-- Settings screen: reached only by tapping the page-dot strip at
+             the bottom of the pager, to paste in a Todoist API token. Not a
+             launcher entry point, not exported. -->
         <activity
             android:name=".settings.SettingsActivity"
             android:exported="false"

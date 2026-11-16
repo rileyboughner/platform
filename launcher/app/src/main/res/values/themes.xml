@@ -26,10 +26,25 @@
       its dark scrim) for this to show through — every other page paints
       its own fully opaque background on top, so they stay solid black
       unaffected by this theme change.
+
+      Also overrides windowFullscreen back to false (v8 regression): that
+      legacy pre-insets-API attribute hides the status bar at the
+      WindowManager.LayoutParams level, which the Android docs warn against
+      combining with WindowInsetsController/decorFitsSystemWindows — in
+      practice it fought the insets controller and left a solid opaque
+      status-bar-height band on screen instead of either fully hiding the
+      bar or letting content draw through it. statusBarColor/navigationBarColor
+      transparent plus windowLayoutInDisplayCutoutMode=shortEdges below are
+      the modern replacement: bars stay shown but transparent, and content
+      (plus the cutout area) draws underneath them edge-to-edge.
     -->
     <style name="Theme.Launcher.Wallpaper" parent="Theme.Launcher">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowShowWallpaper">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>
