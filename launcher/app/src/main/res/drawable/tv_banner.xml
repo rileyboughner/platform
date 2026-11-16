@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimal Android TV banner (320x180dp, the Leanback-recommended size),
+  shown for this app in the system Android TV launcher's apps row. Matches
+  the launcher's own black-background / white-text-row minimal style —
+  solid black, three plain white bars standing in for text rows, no icon,
+  no gradient, no logotype.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#FF000000" android:pathData="M0,0H320V180H0Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M28,48H200V62H28Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M28,78H260V92H28Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M28,108H160V122H28Z" />
+</vector>

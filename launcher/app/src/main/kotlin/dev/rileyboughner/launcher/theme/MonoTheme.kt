@@ -8,10 +8,11 @@ import androidx.compose.ui.graphics.Color
 /**
  * Riley's requested restyle: a minimal black-and-white text launcher
  * (Olauncher / Before Launcher style). This intentionally overrides the
- * rose-pine wiring in [AppTheme] for the phone/tablet UI only — colors are
+ * rose-pine wiring in [AppTheme] for the phone/tablet UI — colors are
  * fixed (pure black, pure white, one dark-gray hairline), not sourced from
- * [platform.theme.PlatformTheme]. [TvHomeScreen] keeps using [LauncherTheme]
- * (rose-pine) untouched.
+ * [platform.theme.PlatformTheme]. The Google TV / Leanback UI
+ * ([dev.rileyboughner.launcher.ui.TvHomeScreen]) uses this same theme, for
+ * the same minimal black-and-white look on both form factors.
  */
 private val MonoBlack = Color(0xFF000000)
 private val MonoWhite = Color(0xFFFFFFFF)
