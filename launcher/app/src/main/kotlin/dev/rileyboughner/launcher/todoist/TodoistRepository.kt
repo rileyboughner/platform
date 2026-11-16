@@ -1,0 +1,47 @@
+package dev.rileyboughner.launcher.todoist
+
+import dev.rileyboughner.launcher.settings.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.IOException
+
+sealed interface TodoistResult<out T> {
+    data class Success<T>(val value: T) : TodoistResult<T>
+    data class Error(val message: String) : TodoistResult<Nothing>
+}
+
+/**
+ * Orchestrates Todoist calls for the Todo page: resolves the saved token,
+ * runs network I/O off the main thread, and turns every failure into a
+ * [TodoistResult.Error] — this must never let an exception reach the UI
+ * and crash the launcher.
+ */
+class TodoistRepository(private val settingsRepository: SettingsRepository) {
+
+    fun hasToken(): Boolean = settingsRepository.getTodoistToken() != null
+
+    suspend fun fetchTasks(): TodoistResult<List<TodoistTask>> = withContext(Dispatchers.IO) {
+        val token = settingsRepository.getTodoistToken()
+            ?: return@withContext TodoistResult.Error("No Todoist API token saved. Add one in Settings.")
+        try {
+            TodoistResult.Success(TodoistApi.fetchTasks(token))
+        } catch (e: IOException) {
+            TodoistResult.Error("Couldn't reach Todoist. Check your connection and try again.")
+        } catch (e: Exception) {
+            TodoistResult.Error("Couldn't load tasks from Todoist.")
+        }
+    }
+
+    suspend fun closeTask(taskId: String): TodoistResult<Unit> = withContext(Dispatchers.IO) {
+        val token = settingsRepository.getTodoistToken()
+            ?: return@withContext TodoistResult.Error("No Todoist API token saved.")
+        try {
+            TodoistApi.closeTask(token, taskId)
+            TodoistResult.Success(Unit)
+        } catch (e: IOException) {
+            TodoistResult.Error("Couldn't reach Todoist. Check your connection and try again.")
+        } catch (e: Exception) {
+            TodoistResult.Error("Couldn't complete that task.")
+        }
+    }
+}

@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
+    <!-- Todo page: Todoist REST API calls. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Calendar page: read-only device calendar, requested at runtime. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
     <!-- Declared so this APK is installable on a phone/tablet without
          Leanback (feature is optional, matching the Google TV entry point
          below also being optional on handheld devices). -->
@@ -35,6 +41,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Settings screen: reached only from the "Settings" text row on
+             the Apps page, to paste in a Todoist API token. Not a launcher
+             entry point, not exported. -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Launcher" />
 
         <!-- Google TV / Android TV entry point: shown as the Leanback home
              launcher stub. Separate activity so the TV "10-foot" Compose UI

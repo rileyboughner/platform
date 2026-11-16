@@ -88,6 +88,9 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.1")
 
+    // Todo page: encrypted storage for the user-entered Todoist API token.
+    implementation("androidx.security:security-crypto:1.1.0")
+
     // Phone / tablet UI
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

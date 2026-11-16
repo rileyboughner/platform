@@ -2,9 +2,6 @@
 <resources>
     <string name="app_name">Launcher</string>
 
-    <string name="app_grid_title">Apps</string>
-    <string name="app_grid_empty">No launchable apps found.</string>
-
     <string name="jellyfin_row_title">Continue Watching</string>
     <string name="jellyfin_row_stub_notice">Stub — wire up Jellyfin API client in Phase 2+</string>
     <string name="jellyfin_open_app">Open in Jellyfin</string>

@@ -1,0 +1,95 @@
+package dev.rileyboughner.launcher.ui
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import dev.rileyboughner.launcher.AppListRepository
+import dev.rileyboughner.launcher.calendar.CalendarRepository
+import dev.rileyboughner.launcher.todoist.TodoistRepository
+
+/**
+ * Three-page horizontal pager, Apps in the center and the default/start
+ * page. Picked direction: swiping right (towards the page on the left)
+ * goes to Todo, swiping left (towards the page on the right) goes to
+ * Calendar — i.e. page order is [Todo, Apps, Calendar].
+ *
+ * Todo/Calendar pages are only composed once actually swiped into view
+ * (Pager's default `beyondViewportPageCount` is 0), which is also what
+ * makes "request the permission / fetch tasks when the page is first
+ * shown" work for free via a plain `LaunchedEffect(Unit)` in each page.
+ */
+private const val PAGE_TODO = 0
+private const val PAGE_APPS = 1
+private const val PAGE_CALENDAR = 2
+private const val PAGE_COUNT = 3
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LauncherPagerScreen(
+    appListRepository: AppListRepository,
+    calendarRepository: CalendarRepository,
+    todoistRepository: TodoistRepository,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val pagerState = rememberPagerState(initialPage = PAGE_APPS) { PAGE_COUNT }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize().weight(1f),
+        ) { page ->
+            when (page) {
+                PAGE_TODO -> TodoScreen(todoistRepository, modifier = Modifier.fillMaxSize())
+                PAGE_APPS -> AppsPageScreen(
+                    appListRepository = appListRepository,
+                    onOpenSettings = onOpenSettings,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                PAGE_CALENDAR -> CalendarScreen(calendarRepository, modifier = Modifier.fillMaxSize())
+            }
+        }
+        PageIndicator(pageCount = PAGE_COUNT, currentPage = pagerState.currentPage)
+    }
+}
+
+/** Minimal dot indicator — three small dots, no labels, no animation. */
+@Composable
+private fun PageIndicator(pageCount: Int, currentPage: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        repeat(pageCount) { index ->
+            val color = if (index == currentPage) {
+                MaterialTheme.colorScheme.onBackground
+            } else {
+                MaterialTheme.colorScheme.outline
+            }
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color),
+            )
+        }
+    }
+}
