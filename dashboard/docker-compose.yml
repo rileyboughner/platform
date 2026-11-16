@@ -10,13 +10,9 @@ services:
     environment:
       - HA_TOKEN=${HA_TOKEN:-}
       - HA_URL=${HA_URL:-http://homeassistant:8123}
-      - JELLYFIN_URL=${JELLYFIN_URL:-http://192.168.1.2:30960}
-      - JELLYFIN_USERNAME=${JELLYFIN_USERNAME:-rileyboughner}
       - SEERR_URL=${SEERR_URL:-http://seerr:5055}
       - CADVISOR_URL=${CADVISOR_URL:-}
     volumes:
-      # Jellyfin's sqlite db holds the API key this dashboard reads server-side.
-      - /mnt/tank/config/jellyfin/data:/mnt/tank/config/jellyfin/data:ro
       # Seerr's API key.
       - /mnt/tank/services/jellyseer/settings.json:/mnt/tank/services/jellyseer/settings.json:ro
       # Canonical hostnames for the links section.

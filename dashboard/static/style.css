@@ -87,18 +87,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.progress-track {
-  height: 6px;
-  background: var(--color-semantic-overlay);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--color-semantic-accent-secondary);
-}
-
 .badge {
   display: inline-block;
   font-size: var(--font-size-12);
@@ -193,6 +181,24 @@ body {
 .dot.exited, .dot.dead { background: var(--color-semantic-error); }
 .dot.other { background: var(--color-semantic-warning); }
 
+.links-filter {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: var(--spacing-12);
+  background: var(--color-semantic-overlay);
+  border: 1px solid var(--color-semantic-border);
+  border-radius: var(--radius-small);
+  color: var(--color-semantic-text);
+  font-size: var(--font-size-14);
+  font-family: var(--font-family-sans);
+  padding: var(--spacing-8) var(--spacing-12);
+}
+
+.links-filter:focus {
+  outline: 1px solid var(--color-semantic-accent);
+}
+
 .links-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -208,9 +214,15 @@ body {
   border-radius: var(--radius-small);
   padding: var(--spacing-12);
   font-size: var(--font-size-14);
-  transition: background 0.15s ease;
+  cursor: grab;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
 
 .link-tile:hover {
   background: var(--color-highlight-med);
+}
+
+.link-tile.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
 }

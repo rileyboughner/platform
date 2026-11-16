@@ -8,19 +8,12 @@ import json
 import os
 import shutil
 import socket
-import sqlite3
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PORT = int(os.environ.get("PORT", "8099"))
 STATIC_DIR = Path(__file__).parent / "static"
-
-JELLYFIN_URL = os.environ.get("JELLYFIN_URL", "http://192.168.1.2:30960")
-JELLYFIN_USERNAME = os.environ.get("JELLYFIN_USERNAME", "rileyboughner")
-JELLYFIN_DB_PATH = os.environ.get(
-    "JELLYFIN_DB_PATH", "/mnt/tank/config/jellyfin/data/jellyfin.db"
-)
 
 SEERR_URL = os.environ.get("SEERR_URL", "http://seerr:5055")
 SEERR_SETTINGS_PATH = os.environ.get(
@@ -33,7 +26,7 @@ HA_TOKEN = os.environ.get("HA_TOKEN", "").strip()
 CADVISOR_URL_OVERRIDE = os.environ.get("CADVISOR_URL", "").strip()
 DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 HOST_UPTIME_PATH = os.environ.get("HOST_UPTIME_PATH", "/host/proc-uptime")
-DISK_PATH = os.environ.get("DISK_PATH", "/mnt/tank/config/jellyfin/data")
+DISK_PATH = os.environ.get("DISK_PATH", "/mnt/tank/services/jellyseer/settings.json")
 
 CLOUDFLARED_CONFIG_PATH = os.environ.get(
     "CLOUDFLARED_CONFIG_PATH", "/mnt/tank/services/cloudflared/config.yml"
@@ -88,54 +81,6 @@ def _cpu_percent(first_stat, last_stat, divisor=1):
         return None
 
 
-# ------------------------------------------------------------- Jellyfin ---
-
-def get_jellyfin():
-    try:
-        conn = sqlite3.connect(f"file:{JELLYFIN_DB_PATH}?mode=ro", uri=True, timeout=3)
-        cur = conn.cursor()
-        cur.execute("SELECT AccessToken FROM ApiKeys LIMIT 1")
-        key_row = cur.fetchone()
-        cur.execute("SELECT Id FROM Users WHERE Username = ?", (JELLYFIN_USERNAME,))
-        user_row = cur.fetchone()
-        conn.close()
-    except Exception:
-        return {"error": "Could not read the Jellyfin database."}
-
-    if not key_row:
-        return {"error": "No Jellyfin API key found in the database."}
-    if not user_row:
-        return {"error": f"No Jellyfin user named '{JELLYFIN_USERNAME}'."}
-
-    api_key, user_id = key_row[0], user_row[0]
-    auth = (
-        f'MediaBrowser Token="{api_key}", Client="dashboard", '
-        f'Device="dashboard", DeviceId="dashboard-v1", Version="1.0"'
-    )
-    try:
-        data = _http_json(
-            f"{JELLYFIN_URL}/Users/{user_id}/Items/Resume?Limit=20",
-            headers={"Authorization": auth},
-        )
-    except Exception:
-        return {"error": f"Jellyfin at {JELLYFIN_URL} is not reachable."}
-
-    items = []
-    for item in data.get("Items", []):
-        if item.get("Type") not in ("Episode", "Movie"):
-            continue
-        pct = (item.get("UserData") or {}).get("PlayedPercentage") or 0
-        title = item.get("Name")
-        series = item.get("SeriesName")
-        items.append({
-            "title": f"{series} — {title}" if series else title,
-            "percent": round(pct, 1),
-        })
-        if len(items) >= 8:
-            break
-    return {"items": items}
-
-
 # --------------------------------------------------------------- Seerr ----
 
 def _seerr_title(api_key, media_type, tmdb_id):
@@ -175,7 +120,7 @@ def get_seerr():
 
     try:
         data = _http_json(
-            f"{SEERR_URL}/api/v1/request?take=8&sort=added",
+            f"{SEERR_URL}/api/v1/request?take=25&sort=added",
             headers={"X-Api-Key": api_key},
         )
     except Exception:
@@ -185,13 +130,18 @@ def get_seerr():
     for r in data.get("results", []):
         media = r.get("media") or {}
         media_type = r.get("type")
+        status = _seerr_status_label(r.get("status"), media.get("status"))
+        if status == "Available":
+            continue
         tmdb_id = media.get("tmdbId")
         title = _seerr_title(api_key, media_type, tmdb_id) if tmdb_id else "Unknown title"
         items.append({
             "title": title,
             "type": media_type,
-            "status": _seerr_status_label(r.get("status"), media.get("status")),
+            "status": status,
         })
+        if len(items) >= 8:
+            break
     return {"items": items}
 
 
@@ -393,7 +343,6 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/api/all":
             self._send_json({
-                "jellyfin": get_jellyfin(),
                 "seerr": get_seerr(),
                 "homeassistant": get_homeassistant(),
                 "server": get_server(),

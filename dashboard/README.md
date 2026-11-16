@@ -1,23 +1,24 @@
 # dashboard
 
-v1: one glanceable page covering Jellyfin "continue watching," Seerr
-request status, Home Assistant presence, server/container status, and
-links to everything else.
+Links/services at the top, Seerr request status (pending/processing
+only — available requests are filtered out), Home Assistant presence,
+and server/container status below.
+
+The links section is filterable (text search) and reorderable
+(drag tiles to reorder; the order is persisted in the browser's
+localStorage, not server-side).
 
 Styled using the CSS custom properties generated in
 `../theme/build/css/variables.css` — no separate theme implementation
 (the Dockerfile pulls it straight from the theme build output).
 
 Stack: a single Python stdlib HTTP server (`server.py`) serving the
-static frontend and a `/api/all` endpoint that fans out to Jellyfin,
-Seerr, Home Assistant, cAdvisor, and the Docker socket. No frameworks,
-no build step.
+static frontend and a `/api/all` endpoint that fans out to Seerr, Home
+Assistant, cAdvisor, and the Docker socket. No frameworks, no build
+step.
 
 ## Secrets
 
-- The Jellyfin API key is read server-side from the K8s Jellyfin
-  sqlite database (`/mnt/tank/config/jellyfin/data/jellyfin.db`,
-  mounted read-only). Never logged.
 - The Seerr API key is read server-side from
   `/mnt/tank/services/jellyseer/settings.json` (`.main.apiKey`,
   mounted read-only). Never logged.
