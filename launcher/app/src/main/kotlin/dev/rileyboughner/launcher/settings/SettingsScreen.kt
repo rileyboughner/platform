@@ -1,5 +1,7 @@
 package dev.rileyboughner.launcher.settings
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,13 +13,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.PermissionController
+import dev.rileyboughner.launcher.health.HealthConnectRepository
+import dev.rileyboughner.launcher.health.READ_SLEEP_PERMISSIONS
 import dev.rileyboughner.launcher.ui.AppTextRow
 import dev.rileyboughner.launcher.ui.HairlineDivider
 
@@ -50,6 +59,14 @@ fun SettingsScreen(
     var homeAssistantServerUrl by rememberSaveable { mutableStateOf(initialFields.homeAssistantServerUrl) }
     var homeAssistantToken by rememberSaveable { mutableStateOf(initialFields.homeAssistantToken) }
     var duolingoUsername by rememberSaveable { mutableStateOf(initialFields.duolingoUsername) }
+
+    val context = LocalContext.current
+    val healthConnectAvailable = remember { HealthConnectRepository.isAvailable(context) }
+    var hasSleepPermission by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { hasSleepPermission = HealthConnectRepository.hasSleepPermission(context) }
+    val healthPermissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract(),
+    ) { granted -> hasSleepPermission = granted.containsAll(READ_SLEEP_PERMISSIONS) }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         AppTextRow(label = "← Back", onClick = onBack)
@@ -85,6 +102,40 @@ fun SettingsScreen(
 
         SettingsSection(title = "Duolingo", description = "Your public Duolingo username — no password needed.") {
             LabeledField(label = "Username", value = duolingoUsername, onValueChange = { duolingoUsername = it })
+        }
+
+        SettingsSection(
+            title = "Health",
+            description = "Sleep on the main page reads from Health Connect. Fitbit sleep only shows up here if " +
+                "the Fitbit app is set to sync sleep to Health Connect (Fitbit app → Health Connect settings).",
+        ) {
+            val statusLabel = when {
+                !healthConnectAvailable -> "Health Connect isn't available on this device"
+                hasSleepPermission -> "Sleep access granted"
+                else -> "Sleep access not granted"
+            }
+            Text(
+                text = statusLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            if (healthConnectAvailable && !hasSleepPermission) {
+                AppTextRow(
+                    label = "Grant Health Connect access",
+                    onClick = { healthPermissionLauncher.launch(READ_SLEEP_PERMISSIONS) },
+                )
+            }
+        }
+
+        SettingsSection(
+            title = "Screen time",
+            description = "Needed to show today's total foreground time on the main page.",
+        ) {
+            AppTextRow(
+                label = "Grant usage access",
+                onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+            )
         }
 
         HairlineDivider()

@@ -18,7 +18,9 @@ internal object DuolingoApi {
     private const val BASE_URL = "https://www.duolingo.com/2017-06-30/users"
     private const val TIMEOUT_MS = 10_000
 
-    fun fetchStreakDays(username: String): Int {
+    data class Stats(val streakDays: Int, val totalXp: Int?)
+
+    fun fetchStats(username: String): Stats {
         val encodedUsername = URLEncoder.encode(username, "UTF-8")
         val connection = URL("$BASE_URL?username=$encodedUsername").openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
@@ -41,9 +43,17 @@ internal object DuolingoApi {
         // expose the current streak in two different places — a top-level
         // `streak` count, and a nested `streakData.currentStreak.length`.
         // Try the top-level field first, then fall back to the nested one.
-        return user.optIntOrNull("streak")
+        val streakDays = user.optIntOrNull("streak")
             ?: user.optJSONObject("streakData")?.optJSONObject("currentStreak")?.optIntOrNull("length")
             ?: throw IOException("No recognizable streak field in Duolingo response")
+
+        // Same defensive-parsing approach for total XP: top-level `totalXp`
+        // first, falling back to the shorter `xp` field some responses use.
+        // Null (rather than a thrown error) when neither is present — XP is
+        // a bonus display field, not required for a usable streak result.
+        val totalXp = user.optIntOrNull("totalXp") ?: user.optIntOrNull("xp")
+
+        return Stats(streakDays = streakDays, totalXp = totalXp)
     }
 
     private fun JSONObject.optIntOrNull(key: String): Int? {

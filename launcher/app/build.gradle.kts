@@ -128,6 +128,9 @@ dependencies {
     // Homelab dashboard page: Jellyfin poster images.
     implementation("io.coil-kt:coil-compose:2.6.0")
 
+    // Main-page glance block: Health Connect client, for sleep sessions only.
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

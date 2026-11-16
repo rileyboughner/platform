@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.AlarmClock
+import android.provider.Settings
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -28,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -45,7 +47,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.FavoritesRepository
+import dev.rileyboughner.launcher.duolingo.DuolingoRepository
+import dev.rileyboughner.launcher.duolingo.DuolingoResult
+import dev.rileyboughner.launcher.health.HealthConnectRepository
+import dev.rileyboughner.launcher.health.SleepResult
+import dev.rileyboughner.launcher.screentime.ScreenTimeRepository
+import dev.rileyboughner.launcher.screentime.ScreenTimeResult
+import dev.rileyboughner.launcher.settings.SettingsActivity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -70,13 +81,29 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun AppsPageScreen(
     appListRepository: AppListRepository,
+    duolingoRepository: DuolingoRepository,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val allApps = remember { appListRepository.getLaunchableApps() }
     val favorites = remember(allApps) { FavoritesRepository.resolveFavorites(allApps) }
     var showAllApps by rememberSaveable { mutableStateOf(false) }
     var autoFocusSearch by rememberSaveable { mutableStateOf(false) }
+
+    // Seeded from each repository's in-memory/disk cache so a page revisit
+    // shows last-known values instantly; each LaunchedEffect below then
+    // reissues the (self-throttled, IO-dispatched) fetch and updates these
+    // once it resolves — this is the "refresh when the page becomes
+    // visible" trigger, since Pager only composes this page when swiped
+    // into view (see LauncherPagerScreen).
+    var sleepResult by remember { mutableStateOf(HealthConnectRepository.cachedSleepOrNull()) }
+    var screenTimeResult by remember { mutableStateOf(ScreenTimeRepository.cachedOrNull()) }
+    var duolingoResult by remember { mutableStateOf<DuolingoResult?>(duolingoRepository.peekCachedStats()) }
+
+    LaunchedEffect(Unit) { sleepResult = HealthConnectRepository.fetchLatestSleep(context) }
+    LaunchedEffect(Unit) { screenTimeResult = ScreenTimeRepository.fetchTodayScreenTime(context) }
+    LaunchedEffect(Unit) { duolingoResult = duolingoRepository.fetchStats() }
 
     if (showAllApps) {
         AllAppsScreen(
@@ -187,6 +214,32 @@ fun AppsPageScreen(
 
             ClockHeader(onClockClick = { openAlarmApp(context) })
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            GlanceSection(
+                sleepResult = sleepResult,
+                screenTimeResult = screenTimeResult,
+                duolingoResult = duolingoResult,
+                onSleepClick = {
+                    if (sleepResult !is SleepResult.Success) {
+                        context.startActivity(Intent(context, SettingsActivity::class.java))
+                    }
+                },
+                onScreenTimeClick = {
+                    if (screenTimeResult is ScreenTimeResult.NoAccess) {
+                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                    }
+                },
+                onDuolingoClick = {
+                    if (duolingoResult is DuolingoResult.NotConfigured) {
+                        context.startActivity(Intent(context, SettingsActivity::class.java))
+                    } else {
+                        coroutineScope.launch { duolingoResult = duolingoRepository.fetchStats(forceRefresh = true) }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Spacer(modifier = Modifier.height(48.dp))
 
             Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -225,6 +278,79 @@ private fun ClockHeader(onClockClick: () -> Unit, modifier: Modifier = Modifier)
             color = Color.White.copy(alpha = 0.85f),
         )
     }
+}
+
+/**
+ * Compact, text-only glance block under the clock: sleep (Health Connect),
+ * today's screen time (usage access), and Duolingo streak+XP — three lines
+ * max, muted relative to the clock so it doesn't compete with it. Every
+ * line renders from whatever value it's handed (cached or freshly fetched,
+ * including the "not configured/available" states) and never blocks on
+ * the others — a slow or failing source only ever affects its own line.
+ */
+@Composable
+private fun GlanceSection(
+    sleepResult: SleepResult?,
+    screenTimeResult: ScreenTimeResult?,
+    duolingoResult: DuolingoResult?,
+    onSleepClick: () -> Unit,
+    onScreenTimeClick: () -> Unit,
+    onDuolingoClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        GlanceRow(text = formatSleepLine(sleepResult), onClick = onSleepClick)
+        GlanceRow(text = formatScreenTimeLine(screenTimeResult), onClick = onScreenTimeClick)
+        GlanceRow(text = formatDuolingoLine(duolingoResult), onClick = onDuolingoClick)
+    }
+}
+
+@Composable
+private fun GlanceRow(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 19.sp, lineHeight = 24.sp),
+        color = Color.White.copy(alpha = 0.7f),
+        maxLines = 1,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    )
+}
+
+private fun formatSleepLine(result: SleepResult?): String = when (result) {
+    null, SleepResult.NoPermission, SleepResult.NoData, SleepResult.Unavailable -> "Sleep —"
+    is SleepResult.Success -> {
+        val base = "Sleep ${formatDuration(result.totalAsleep)}"
+        if (result.deep != null && result.rem != null && result.light != null) {
+            "$base, deep ${formatDuration(result.deep)}, REM ${formatDuration(result.rem)}, light ${formatDuration(result.light)}"
+        } else {
+            base
+        }
+    }
+}
+
+private fun formatScreenTimeLine(result: ScreenTimeResult?): String = when (result) {
+    null, ScreenTimeResult.NoAccess -> "Screen —"
+    is ScreenTimeResult.Success -> "Screen ${formatDuration(result.duration)}"
+}
+
+private fun formatDuolingoLine(result: DuolingoResult?): String = when (result) {
+    null -> "Duolingo …"
+    is DuolingoResult.NotConfigured -> "Duolingo — set username in Settings"
+    is DuolingoResult.Unavailable -> "Duolingo — unavailable"
+    is DuolingoResult.Success -> {
+        val xpPart = result.totalXp?.let { ", %,d XP".format(it) } ?: ""
+        "Duolingo ${result.streakDays} day streak$xpPart"
+    }
+}
+
+/** "7h 12m" when there's a whole hour, "1h 05m" (zero-padded minutes) alongside it, else just "12m". */
+private fun formatDuration(duration: Duration): String {
+    val totalMinutes = duration.toMinutes()
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours > 0) "%dh %02dm".format(hours, minutes) else "${minutes}m"
 }
 
 /**

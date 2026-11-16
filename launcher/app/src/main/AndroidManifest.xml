@@ -12,6 +12,16 @@
     <!-- Calendar page: read-only device calendar, requested at runtime. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
+    <!-- Main-page glance block: Health Connect sleep sessions (read-only,
+         requested via the Health Connect permission contract — see
+         SettingsScreen/HealthConnectRepository) and the special "usage
+         access" grant for today's screen time (no runtime dialog; user
+         enables it by hand in system Settings). -->
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- Declared so this APK is installable on a phone/tablet without
          Leanback (feature is optional, matching the Google TV entry point
          below also being optional on handheld devices). -->

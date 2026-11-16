@@ -3,7 +3,6 @@ package dev.rileyboughner.launcher.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +21,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,11 +29,7 @@ import dev.rileyboughner.launcher.HomelabLinks
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.dashboard.DashboardResult
 import dev.rileyboughner.launcher.dashboard.ServerMetrics
-import dev.rileyboughner.launcher.duolingo.DuolingoRepository
-import dev.rileyboughner.launcher.duolingo.DuolingoResult
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
-import dev.rileyboughner.launcher.settings.SettingsActivity
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -49,20 +43,13 @@ import kotlin.math.roundToInt
 fun DashboardScreen(
     dashboardRepository: DashboardRepository,
     jellyfinRepository: JellyfinRepository,
-    duolingoRepository: DuolingoRepository,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var metricsResult by remember { mutableStateOf<DashboardResult<ServerMetrics>?>(null) }
-    var duolingoResult by remember { mutableStateOf<DuolingoResult?>(null) }
 
     LaunchedEffect(Unit) {
         metricsResult = dashboardRepository.fetchServerMetrics()
-    }
-
-    LaunchedEffect(Unit) {
-        duolingoResult = duolingoRepository.fetchStreak()
     }
 
     Column(
@@ -82,20 +69,6 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
             HairlineDivider()
         }
-
-        DuolingoStreakRow(
-            result = duolingoResult,
-            onRefresh = {
-                coroutineScope.launch { duolingoResult = duolingoRepository.fetchStreak(forceRefresh = true) }
-            },
-            onOpenSettings = {
-                context.startActivity(Intent(context, SettingsActivity::class.java))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-        HairlineDivider()
 
         JellyfinContinueWatchingSection(jellyfinRepository = jellyfinRepository, modifier = Modifier.fillMaxWidth())
 
@@ -143,38 +116,6 @@ private fun MetricsSection(metrics: ServerMetrics, modifier: Modifier = Modifier
             MetricRow("Containers", "${metrics.containersRunning} / ${metrics.containersTotal} running")
         }
     }
-}
-
-/**
- * Small text-only row, no icon/card, directly under the server metrics
- * block. Tapping it refreshes the streak — except when no username is
- * saved yet, where tapping opens Settings instead, same as the "not
- * configured" rows elsewhere on this page.
- */
-@Composable
-private fun DuolingoStreakRow(
-    result: DuolingoResult?,
-    onRefresh: () -> Unit,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val label = when (result) {
-        null -> "Duolingo streak: …"
-        is DuolingoResult.NotConfigured -> "Duolingo: not set up"
-        is DuolingoResult.Unavailable -> "Duolingo: unavailable"
-        is DuolingoResult.Success -> "Duolingo streak: ${result.streakDays} days"
-    }
-    val onClick = if (result is DuolingoResult.NotConfigured) onOpenSettings else onRefresh
-
-    Text(
-        text = label,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 8.dp),
-    )
 }
 
 @Composable

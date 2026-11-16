@@ -98,7 +98,6 @@ fun TvHomeScreen(
             DashboardScreen(
                 dashboardRepository = dashboardRepository,
                 jellyfinRepository = jellyfinRepository,
-                duolingoRepository = duolingoRepository,
                 modifier = Modifier.fillMaxSize(),
             )
         }

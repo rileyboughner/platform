@@ -71,12 +71,12 @@ fun LauncherPagerScreen(
                 PAGE_DASHBOARD -> DashboardScreen(
                     dashboardRepository = dashboardRepository,
                     jellyfinRepository = jellyfinRepository,
-                    duolingoRepository = duolingoRepository,
                     modifier = Modifier.fillMaxSize(),
                 )
                 PAGE_HOME_ASSISTANT -> HomeAssistantScreen(homeAssistantRepository, modifier = Modifier.fillMaxSize())
                 PAGE_APPS -> AppsPageScreen(
                     appListRepository = appListRepository,
+                    duolingoRepository = duolingoRepository,
                     modifier = Modifier.fillMaxSize(),
                 )
                 PAGE_CALENDAR -> CalendarScreen(
