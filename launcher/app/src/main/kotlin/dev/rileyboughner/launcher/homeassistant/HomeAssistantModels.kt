@@ -15,8 +15,13 @@ data class HomeAssistantScene(
     val friendlyName: String,
 )
 
-data class HomeAssistantSnapshot(
-    val presence: Presence,
+data class HomeAssistantRoom(
+    val name: String,
     val lights: List<HomeAssistantLight>,
     val scenes: List<HomeAssistantScene>,
+)
+
+data class HomeAssistantSnapshot(
+    val presence: Presence,
+    val rooms: List<HomeAssistantRoom>,
 )

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantLight
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantResult
+import dev.rileyboughner.launcher.homeassistant.HomeAssistantRoom
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantSnapshot
 import dev.rileyboughner.launcher.homeassistant.Presence
 import kotlinx.coroutines.launch
@@ -75,42 +76,62 @@ fun HomeAssistantScreen(homeAssistantRepository: HomeAssistantRepository, modifi
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                 )
 
-                HairlineDivider()
-                SectionHeader("Lights")
-                if (snapshot.lights.isEmpty()) {
-                    SectionMessage("No lights found.")
-                } else {
-                    snapshot.lights.forEach { light ->
-                        LightRow(
-                            light = light,
-                            onToggle = {
-                                scope.launch {
-                                    homeAssistantRepository.toggleLight(light.entityId)
-                                    refresh()
-                                }
-                            },
-                            onBrightnessChangeFinished = { percent ->
-                                scope.launch {
-                                    homeAssistantRepository.setLightBrightness(light.entityId, percent)
-                                    refresh()
-                                }
-                            },
-                        )
-                    }
+                snapshot.rooms.forEach { room ->
+                    HairlineDivider()
+                    RoomSection(
+                        room = room,
+                        onToggleLight = { entityId ->
+                            scope.launch {
+                                homeAssistantRepository.toggleLight(entityId)
+                                refresh()
+                            }
+                        },
+                        onSetBrightness = { entityId, percent ->
+                            scope.launch {
+                                homeAssistantRepository.setLightBrightness(entityId, percent)
+                                refresh()
+                            }
+                        },
+                        onActivateScene = { entityId ->
+                            scope.launch { homeAssistantRepository.activateScene(entityId) }
+                        },
+                    )
                 }
+            }
+        }
+    }
+}
 
-                HairlineDivider()
-                SectionHeader("Scenes")
-                if (snapshot.scenes.isEmpty()) {
-                    SectionMessage("No scenes found.")
-                } else {
-                    snapshot.scenes.forEach { scene ->
-                        AppTextRow(
-                            label = scene.friendlyName,
-                            onClick = { scope.launch { homeAssistantRepository.activateScene(scene.entityId) } },
-                        )
-                    }
-                }
+@Composable
+private fun RoomSection(
+    room: HomeAssistantRoom,
+    onToggleLight: (String) -> Unit,
+    onSetBrightness: (String, Int) -> Unit,
+    onActivateScene: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        SectionHeader(room.name)
+
+        if (room.lights.isEmpty()) {
+            SectionMessage("No lights found.")
+        } else {
+            room.lights.forEach { light ->
+                LightRow(
+                    light = light,
+                    onToggle = { onToggleLight(light.entityId) },
+                    onBrightnessChangeFinished = { percent -> onSetBrightness(light.entityId, percent) },
+                )
+            }
+        }
+
+        if (room.scenes.isNotEmpty()) {
+            SubSectionHeader("Scenes")
+            room.scenes.forEach { scene ->
+                AppTextRow(
+                    label = scene.friendlyName,
+                    onClick = { onActivateScene(scene.entityId) },
+                )
             }
         }
     }
@@ -123,6 +144,16 @@ private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onBackground,
         modifier = modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+    )
+}
+
+@Composable
+private fun SubSectionHeader(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(horizontal = 24.dp, vertical = 8.dp),
     )
 }
 

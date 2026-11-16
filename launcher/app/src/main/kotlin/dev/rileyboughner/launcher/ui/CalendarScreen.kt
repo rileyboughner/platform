@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,30 +69,44 @@ fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = 
     // only takes effect via the nested-scroll connection below, which lets
     // it through only once the event list is already scrolled to its top —
     // otherwise this is indistinguishable from a normal scroll-up gesture.
+    //
+    // The toggle fires as soon as the pull *distance* crosses the threshold,
+    // during the drag itself (in onPreScroll) rather than waiting for
+    // onPreFling at release. On Riley's phone the old onPreFling-triggered
+    // version never fired: a deliberate, unhurried pull-down has near-zero
+    // release velocity, and a drag that starts near the top edge of the
+    // screen can get cut short by an ACTION_CANCEL (status bar / gesture-nav
+    // edge swipes compete for that touch) before Compose ever dispatches a
+    // fling for it. Triggering on distance-crossed means the toggle has
+    // already happened the moment the pull "catches", before any of that
+    // can intervene. A tappable header chip (below) is the guaranteed
+    // fallback if the HorizontalPager ever wins the vertical drag outright.
     var showAllEvents by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var pullDistancePx by remember { mutableStateOf(0f) }
+    var toggledThisGesture by remember { mutableStateOf(false) }
     val pullThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
 
     val pullToggleConnection = remember(listState) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-                if (atTop && available.y > 0f) {
-                    pullDistancePx += available.y
-                    return Offset(0f, available.y)
+                if (source != NestedScrollSource.Drag || !atTop || available.y <= 0f) {
+                    pullDistancePx = 0f
+                    toggledThisGesture = false
+                    return Offset.Zero
                 }
-                return Offset.Zero
+                pullDistancePx += available.y
+                if (!toggledThisGesture && pullDistancePx > pullThresholdPx) {
+                    showAllEvents = !showAllEvents
+                    toggledThisGesture = true
+                }
+                return Offset(0f, available.y)
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (pullDistancePx > 0f) {
-                    if (pullDistancePx > pullThresholdPx) {
-                        showAllEvents = !showAllEvents
-                    }
-                    pullDistancePx = 0f
-                    return available
-                }
+                pullDistancePx = 0f
+                toggledThisGesture = false
                 return Velocity.Zero
             }
         }
@@ -121,7 +137,7 @@ fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = 
     val visibleEvents = if (showAllEvents) events else events.filter { eventDay(it).isEqual(today) }
 
     Column(modifier = modifier.fillMaxSize()) {
-        FilterModeHeader(showAllEvents)
+        FilterModeHeader(showAllEvents, onToggle = { showAllEvents = !showAllEvents })
         when {
             !permissionGranted && permissionWasRequested -> EmptyCalendarState(
                 "Calendar access was denied. Grant READ_CALENDAR in system Settings to see upcoming events here.",
@@ -149,16 +165,24 @@ fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = 
     }
 }
 
+/**
+ * Tappable chip showing the current filter mode. This is the guaranteed
+ * fallback for toggling "Today only" / "All events" — it always works even
+ * if the pull-down gesture on the list below is finicky on a given device.
+ */
 @Composable
-private fun FilterModeHeader(showAllEvents: Boolean, modifier: Modifier = Modifier) {
-    Text(
-        text = if (showAllEvents) "All events" else "Today only",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp),
-    )
+private fun FilterModeHeader(showAllEvents: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(
+            text = if (showAllEvents) "All events" else "Today only",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
 }
 
 @Composable

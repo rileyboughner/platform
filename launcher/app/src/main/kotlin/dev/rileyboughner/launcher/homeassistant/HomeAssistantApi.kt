@@ -35,27 +35,31 @@ internal object HomeAssistantApi {
             else -> Presence.UNKNOWN
         }
 
-        val lights = HomeAssistantEntities.LIGHT_ENTITY_IDS.mapNotNull { entityId ->
-            val state = byEntityId[entityId] ?: return@mapNotNull null
-            val attributes = state.optJSONObject("attributes") ?: JSONObject()
-            val rawBrightness = if (attributes.has("brightness")) attributes.optInt("brightness", -1) else -1
-            HomeAssistantLight(
-                entityId = entityId,
-                friendlyName = attributes.optString("friendly_name", humanize(entityId)),
-                isOn = state.optString("state") == "on",
-                brightnessPercent = if (rawBrightness >= 0) ((rawBrightness * 100) / 255) else null,
-            )
+        val rooms = HomeAssistantEntities.ROOMS.map { room ->
+            val lights = room.lightEntityIds.mapNotNull { entityId ->
+                val state = byEntityId[entityId] ?: return@mapNotNull null
+                val attributes = state.optJSONObject("attributes") ?: JSONObject()
+                val rawBrightness = if (attributes.has("brightness")) attributes.optInt("brightness", -1) else -1
+                HomeAssistantLight(
+                    entityId = entityId,
+                    friendlyName = attributes.optString("friendly_name", humanize(entityId)),
+                    isOn = state.optString("state") == "on",
+                    brightnessPercent = if (rawBrightness >= 0) ((rawBrightness * 100) / 255) else null,
+                )
+            }
+
+            val scenes = room.sceneEntityIds.map { entityId ->
+                val attributes = byEntityId[entityId]?.optJSONObject("attributes")
+                HomeAssistantScene(
+                    entityId = entityId,
+                    friendlyName = attributes?.optString("friendly_name", humanize(entityId)) ?: humanize(entityId),
+                )
+            }
+
+            HomeAssistantRoom(name = room.name, lights = lights, scenes = scenes)
         }
 
-        val scenes = HomeAssistantEntities.SCENE_ENTITY_IDS.map { entityId ->
-            val attributes = byEntityId[entityId]?.optJSONObject("attributes")
-            HomeAssistantScene(
-                entityId = entityId,
-                friendlyName = attributes?.optString("friendly_name", humanize(entityId)) ?: humanize(entityId),
-            )
-        }
-
-        return HomeAssistantSnapshot(presence = presence, lights = lights, scenes = scenes)
+        return HomeAssistantSnapshot(presence = presence, rooms = rooms)
     }
 
     fun toggleLight(serverUrl: String, token: String, entityId: String) {
