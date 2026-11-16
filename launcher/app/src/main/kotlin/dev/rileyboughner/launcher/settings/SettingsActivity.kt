@@ -7,8 +7,9 @@ import dev.rileyboughner.launcher.theme.MonoLauncherTheme
 
 /**
  * Minimal Settings screen, reached from the "Settings" text row on the
- * Apps page. Only job: let Riley paste his own Todoist API token — see
- * [SettingsRepository] for storage and [SettingsScreen] for the UI.
+ * Apps page. Lets Riley paste in his own Todoist API token, Jellyfin
+ * server URL + API key, and Home Assistant server URL + long-lived token —
+ * see [SettingsRepository] for storage and [SettingsScreen] for the UI.
  */
 class SettingsActivity : ComponentActivity() {
 
@@ -21,9 +22,19 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             MonoLauncherTheme {
                 SettingsScreen(
-                    initialToken = settingsRepository.getTodoistToken() ?: "",
-                    onSave = { token ->
-                        settingsRepository.setTodoistToken(token)
+                    initialFields = SettingsFields(
+                        todoistToken = settingsRepository.getTodoistToken() ?: "",
+                        jellyfinServerUrl = settingsRepository.getJellyfinServerUrl() ?: "",
+                        jellyfinApiKey = settingsRepository.getJellyfinApiKey() ?: "",
+                        homeAssistantServerUrl = settingsRepository.getHomeAssistantServerUrl(),
+                        homeAssistantToken = settingsRepository.getHomeAssistantToken() ?: "",
+                    ),
+                    onSave = { fields ->
+                        settingsRepository.setTodoistToken(fields.todoistToken)
+                        settingsRepository.setJellyfinServerUrl(fields.jellyfinServerUrl)
+                        settingsRepository.setJellyfinApiKey(fields.jellyfinApiKey)
+                        settingsRepository.setHomeAssistantServerUrl(fields.homeAssistantServerUrl)
+                        settingsRepository.setHomeAssistantToken(fields.homeAssistantToken)
                         finish()
                     },
                     onBack = { finish() },

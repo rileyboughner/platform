@@ -20,23 +20,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.calendar.CalendarRepository
+import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
+import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.todoist.TodoistRepository
 
 /**
- * Three-page horizontal pager, Apps in the center and the default/start
- * page. Picked direction: swiping right (towards the page on the left)
- * goes to Todo, swiping left (towards the page on the right) goes to
- * Calendar — i.e. page order is [Todo, Apps, Calendar].
- *
- * Todo/Calendar pages are only composed once actually swiped into view
- * (Pager's default `beyondViewportPageCount` is 0), which is also what
- * makes "request the permission / fetch tasks when the page is first
- * shown" work for free via a plain `LaunchedEffect(Unit)` in each page.
+ * Five-page horizontal pager, page order [Dashboard, Home Assistant, Apps,
+ * Calendar, Todo] with Apps (index 2) the default/start page. Pages are
+ * only composed once actually swiped into view (Pager's default
+ * `beyondViewportPageCount` is 0), which is also what makes "request the
+ * permission / fetch data when the page is first shown" work for free via
+ * a plain `LaunchedEffect(Unit)` in each page.
  */
-private const val PAGE_TODO = 0
-private const val PAGE_APPS = 1
-private const val PAGE_CALENDAR = 2
-private const val PAGE_COUNT = 3
+private const val PAGE_DASHBOARD = 0
+private const val PAGE_HOME_ASSISTANT = 1
+private const val PAGE_APPS = 2
+private const val PAGE_CALENDAR = 3
+private const val PAGE_TODO = 4
+private const val PAGE_COUNT = 5
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -44,6 +45,8 @@ fun LauncherPagerScreen(
     appListRepository: AppListRepository,
     calendarRepository: CalendarRepository,
     todoistRepository: TodoistRepository,
+    jellyfinRepository: JellyfinRepository,
+    homeAssistantRepository: HomeAssistantRepository,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -55,25 +58,34 @@ fun LauncherPagerScreen(
             modifier = Modifier.fillMaxSize().weight(1f),
         ) { page ->
             when (page) {
-                PAGE_TODO -> TodoScreen(todoistRepository, modifier = Modifier.fillMaxSize())
+                PAGE_DASHBOARD -> DashboardScreen(jellyfinRepository, modifier = Modifier.fillMaxSize())
+                PAGE_HOME_ASSISTANT -> HomeAssistantScreen(homeAssistantRepository, modifier = Modifier.fillMaxSize())
                 PAGE_APPS -> AppsPageScreen(
                     appListRepository = appListRepository,
                     onOpenSettings = onOpenSettings,
                     modifier = Modifier.fillMaxSize(),
                 )
-                PAGE_CALENDAR -> CalendarScreen(calendarRepository, modifier = Modifier.fillMaxSize())
+                PAGE_CALENDAR -> CalendarScreen(
+                    calendarRepository,
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                )
+                PAGE_TODO -> TodoScreen(
+                    todoistRepository,
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                )
             }
         }
         PageIndicator(pageCount = PAGE_COUNT, currentPage = pagerState.currentPage)
     }
 }
 
-/** Minimal dot indicator — three small dots, no labels, no animation. */
+/** Minimal dot indicator — small dots, no labels, no animation. */
 @Composable
 private fun PageIndicator(pageCount: Int, currentPage: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
     ) {
