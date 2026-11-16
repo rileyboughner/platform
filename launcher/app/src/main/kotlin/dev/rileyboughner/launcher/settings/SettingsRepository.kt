@@ -3,12 +3,18 @@ package dev.rileyboughner.launcher.settings
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import dev.rileyboughner.launcher.BuildConfig
 
 /**
  * Stores user-entered server URLs and API tokens (Todoist, Jellyfin, Home
  * Assistant) in [EncryptedSharedPreferences]. Tokens/keys are never logged —
  * see [dev.rileyboughner.launcher.todoist.TodoistApi], `JellyfinApi`, and
  * `HomeAssistantApi`.
+ *
+ * Getters fall back to a [BuildConfig] default (compiled in at build time
+ * from an environment variable outside this repo, empty if unset) when
+ * nothing has been saved yet. Saving a value from the Settings screen always
+ * takes priority over the compiled-in default.
  */
 class SettingsRepository(context: Context) {
 
@@ -25,19 +31,24 @@ class SettingsRepository(context: Context) {
         )
     }
 
-    fun getTodoistToken(): String? = prefs.getString(KEY_TODOIST_TOKEN, null)?.takeIf { it.isNotBlank() }
+    fun getTodoistToken(): String? =
+        prefs.getString(KEY_TODOIST_TOKEN, null)?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.DEFAULT_TODOIST_TOKEN.takeIf { it.isNotBlank() }
 
     fun setTodoistToken(token: String) {
         prefs.edit().putString(KEY_TODOIST_TOKEN, token.trim()).apply()
     }
 
-    fun getJellyfinServerUrl(): String? = prefs.getString(KEY_JELLYFIN_SERVER_URL, null)?.takeIf { it.isNotBlank() }
+    fun getJellyfinServerUrl(): String =
+        prefs.getString(KEY_JELLYFIN_SERVER_URL, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_JELLYFIN_SERVER_URL
 
     fun setJellyfinServerUrl(url: String) {
         prefs.edit().putString(KEY_JELLYFIN_SERVER_URL, url.trim().trimEnd('/')).apply()
     }
 
-    fun getJellyfinApiKey(): String? = prefs.getString(KEY_JELLYFIN_API_KEY, null)?.takeIf { it.isNotBlank() }
+    fun getJellyfinApiKey(): String? =
+        prefs.getString(KEY_JELLYFIN_API_KEY, null)?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.DEFAULT_JELLYFIN_API_KEY.takeIf { it.isNotBlank() }
 
     fun setJellyfinApiKey(apiKey: String) {
         prefs.edit().putString(KEY_JELLYFIN_API_KEY, apiKey.trim()).apply()
@@ -50,7 +61,9 @@ class SettingsRepository(context: Context) {
         prefs.edit().putString(KEY_HOME_ASSISTANT_SERVER_URL, url.trim().trimEnd('/')).apply()
     }
 
-    fun getHomeAssistantToken(): String? = prefs.getString(KEY_HOME_ASSISTANT_TOKEN, null)?.takeIf { it.isNotBlank() }
+    fun getHomeAssistantToken(): String? =
+        prefs.getString(KEY_HOME_ASSISTANT_TOKEN, null)?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.DEFAULT_HOME_ASSISTANT_TOKEN.takeIf { it.isNotBlank() }
 
     fun setHomeAssistantToken(token: String) {
         prefs.edit().putString(KEY_HOME_ASSISTANT_TOKEN, token.trim()).apply()
@@ -65,5 +78,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_HOME_ASSISTANT_TOKEN = "home_assistant_token"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
+        const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"
     }
 }

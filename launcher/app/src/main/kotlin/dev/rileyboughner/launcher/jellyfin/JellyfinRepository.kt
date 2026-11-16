@@ -19,12 +19,12 @@ sealed interface JellyfinResult<out T> {
  */
 class JellyfinRepository(private val settingsRepository: SettingsRepository) {
 
-    fun serverUrl(): String? = settingsRepository.getJellyfinServerUrl()
+    fun serverUrl(): String = settingsRepository.getJellyfinServerUrl()
 
     suspend fun fetchResumeItems(): JellyfinResult<List<JellyfinResumeItem>> = withContext(Dispatchers.IO) {
         val serverUrl = settingsRepository.getJellyfinServerUrl()
         val apiKey = settingsRepository.getJellyfinApiKey()
-        if (serverUrl == null || apiKey == null) {
+        if (apiKey == null) {
             return@withContext JellyfinResult.NotConfigured
         }
         try {

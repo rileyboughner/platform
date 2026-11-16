@@ -33,6 +33,28 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0-skeleton"
+
+        // Compiled-in Settings defaults for Riley's own API keys, so he
+        // doesn't have to type them into the Settings screen by hand. The
+        // values come from environment variables set outside this repo at
+        // build time (see launcher/README or the build invocation) — never
+        // from a committed file — and default to empty when unset, which
+        // SettingsRepository treats the same as "not configured yet".
+        buildConfigField(
+            "String",
+            "DEFAULT_JELLYFIN_API_KEY",
+            "\"${(System.getenv("LAUNCHER_JELLYFIN_API_KEY") ?: "").replace("\"", "\\\"")}\"",
+        )
+        buildConfigField(
+            "String",
+            "DEFAULT_HOME_ASSISTANT_TOKEN",
+            "\"${(System.getenv("LAUNCHER_HOME_ASSISTANT_TOKEN") ?: "").replace("\"", "\\\"")}\"",
+        )
+        buildConfigField(
+            "String",
+            "DEFAULT_TODOIST_TOKEN",
+            "\"${(System.getenv("LAUNCHER_TODOIST_TOKEN") ?: "").replace("\"", "\\\"")}\"",
+        )
     }
 
     buildTypes {
@@ -52,6 +74,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     sourceSets {

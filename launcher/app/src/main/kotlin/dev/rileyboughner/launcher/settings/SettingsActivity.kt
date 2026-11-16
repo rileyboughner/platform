@@ -24,7 +24,7 @@ class SettingsActivity : ComponentActivity() {
                 SettingsScreen(
                     initialFields = SettingsFields(
                         todoistToken = settingsRepository.getTodoistToken() ?: "",
-                        jellyfinServerUrl = settingsRepository.getJellyfinServerUrl() ?: "",
+                        jellyfinServerUrl = settingsRepository.getJellyfinServerUrl(),
                         jellyfinApiKey = settingsRepository.getJellyfinApiKey() ?: "",
                         homeAssistantServerUrl = settingsRepository.getHomeAssistantServerUrl(),
                         homeAssistantToken = settingsRepository.getHomeAssistantToken() ?: "",
