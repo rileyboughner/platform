@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
+import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.todoist.TodoistRepository
@@ -55,6 +56,7 @@ fun LauncherPagerScreen(
     jellyfinRepository: JellyfinRepository,
     homeAssistantRepository: HomeAssistantRepository,
     dashboardRepository: DashboardRepository,
+    duolingoRepository: DuolingoRepository,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -69,6 +71,7 @@ fun LauncherPagerScreen(
                 PAGE_DASHBOARD -> DashboardScreen(
                     dashboardRepository = dashboardRepository,
                     jellyfinRepository = jellyfinRepository,
+                    duolingoRepository = duolingoRepository,
                     modifier = Modifier.fillMaxSize(),
                 )
                 PAGE_HOME_ASSISTANT -> HomeAssistantScreen(homeAssistantRepository, modifier = Modifier.fillMaxSize())

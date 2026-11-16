@@ -69,6 +69,15 @@ class SettingsRepository(context: Context) {
         prefs.edit().putString(KEY_HOME_ASSISTANT_TOKEN, token.trim()).apply()
     }
 
+    // No token/password involved — Duolingo's unofficial public-profile
+    // endpoint only needs a username, so there's no BuildConfig default here.
+    fun getDuolingoUsername(): String? =
+        prefs.getString(KEY_DUOLINGO_USERNAME, null)?.takeIf { it.isNotBlank() }
+
+    fun setDuolingoUsername(username: String) {
+        prefs.edit().putString(KEY_DUOLINGO_USERNAME, username.trim()).apply()
+    }
+
     companion object {
         private const val PREFS_FILE_NAME = "launcher_secure_settings"
         private const val KEY_TODOIST_TOKEN = "todoist_api_token"
@@ -76,6 +85,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_JELLYFIN_API_KEY = "jellyfin_api_key"
         private const val KEY_HOME_ASSISTANT_SERVER_URL = "home_assistant_server_url"
         private const val KEY_HOME_ASSISTANT_TOKEN = "home_assistant_token"
+        private const val KEY_DUOLINGO_USERNAME = "duolingo_username"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
         const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"

@@ -27,6 +27,7 @@ data class SettingsFields(
     val jellyfinApiKey: String,
     val homeAssistantServerUrl: String,
     val homeAssistantToken: String,
+    val duolingoUsername: String,
 )
 
 /**
@@ -48,6 +49,7 @@ fun SettingsScreen(
     var jellyfinApiKey by rememberSaveable { mutableStateOf(initialFields.jellyfinApiKey) }
     var homeAssistantServerUrl by rememberSaveable { mutableStateOf(initialFields.homeAssistantServerUrl) }
     var homeAssistantToken by rememberSaveable { mutableStateOf(initialFields.homeAssistantToken) }
+    var duolingoUsername by rememberSaveable { mutableStateOf(initialFields.duolingoUsername) }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         AppTextRow(label = "← Back", onClick = onBack)
@@ -81,6 +83,10 @@ fun SettingsScreen(
             LabeledField(label = "Access token", value = homeAssistantToken, onValueChange = { homeAssistantToken = it })
         }
 
+        SettingsSection(title = "Duolingo", description = "Your public Duolingo username — no password needed.") {
+            LabeledField(label = "Username", value = duolingoUsername, onValueChange = { duolingoUsername = it })
+        }
+
         HairlineDivider()
         AppTextRow(
             label = "Save",
@@ -92,6 +98,7 @@ fun SettingsScreen(
                         jellyfinApiKey = jellyfinApiKey,
                         homeAssistantServerUrl = homeAssistantServerUrl,
                         homeAssistantToken = homeAssistantToken,
+                        duolingoUsername = duolingoUsername,
                     ),
                 )
             },

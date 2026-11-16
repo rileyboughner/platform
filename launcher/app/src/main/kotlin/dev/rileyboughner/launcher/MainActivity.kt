@@ -10,6 +10,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
+import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.settings.SettingsActivity
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var jellyfinRepository: JellyfinRepository
     private lateinit var homeAssistantRepository: HomeAssistantRepository
     private lateinit var dashboardRepository: DashboardRepository
+    private lateinit var duolingoRepository: DuolingoRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
         jellyfinRepository = JellyfinRepository(settingsRepository)
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         dashboardRepository = DashboardRepository()
+        duolingoRepository = DuolingoRepository(applicationContext, settingsRepository)
 
         setContent {
             MonoLauncherTheme {
@@ -60,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     jellyfinRepository = jellyfinRepository,
                     homeAssistantRepository = homeAssistantRepository,
                     dashboardRepository = dashboardRepository,
+                    duolingoRepository = duolingoRepository,
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                 )
             }

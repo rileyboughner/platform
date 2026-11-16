@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
+import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.settings.SettingsActivity
@@ -35,6 +36,7 @@ class TvMainActivity : ComponentActivity() {
     private lateinit var jellyfinRepository: JellyfinRepository
     private lateinit var homeAssistantRepository: HomeAssistantRepository
     private lateinit var dashboardRepository: DashboardRepository
+    private lateinit var duolingoRepository: DuolingoRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +47,7 @@ class TvMainActivity : ComponentActivity() {
         jellyfinRepository = JellyfinRepository(settingsRepository)
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         dashboardRepository = DashboardRepository()
+        duolingoRepository = DuolingoRepository(applicationContext, settingsRepository)
 
         setContent {
             val apps = remember { appListRepository.getLaunchableApps() }
@@ -58,6 +61,7 @@ class TvMainActivity : ComponentActivity() {
                     homeAssistantRepository = homeAssistantRepository,
                     calendarRepository = calendarRepository,
                     todoistRepository = todoistRepository,
+                    duolingoRepository = duolingoRepository,
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                 )
             }

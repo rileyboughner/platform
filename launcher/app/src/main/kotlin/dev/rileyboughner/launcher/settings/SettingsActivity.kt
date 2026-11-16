@@ -28,6 +28,7 @@ class SettingsActivity : ComponentActivity() {
                         jellyfinApiKey = settingsRepository.getJellyfinApiKey() ?: "",
                         homeAssistantServerUrl = settingsRepository.getHomeAssistantServerUrl(),
                         homeAssistantToken = settingsRepository.getHomeAssistantToken() ?: "",
+                        duolingoUsername = settingsRepository.getDuolingoUsername() ?: "",
                     ),
                     onSave = { fields ->
                         settingsRepository.setTodoistToken(fields.todoistToken)
@@ -35,6 +36,7 @@ class SettingsActivity : ComponentActivity() {
                         settingsRepository.setJellyfinApiKey(fields.jellyfinApiKey)
                         settingsRepository.setHomeAssistantServerUrl(fields.homeAssistantServerUrl)
                         settingsRepository.setHomeAssistantToken(fields.homeAssistantToken)
+                        settingsRepository.setDuolingoUsername(fields.duolingoUsername)
                         finish()
                     },
                     onBack = { finish() },

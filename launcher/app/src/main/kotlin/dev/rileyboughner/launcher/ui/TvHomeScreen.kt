@@ -32,6 +32,7 @@ import dev.rileyboughner.launcher.FavoritesRepository
 import dev.rileyboughner.launcher.LauncherAppInfo
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
+import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.todoist.TodoistRepository
@@ -67,6 +68,7 @@ fun TvHomeScreen(
     homeAssistantRepository: HomeAssistantRepository,
     calendarRepository: CalendarRepository,
     todoistRepository: TodoistRepository,
+    duolingoRepository: DuolingoRepository,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -96,6 +98,7 @@ fun TvHomeScreen(
             DashboardScreen(
                 dashboardRepository = dashboardRepository,
                 jellyfinRepository = jellyfinRepository,
+                duolingoRepository = duolingoRepository,
                 modifier = Modifier.fillMaxSize(),
             )
         }
