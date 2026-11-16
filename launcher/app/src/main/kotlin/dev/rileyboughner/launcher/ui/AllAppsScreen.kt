@@ -29,7 +29,7 @@ import dev.rileyboughner.launcher.LauncherAppInfo
  * Full alphabetical app list (already sorted by
  * [dev.rileyboughner.launcher.AppListRepository]), with a plain text
  * filter. [autoFocusSearch] is true when this screen was opened via the
- * Apps page's swipe-down gesture — it focuses the filter field and opens
+ * Apps page's swipe-up gesture — it focuses the filter field and opens
  * the keyboard immediately so Riley can start typing without an extra tap,
  * and arms the single-match auto-launch below. When opened by tapping
  * "All apps" instead, neither of those kick in until he actually types.

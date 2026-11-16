@@ -54,7 +54,7 @@ import java.time.format.DateTimeFormatter
  * Restyled to look like Olauncher (minimal AF launcher): a large clock +
  * date at the top over the system wallpaper, then plain left-aligned
  * favorite rows with generous spacing (no icons, no dividers). There's no
- * separate "All apps" row — swipe down already opens [AllAppsScreen] in
+ * separate "All apps" row — swipe up already opens [AllAppsScreen] in
  * place (not a separate pager page), so the button was redundant. There's
  * also no "Settings" row — tapping the page-dot strip at the bottom of
  * [dev.rileyboughner.launcher.ui.LauncherPagerScreen] already opens
@@ -62,9 +62,9 @@ import java.time.format.DateTimeFormatter
  * feedback on v8).
  *
  * Gestures on this page (Riley's phone feedback):
- * - Swipe down opens [AllAppsScreen] with the search field focused/keyboard
+ * - Swipe up opens [AllAppsScreen] with the search field focused/keyboard
  *   open, so he can start typing immediately.
- * - Swipe up opens the browser.
+ * - Swipe down opens the browser.
  * - Double-tap on empty background (not on a row) opens Messages.
  */
 @Composable
@@ -128,8 +128,7 @@ fun AppsPageScreen(
                     pullDownPx += available.y
                     if (!pulledDownThisGesture && pullDownPx > swipeThresholdPx) {
                         pulledDownThisGesture = true
-                        autoFocusSearch = true
-                        showAllApps = true
+                        openBrowser(context)
                     }
                     return Offset(0f, available.y)
                 }
@@ -139,7 +138,8 @@ fun AppsPageScreen(
                     pullUpPx += available.y
                     if (!pulledUpThisGesture && pullUpPx < -swipeThresholdPx) {
                         pulledUpThisGesture = true
-                        openBrowser(context)
+                        autoFocusSearch = true
+                        showAllApps = true
                     }
                     return Offset(0f, available.y)
                 }
@@ -283,7 +283,7 @@ private fun openAlarmApp(context: Context) {
     }
 }
 
-/** Swipe-up target: Vivaldi, falling back to whatever the system default browser is. */
+/** Swipe-down target: Vivaldi, falling back to whatever the system default browser is. */
 private fun openBrowser(context: Context) {
     val vivaldiIntent = context.packageManager.getLaunchIntentForPackage(VIVALDI_PACKAGE)
     if (vivaldiIntent != null) {
