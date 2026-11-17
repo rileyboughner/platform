@@ -72,6 +72,10 @@
       install -Dm755 ${../../scripts/todoist-tasks} $out/bin/todoist-tasks
     '')
 
+    (pkgs.runCommand "calendar-events" { } ''
+      install -Dm755 ${../../scripts/calendar-events} $out/bin/calendar-events
+    '')
+
     (pkgs.makeDesktopItem {
       name = "vm-cyber-defence";
       desktopName = "cyber-defence (VM)";

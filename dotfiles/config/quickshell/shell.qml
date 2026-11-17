@@ -180,6 +180,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         themePopup.visible = false
         sidePanel.visible = false
         todoistPanel.visible = false
+        calendarPanel.visible = false
 
         target.visible = !wasVisible
     }
@@ -647,6 +648,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(todoistPanel)
+        }
+    }
+
+    IpcHandler {
+        target: "calendar"
+
+        function toggle(): void {
+            root.togglePopup(calendarPanel)
         }
     }
 
@@ -3149,6 +3158,313 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         Repeater {
                             model: todoistPanel.tasksList
                             delegate: todoistTaskRowComponent
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // Calendar Panel (today + tomorrow's events)
+    // ─────────────────────────────────────────────
+
+    PanelWindow {
+        id: calendarPanel
+
+        property var eventsList: []
+        property bool eventsLoading: true
+        property string eventsError: ""
+
+        function fetchEvents() {
+            calendarEventsProcess.running = true
+        }
+
+        // date/time are plain "YYYY-MM-DD"/"HH:MM" strings from gcalcli;
+        // dayLabel collapses the date against today/tomorrow since the
+        // panel only ever spans those two days.
+        function dayLabel(dateStr) {
+            const today = new Date()
+            const eventDate = new Date(dateStr + "T00:00:00")
+            const diffDays = Math.round((eventDate - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000)
+
+            if (diffDays === 0) return "Today"
+            if (diffDays === 1) return "Tomorrow"
+            return dateStr
+        }
+
+        function timeLabel(event) {
+            const d = new Date(event.date + "T" + event.time + ":00")
+            return isNaN(d.getTime()) ? event.time : Qt.formatDateTime(d, "h:mm AP")
+        }
+
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.namespace: "calendar-panel"
+
+        anchors.top: true
+        anchors.bottom: true
+        anchors.right: true
+
+        implicitWidth: 380
+        margins.top: root.visible ? root.implicitHeight : 0
+
+        color: root.colBg
+        visible: false
+
+        onVisibleChanged: {
+            if (visible) {
+                calendarPanel.eventsError = ""
+                if (root.calendarAuthenticated) {
+                    calendarPanel.eventsLoading = true
+                    calendarPanel.fetchEvents()
+                } else {
+                    calendarPanel.eventsLoading = false
+                }
+            }
+        }
+
+        Process {
+            id: calendarEventsProcess
+
+            command: ["calendar-events", "events"]
+
+            stdout: StdioCollector {
+                id: calendarEventsStdout
+            }
+            stderr: StdioCollector {
+                id: calendarEventsStderr
+            }
+
+            onExited: (exitCode) => {
+                calendarPanel.eventsLoading = false
+                if (exitCode === 0) {
+                    try {
+                        calendarPanel.eventsList = JSON.parse(calendarEventsStdout.text)
+                        calendarPanel.eventsError = ""
+                    } catch (error) {
+                        calendarPanel.eventsError = "Failed to parse events"
+                    }
+                } else {
+                    const firstLine = calendarEventsStderr.text.trim().split("\n")[0]
+                    calendarPanel.eventsError = firstLine || "calendar-events failed"
+                }
+            }
+        }
+
+        Component {
+            id: calendarEventRowComponent
+
+            Rectangle {
+                id: calEventRow
+
+                required property var modelData
+
+                width: parent.width
+                height: calEventRowLayout.implicitHeight + 10
+
+                radius: 6
+                color: "transparent"
+
+                ColumnLayout {
+                    id: calEventRowLayout
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+
+                    spacing: 2
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
+                            text: calendarPanel.dayLabel(calEventRow.modelData.date) + " · " + calendarPanel.timeLabel(calEventRow.modelData)
+                            color: root.colAccent
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 2
+                                bold: true
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+
+                            text: calEventRow.modelData.title
+                            elide: Text.ElideRight
+
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+
+                        text: calEventRow.modelData.calendar
+                        elide: Text.ElideRight
+
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 2
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Chrome: thin left border matching the bar-popup borders ----
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: root.colMuted
+            opacity: 0.4
+        }
+
+        ColumnLayout {
+            id: calendarPanelLayout
+
+            anchors.fill: parent
+            anchors.margins: 8
+
+            spacing: 8
+
+            Flickable {
+                id: calendarEventsFlick
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                contentWidth: width
+                contentHeight: calendarEventsContent.implicitHeight
+                clip: true
+
+                Column {
+                    id: calendarEventsContent
+
+                    width: calendarEventsFlick.width
+                    spacing: 6
+
+                    RowLayout {
+                        width: calendarEventsContent.width
+                        spacing: 8
+
+                        Text {
+                            text: "Calendar"
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                                bold: true
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+
+                            visible: calendarPanel.eventsError.length > 0
+                            elide: Text.ElideRight
+
+                            text: calendarPanel.eventsError
+                            color: root.colRed
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 2
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            visible: calendarPanel.eventsError.length === 0
+                        }
+
+                        MouseArea {
+                            id: calendarPanelRefreshArea
+
+                            implicitWidth: calendarPanelRefreshText.implicitWidth
+                            implicitHeight: calendarPanelRefreshText.implicitHeight
+                            hoverEnabled: true
+
+                            onClicked: calendarPanel.fetchEvents()
+
+                            Text {
+                                id: calendarPanelRefreshText
+
+                                text: "⟳"
+                                color: calendarPanelRefreshArea.containsMouse ? root.colFg : root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize
+                                    bold: true
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: !root.calendarAuthenticated
+
+                        text: "Not signed in to gcalcli yet."
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Text {
+                        visible: root.calendarAuthenticated && calendarPanel.eventsLoading
+                        text: "Loading…"
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Text {
+                        visible: root.calendarAuthenticated
+                            && !calendarPanel.eventsLoading
+                            && calendarPanel.eventsList.length === 0
+                            && calendarPanel.eventsError.length === 0
+
+                        text: "No events today or tomorrow."
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Column {
+                        visible: root.calendarAuthenticated && !calendarPanel.eventsLoading
+
+                        width: calendarEventsContent.width
+                        spacing: 4
+
+                        Repeater {
+                            model: calendarPanel.eventsList
+                            delegate: calendarEventRowComponent
                         }
                     }
                 }

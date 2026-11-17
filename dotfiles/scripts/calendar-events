@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLIENT_SECRET_FILE="/run/agenix/gcalcli-client-secret"
+
+die() {
+    echo "calendar-events: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: calendar-events <command>
+
+Commands:
+  events   Print JSON array of today's + tomorrow's events (date, time, title, calendar)
+EOF
+}
+
+load_client_secret() {
+    [ -f "$CLIENT_SECRET_FILE" ] || die "no client secret at $CLIENT_SECRET_FILE"
+    CLIENT_SECRET=$(<"$CLIENT_SECRET_FILE")
+    [ -n "$CLIENT_SECRET" ] || die "client secret at $CLIENT_SECRET_FILE is empty"
+}
+
+# stdin is /dev/null so an unauthenticated gcalcli fails fast on the missing
+# oauth token instead of blocking on an interactive login prompt.
+cmd_events() {
+    load_client_secret
+
+    local until_date raw
+    until_date=$(date -d '+2 days' '+%Y-%m-%d')
+
+    raw=$(gcalcli --nocolor --client-secret "$CLIENT_SECRET" \
+        agenda --tsv --military --details calendar today "$until_date" \
+        < /dev/null 2>/dev/null) \
+        || die "gcalcli agenda failed (not signed in, or network unreachable?)"
+
+    awk -F'\t' 'NR>1 && $2!=""' <<<"$raw" | jq -R -s '
+        split("\n")
+        | map(select(length > 0) | split("\t"))
+        | map(select(length >= 6))
+        | map({date: .[0], time: .[1], title: .[4], calendar: .[5]})
+    '
+}
+
+case "${1:-}" in
+    events)
+        shift
+        cmd_events "$@"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
