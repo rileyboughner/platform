@@ -384,7 +384,6 @@ hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("pypr toggle messages"))
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pypr toggle dashboard"))
 
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("quickshell ipc call bar toggle"))
-hl.bind(mainMod .. " + ALT + B", hl.dsp.exec_cmd("quickshell ipc call barBottom toggle"))
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
