@@ -13,9 +13,15 @@
 # Wallpaper blobs are content-addressed by sha256 and shared across all of
 # the above -- any state document can reference any blob, so there's
 # nothing group-specific about blob storage.
+#
+# GET /events is a Server-Sent Events stream: clients hold it open and
+# the hub pushes a nudge on every accepted state/mode write, so clients
+# learn about changes immediately instead of on their next poll (the
+# slow poll remains as a fallback). See _serve_events/_broadcast.
 import hashlib
 import json
 import os
+import queue
 import socketserver
 import sys
 import threading
@@ -42,6 +48,41 @@ DEFAULT_MODE = "unified"
 # (POST /state, /state/<group>, /mode) and blob writes, since each bound
 # address runs its own server instance on its own thread.
 _lock = threading.Lock()
+
+# Live SSE subscribers (GET /events): one bounded queue per connection,
+# shared across every bound address's server instance, so a state change
+# posted via the LAN socket reaches a subscriber on the tailnet socket
+# too. A queue that fills up (slow/dead consumer) is dropped from the set
+# -- its handler thread fails its next write and exits, and the client
+# reconnects and re-syncs, so nothing is lost that the fallback poll
+# wouldn't have caught anyway.
+_subscribers = set()
+_subscribers_lock = threading.Lock()
+_SUBSCRIBER_QUEUE_SIZE = 8
+# Seconds between `: ping` heartbeats on idle streams: keeps middleboxes
+# from closing the connection and lets clients tell a dead stream (no
+# bytes well past this) from a quiet one.
+_EVENT_HEARTBEAT_SECS = 20
+
+
+def _broadcast(event):
+    """Fan a state/mode-change nudge out to every live SSE subscriber.
+
+    Events are nudges, not the state itself: clients re-fetch their own
+    state document over the existing GET endpoints and apply it with the
+    same compare-and-apply logic the polling path uses, so the hub never
+    has to know which document a given client cares about. Never blocks
+    the caller: slow subscribers are dropped, not waited on.
+    """
+    payload = json.dumps(event)
+    with _subscribers_lock:
+        subscribers = list(_subscribers)
+    for subscriber in subscribers:
+        try:
+            subscriber.put_nowait(payload)
+        except queue.Full:
+            with _subscribers_lock:
+                _subscribers.discard(subscriber)
 
 
 def _read_json(path):
@@ -105,6 +146,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/events":
+            self._serve_events()
+            return
         if self.path == "/state":
             with _lock:
                 state = _read_state()
@@ -135,6 +179,43 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_response(404)
         self.end_headers()
+
+    def _serve_events(self):
+        """Hold a Server-Sent Events stream open for one client.
+
+        Sends a `sync` nudge immediately on connect (so a client that
+        reconnects after downtime re-pulls right away instead of waiting
+        for the next change), then one `data:` line per broadcast event
+        and a `: ping` heartbeat comment every _EVENT_HEARTBEAT_SECS.
+        Returns only when the client disconnects or its queue is dropped
+        for being slow; the handler thread is a daemon, so a stuck stream
+        can never wedge the server.
+        """
+        subscriber = queue.Queue(maxsize=_SUBSCRIBER_QUEUE_SIZE)
+        with _subscribers_lock:
+            _subscribers.add(subscriber)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            self.wfile.write(b'data: {"type": "sync"}\n\n')
+            self.wfile.flush()
+            while True:
+                try:
+                    payload = subscriber.get(timeout=_EVENT_HEARTBEAT_SECS)
+                except queue.Empty:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    continue
+                self.wfile.write(b"data: " + payload.encode() + b"\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ValueError):
+            pass
+        finally:
+            with _subscribers_lock:
+                _subscribers.discard(subscriber)
 
     def _digest_path(self, digest):
         digest = digest.lower()
@@ -186,14 +267,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/state":
-            self._post_state(_read_state, _write_state)
+            self._post_state(_read_state, _write_state, "/state")
             return
         if self.path.startswith("/state/"):
             group = self.path[len("/state/") :]
             if group not in GROUPS:
                 self._send_json(404, {"error": "unknown group", "groups": list(GROUPS)})
                 return
-            self._post_state(lambda: _read_group_state(group), lambda s: _write_group_state(group, s))
+            self._post_state(lambda: _read_group_state(group), lambda s: _write_group_state(group, s), self.path)
             return
         if self.path == "/mode":
             self._post_mode()
@@ -205,8 +286,11 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length))
 
     # Shared by /state and /state/<group>: both store a last-write-wins
-    # document with the same schema, just under a different read/write pair.
-    def _post_state(self, read_current, write_new):
+    # [label] is the request path, carried into the SSE broadcast so
+    # clients can tell which document changed. Broadcasts happen after the
+    # lock is released and only when the write was actually accepted --
+    # a rejected (stale) write changes nothing, so there's nothing to push.
+    def _post_state(self, read_current, write_new, label):
         try:
             incoming = self._read_body_json()
         except json.JSONDecodeError:
@@ -222,6 +306,8 @@ class Handler(BaseHTTPRequestHandler):
                 result, accepted = incoming, True
             else:
                 result, accepted = current, False
+        if accepted:
+            _broadcast({"type": "state-changed", "path": label})
         self._send_json(200, {"accepted": accepted, "state": result})
 
     def _post_mode(self):
@@ -236,6 +322,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         with _lock:
             _write_mode(mode)
+        _broadcast({"type": "mode-changed", "mode": mode})
         self._send_json(200, {"mode": mode})
 
 

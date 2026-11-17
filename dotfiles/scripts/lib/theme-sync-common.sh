@@ -40,8 +40,9 @@ THEME_SYNC_GROUP="workstation"
 # Cached locally so a poll that can't reach the hub (or a quick repeat call,
 # e.g. `boner sync status` right after a poll) doesn't need a fresh request
 # just to know which state endpoint to use. Re-checked at most once per
-# THEME_SYNC_MODE_CACHE_TTL seconds; the watcher's own 5s poll loop is what
-# makes a hub-side mode change actually take effect within ~1 cache window.
+# THEME_SYNC_MODE_CACHE_TTL seconds; the watcher's event-driven loop (60s
+# fallback) is what makes a hub-side mode change actually take effect
+# within ~1 cache window.
 THEME_SYNC_MODE_CACHE_FILE="$THEME_SYNC_DIR/mode-cache.json"
 THEME_SYNC_MODE_CACHE_TTL=60
 

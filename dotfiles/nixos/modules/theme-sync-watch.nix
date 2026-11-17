@@ -1,7 +1,8 @@
-# Theme/wallpaper sync watcher -- workstation-only (desktop + laptop). Polls
-# the theme-sync-hub (server, see theme-sync-hub.nix) every 5s and
-# reconciles this machine's local theme/wallpaper state against it. Design,
-# protocol and the `boner sync` toggle: ../../scripts/theme-sync/README.md.
+# Theme/wallpaper sync watcher -- workstation-only (desktop + laptop).
+# Event-driven: a background reader holds the hub's SSE stream
+# (GET /events) and local changes are noticed via inotifywait, with a
+# 60s fallback poll underneath. Design, protocol and the `boner sync`
+# toggle: ../../scripts/theme-sync/README.md.
 { pkgs, ... }:
 let
   watch = pkgs.runCommand "theme-sync-watch" { } ''
@@ -11,8 +12,10 @@ in
 {
   # curl isn't pulled onto PATH by anything every host already imports
   # (unlike jq, see shell.nix) -- declare it explicitly instead of relying
-  # on it arriving transitively via some other package's closure.
-  environment.systemPackages = [ watch pkgs.curl ];
+  # on it arriving transitively via some other package's closure. Same
+  # for inotify-tools, which the watcher uses to wake on local
+  # theme/wallpaper changes instead of a fixed tick.
+  environment.systemPackages = [ watch pkgs.curl pkgs.inotify-tools ];
 
   # This repo's Hyprland setup (hyprland.nix) is a plain greetd launch with
   # no systemd session integration, so there's no graphical-session.target

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Theme/wallpaper sync watcher: polls the theme-sync hub every 5s and
-# reconciles it against this machine's local theme/wallpaper state. See
-# theme-sync/README.md for the full design.
+# Theme/wallpaper sync watcher: reconciles this machine's local
+# theme/wallpaper state against the theme-sync hub, woken by events
+# instead of a fixed tick -- hub SSE nudges (GET /events), local
+# filesystem changes (inotifywait on the theme file, the wallpaper
+# symlink, and the SSE trigger file), plus a 60s fallback poll that
+# catches anything the push path missed. See theme-sync/README.md for
+# the full design.
 #
 # Deliberately does NOT use `set -e`: this is a long-lived daemon, not a
 # one-shot script, so an unexpected failure in one poll iteration must
@@ -251,8 +255,68 @@ poll_once() {
     fi
 }
 
-echo "theme-sync-watch: starting (poll interval 5s, hub candidates: $THEME_SYNC_HUB_URLS)" >&2
-while true; do
-    poll_once || echo "theme-sync-watch: poll iteration errored unexpectedly, continuing" >&2
-    sleep 5
-done
+# --- Event-driven wakeups (SSE + inotify) -----------------------------------
+# Reconcile runs on three triggers instead of a fixed 5s tick:
+#   1. Hub SSE nudges: a background reader holds GET /events open and
+#      touches the trigger file on every `data:` line (the hub pushes on
+#      every accepted state/mode write, and sends a `sync` nudge on
+#      connect, so a reconnect re-syncs immediately).
+#   2. Local changes: inotifywait watches the theme file's directory,
+#      the wallpaper symlink's directory, and the trigger file's
+#      directory, so a local theme-set/set-wallpaper lands on the hub
+#      at once instead of on the next tick.
+#   3. A 60s timeout on the inotifywait: the slow fallback poll that
+#      catches anything the push path missed (dropped stream, missed
+#      filesystem event, or a nudge that arrived while a reconcile was
+#      already running). Without inotifywait installed, the loop falls
+#      back to the old fixed 5s sleep.
+THEME_SYNC_TRIGGER_FILE="$THEME_SYNC_DIR/trigger"
+THEME_SYNC_THEME_DIR="$HOME/.cache/theme"
+
+sse_reader() {
+    while true; do
+        if ! theme_sync_enabled; then
+            sleep 30
+            continue
+        fi
+        local hub_url
+        hub_url=$(theme_sync_find_hub 2>/dev/null) || { sleep 10; continue; }
+        # --max-time bounds a silently dead stream: the hub heartbeats
+        # every 20s, so a healthy connection is just re-opened every
+        # 5 minutes (and re-syncs on connect), while a dead one can't
+        # hang the reader past the fallback poll anyway.
+        curl -sN --max-time 300 "$hub_url/events" 2>/dev/null | while IFS= read -r line; do
+            case "$line" in
+                data:*) : >"$THEME_SYNC_TRIGGER_FILE" ;;
+            esac
+        done
+        sleep 5
+    done
+}
+
+mkdir -p "$THEME_SYNC_DIR" "$THEME_SYNC_THEME_DIR"
+: >"$THEME_SYNC_TRIGGER_FILE"
+
+if command -v inotifywait >/dev/null 2>&1; then
+    echo "theme-sync-watch: starting (event-driven: SSE + inotify, 60s fallback, hub candidates: $THEME_SYNC_HUB_URLS)" >&2
+    sse_reader &
+    SSE_READER_PID=$!
+    trap 'kill $SSE_READER_PID 2>/dev/null' EXIT
+    while true; do
+        poll_once || echo "theme-sync-watch: poll iteration errored unexpectedly, continuing" >&2
+        # One-shot wait: exits on the first matching event, or after
+        # 60s (exit 2, the fallback tick). The `|| sleep 1` only
+        # matters on a real inotifywait error, where it keeps a
+        # failing wait from spinning the loop; the 1s after a
+        # 60s timeout is unnoticeable.
+        inotifywait -qq -t 60 -e close_write,modify,moved_to,create,delete,attrib \
+            --include '^(current|\.wallpaper|trigger)$' \
+            "$THEME_SYNC_THEME_DIR" "$HOME" "$THEME_SYNC_DIR" >/dev/null 2>&1 || sleep 1
+    done
+else
+    echo "theme-sync-watch: starting (inotifywait missing, fixed 5s poll fallback, hub candidates: $THEME_SYNC_HUB_URLS)" >&2
+    while true; do
+        poll_once || echo "theme-sync-watch: poll iteration errored unexpectedly, continuing" >&2
+        sleep 5
+    done
+fi

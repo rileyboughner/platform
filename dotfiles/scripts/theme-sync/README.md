@@ -121,6 +121,15 @@ private addresses, never `0.0.0.0`.
 - `PUT /wallpaper/<sha256>` -> body is the raw file bytes. Hub verifies
   the uploaded bytes actually hash to `<sha256>` before storing (400 on
   mismatch).
+- `GET /events` -> a Server-Sent Events stream, held open. The hub sends
+  a `data: {"type": "sync"}` nudge immediately on connect, then a
+  `data: {"type": "state-changed", "path": ...}` line on every accepted
+  state write and `{"type": "mode-changed", ...}` on every mode write,
+  plus a `: ping` heartbeat comment every 20s. Events are nudges, not
+  the state itself: clients re-fetch their own state document over the
+  `GET` endpoints above and apply it with the same compare-and-apply
+  logic the polling path uses. Clients keep a slow (60s) fallback poll
+  for anything the stream misses.
 
 Wallpaper blobs are shared, content-addressed storage -- any state
 document (shared or either group's) can reference any blob by its
