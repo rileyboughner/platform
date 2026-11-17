@@ -18,31 +18,16 @@
 
   programs.ssh.extraConfig = ''
     Host desktop
-      HostName ${hosts.desktop.ip}
+      HostName ${hosts.desktop.tailnetName}
       User ${hosts.desktop.user}
       IdentityFile /run/agenix/server-to-desktop-key
 
-    # The laptop only answers on its home-LAN address when it's actually
-    # home. Off home Wi-Fi, NetworkManager auto-brings up the "clownweb"
-    # WireGuard tunnel, and the laptop is only reachable at its tunnel
-    # address instead - see hosts/laptop/configuration.nix's
-    # vpn-autoconnect dispatcher. Try the LAN address as the real transport
-    # and fall back to the tunnel address only if that connection attempt
-    # itself fails, so `ssh laptop` keeps working in both states.
-    #
-    # Deliberately NOT a "probe, then connect" ProxyCommand (that used to
-    # do `nc -z` to test the LAN address before connecting for real): a
-    # throwaway connect-then-disconnect against sshd gets penalised by
-    # OpenSSH's PerSourcePenalties (added for the "noauth"/"crash" case,
-    # i.e. exactly what an unauthenticated probe looks like from sshd's
-    # side), which then closes the very next real connection attempt
-    # during kex. Letting the first nc *be* the connection avoids ever
-    # opening and abandoning an unauthenticated session.
+    # Reached over Tailscale MagicDNS, so `ssh laptop` works from
+    # anywhere the laptop is on the tailnet, home or away.
     Host laptop
-      HostName ${hosts.laptop.ip}
+      HostName ${hosts.laptop.tailnetName}
       User ${hosts.laptop.user}
       IdentityFile /run/agenix/server-to-laptop-key
-      ProxyCommand ${pkgs.netcat}/bin/nc ${hosts.laptop.ip} 22 2>/dev/null || exec ${pkgs.netcat}/bin/nc ${hosts.laptop.tunnelIp} 22
 
     Host router
       HostName ${hosts.router.ip}

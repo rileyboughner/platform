@@ -2,13 +2,13 @@
 {
 
   fileSystems."/home/${username}/.vault" = {
-    device = "${hosts.server.ip}:/mnt/tank/files/obsidian";
+    device = "${hosts.server.tailnetName}:/mnt/tank/files/obsidian";
     fsType = "nfs";
-    options = [ "rw" "_netdev" "x-systemd.automount" "noauto" ];
+    options = [ "rw" "_netdev" "x-systemd.automount" "noauto" "vers=4" ];
   };
 
   fileSystems."/home/${username}/Documents" = {
-    device = "${hosts.server.ip}:/mnt/tank/files/Documents";
+    device = "${hosts.server.tailnetName}:/mnt/tank/files/Documents";
     fsType = "nfs";
     options = [ "rw" "_netdev" "x-systemd.automount" "noauto" "vers=4" ];
   };

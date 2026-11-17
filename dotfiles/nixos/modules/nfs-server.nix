@@ -6,10 +6,10 @@
   # Enable NFS server
   services.nfs.server.enable = true;
 
-  # Export /mnt/users to your LAN
+  # Export /mnt/tank/files to the LAN and the tailnet
   services.nfs.server.exports = ''
     /mnt/tank/files  ${hosts.lan}(rw,sync,no_subtree_check,insecure,no_root_squash)
-    /mnt/tank/files  ${hosts.tunnel}(rw,sync,no_subtree_check,insecure,no_root_squash)
+    /mnt/tank/files  ${hosts.tailnet}(rw,sync,no_subtree_check,insecure,no_root_squash)
   '';
 
   # Firewall: allow NFS traffic (rpcbind + nfs)

@@ -7,17 +7,17 @@
     extraConfig = ''
 
       Host server
-        HostName ${hosts.server.ip}
+        HostName ${hosts.server.tailnetName}
         User ${hosts.server.user}
         IdentityFile /run/agenix/server-ssh-key
 
       Host desktop
-        HostName ${hosts.desktop.ip}
+        HostName ${hosts.desktop.tailnetName}
         User ${hosts.desktop.user}
         IdentityFile /run/agenix/desktop-ssh-key
 
       # Reached over Tailscale MagicDNS, not the LAN -- this box isn't
-      # part of hosts.nix's LAN/tunnel address scheme.
+      # part of hosts.nix's LAN address scheme.
       Host devbits
         HostName devbits
         User boner
