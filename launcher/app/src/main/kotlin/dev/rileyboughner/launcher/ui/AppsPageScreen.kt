@@ -54,6 +54,7 @@ import dev.rileyboughner.launcher.health.SleepResult
 import dev.rileyboughner.launcher.screentime.ScreenTimeRepository
 import dev.rileyboughner.launcher.screentime.ScreenTimeResult
 import dev.rileyboughner.launcher.settings.SettingsActivity
+import dev.rileyboughner.launcher.settings.SettingsRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -82,12 +83,14 @@ import java.time.format.DateTimeFormatter
 fun AppsPageScreen(
     appListRepository: AppListRepository,
     duolingoRepository: DuolingoRepository,
+    settingsRepository: SettingsRepository,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val allApps = remember { appListRepository.getLaunchableApps() }
     val favorites = remember(allApps) { FavoritesRepository.resolveFavorites(allApps) }
+    val showGlanceInfo = remember { settingsRepository.getShowGlanceInfo() }
     var showAllApps by rememberSaveable { mutableStateOf(false) }
     var autoFocusSearch by rememberSaveable { mutableStateOf(false) }
 
@@ -101,9 +104,11 @@ fun AppsPageScreen(
     var screenTimeResult by remember { mutableStateOf(ScreenTimeRepository.cachedOrNull()) }
     var duolingoResult by remember { mutableStateOf<DuolingoResult?>(duolingoRepository.peekCachedStats()) }
 
-    LaunchedEffect(Unit) { sleepResult = HealthConnectRepository.fetchLatestSleep(context) }
-    LaunchedEffect(Unit) { screenTimeResult = ScreenTimeRepository.fetchTodayScreenTime(context) }
-    LaunchedEffect(Unit) { duolingoResult = duolingoRepository.fetchStats() }
+    if (showGlanceInfo) {
+        LaunchedEffect(Unit) { sleepResult = HealthConnectRepository.fetchLatestSleep(context) }
+        LaunchedEffect(Unit) { screenTimeResult = ScreenTimeRepository.fetchTodayScreenTime(context) }
+        LaunchedEffect(Unit) { duolingoResult = duolingoRepository.fetchStats() }
+    }
 
     if (showAllApps) {
         AllAppsScreen(
@@ -216,31 +221,33 @@ fun AppsPageScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            GlanceSection(
-                sleepResult = sleepResult,
-                screenTimeResult = screenTimeResult,
-                duolingoResult = duolingoResult,
-                onSleepClick = {
-                    if (sleepResult !is SleepResult.Success) {
-                        context.startActivity(Intent(context, SettingsActivity::class.java))
-                    }
-                },
-                onScreenTimeClick = {
-                    if (screenTimeResult is ScreenTimeResult.NoAccess) {
-                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                    }
-                },
-                onDuolingoClick = {
-                    if (duolingoResult is DuolingoResult.NotConfigured) {
-                        context.startActivity(Intent(context, SettingsActivity::class.java))
-                    } else {
-                        coroutineScope.launch { duolingoResult = duolingoRepository.fetchStats(forceRefresh = true) }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (showGlanceInfo) {
+                GlanceSection(
+                    sleepResult = sleepResult,
+                    screenTimeResult = screenTimeResult,
+                    duolingoResult = duolingoResult,
+                    onSleepClick = {
+                        if (sleepResult !is SleepResult.Success) {
+                            context.startActivity(Intent(context, SettingsActivity::class.java))
+                        }
+                    },
+                    onScreenTimeClick = {
+                        if (screenTimeResult is ScreenTimeResult.NoAccess) {
+                            context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        }
+                    },
+                    onDuolingoClick = {
+                        if (duolingoResult is DuolingoResult.NotConfigured) {
+                            context.startActivity(Intent(context, SettingsActivity::class.java))
+                        } else {
+                            coroutineScope.launch { duolingoResult = duolingoRepository.fetchStats(forceRefresh = true) }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(48.dp))
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 favorites.forEach { app ->

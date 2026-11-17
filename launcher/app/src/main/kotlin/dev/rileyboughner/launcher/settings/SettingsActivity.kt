@@ -29,6 +29,7 @@ class SettingsActivity : ComponentActivity() {
                         homeAssistantServerUrl = settingsRepository.getHomeAssistantServerUrl(),
                         homeAssistantToken = settingsRepository.getHomeAssistantToken() ?: "",
                         duolingoUsername = settingsRepository.getDuolingoUsername() ?: "",
+                        showGlanceInfo = settingsRepository.getShowGlanceInfo(),
                     ),
                     onSave = { fields ->
                         settingsRepository.setTodoistToken(fields.todoistToken)
@@ -37,6 +38,7 @@ class SettingsActivity : ComponentActivity() {
                         settingsRepository.setHomeAssistantServerUrl(fields.homeAssistantServerUrl)
                         settingsRepository.setHomeAssistantToken(fields.homeAssistantToken)
                         settingsRepository.setDuolingoUsername(fields.duolingoUsername)
+                        settingsRepository.setShowGlanceInfo(fields.showGlanceInfo)
                         finish()
                     },
                     onBack = { finish() },

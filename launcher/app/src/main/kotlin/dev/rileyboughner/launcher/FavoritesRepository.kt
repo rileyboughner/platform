@@ -30,6 +30,8 @@ object FavoritesRepository {
         FavoriteSpec("Agent", labelContains = "muse", preferredLabelContains = "muse"),
         FavoriteSpec("Music", packages = listOf("com.Arturo254.opentune"), labelContains = "opentun"),
         FavoriteSpec("Podcasts", packages = listOf("com.spotify.music"), labelContains = "spotify"),
+        FavoriteSpec("Obsidian", packages = listOf("md.obsidian")),
+        FavoriteSpec("SongBook Pro", packages = listOf("com.songbookpro.songbookpro")),
     )
 
     fun resolveFavorites(allApps: List<LauncherAppInfo>): List<LauncherAppInfo> {

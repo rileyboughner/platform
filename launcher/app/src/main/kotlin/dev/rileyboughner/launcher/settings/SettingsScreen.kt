@@ -2,6 +2,7 @@ package dev.rileyboughner.launcher.settings
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,7 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -37,6 +40,7 @@ data class SettingsFields(
     val homeAssistantServerUrl: String,
     val homeAssistantToken: String,
     val duolingoUsername: String,
+    val showGlanceInfo: Boolean,
 )
 
 /**
@@ -59,6 +63,7 @@ fun SettingsScreen(
     var homeAssistantServerUrl by rememberSaveable { mutableStateOf(initialFields.homeAssistantServerUrl) }
     var homeAssistantToken by rememberSaveable { mutableStateOf(initialFields.homeAssistantToken) }
     var duolingoUsername by rememberSaveable { mutableStateOf(initialFields.duolingoUsername) }
+    var showGlanceInfo by rememberSaveable { mutableStateOf(initialFields.showGlanceInfo) }
 
     val context = LocalContext.current
     val healthConnectAvailable = remember { HealthConnectRepository.isAvailable(context) }
@@ -102,6 +107,25 @@ fun SettingsScreen(
 
         SettingsSection(title = "Duolingo", description = "Your public Duolingo username — no password needed.") {
             LabeledField(label = "Username", value = duolingoUsername, onValueChange = { duolingoUsername = it })
+        }
+
+        SettingsSection(
+            title = "Main page",
+            description = "The glance block (sleep, screen time, Duolingo) under the clock on the main page.",
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Show glance info",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Switch(checked = showGlanceInfo, onCheckedChange = { showGlanceInfo = it })
+            }
         }
 
         SettingsSection(
@@ -150,6 +174,7 @@ fun SettingsScreen(
                         homeAssistantServerUrl = homeAssistantServerUrl,
                         homeAssistantToken = homeAssistantToken,
                         duolingoUsername = duolingoUsername,
+                        showGlanceInfo = showGlanceInfo,
                     ),
                 )
             },

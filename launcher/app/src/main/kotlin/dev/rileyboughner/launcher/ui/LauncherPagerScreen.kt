@@ -30,6 +30,7 @@ import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
+import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.todoist.TodoistRepository
 
 /**
@@ -57,6 +58,7 @@ fun LauncherPagerScreen(
     homeAssistantRepository: HomeAssistantRepository,
     dashboardRepository: DashboardRepository,
     duolingoRepository: DuolingoRepository,
+    settingsRepository: SettingsRepository,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -77,6 +79,7 @@ fun LauncherPagerScreen(
                 PAGE_APPS -> AppsPageScreen(
                     appListRepository = appListRepository,
                     duolingoRepository = duolingoRepository,
+                    settingsRepository = settingsRepository,
                     modifier = Modifier.fillMaxSize(),
                 )
                 PAGE_CALENDAR -> CalendarScreen(

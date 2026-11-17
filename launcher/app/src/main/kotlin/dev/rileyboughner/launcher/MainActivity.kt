@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
                     homeAssistantRepository = homeAssistantRepository,
                     dashboardRepository = dashboardRepository,
                     duolingoRepository = duolingoRepository,
+                    settingsRepository = settingsRepository,
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                 )
 
