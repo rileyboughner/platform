@@ -8,6 +8,7 @@
       ../../modules/nfs-client.nix
       ../../modules/audio.nix
       ../../modules/quickemu.nix
+      ../../modules/tailscale.nix
     ];
 
   networking.hostName = "laptop";

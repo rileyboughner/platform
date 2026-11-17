@@ -16,6 +16,13 @@
         User ${hosts.desktop.user}
         IdentityFile /run/agenix/desktop-ssh-key
 
+      # Reached over Tailscale MagicDNS, not the LAN -- this box isn't
+      # part of hosts.nix's LAN/tunnel address scheme.
+      Host devbits
+        HostName nixos
+        User boner
+        IdentityFile ~/.ssh/devbits
+
     '';
   };
 

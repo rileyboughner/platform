@@ -56,7 +56,8 @@
 	    stow
       prismlauncher
       claude-code
-      codex
+
+      vivaldi
 	  ];
 
 	  # -- nix-ld --
