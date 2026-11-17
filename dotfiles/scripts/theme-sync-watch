@@ -147,7 +147,14 @@ apply_hub_state() {
         fi
     fi
 
-    [ "$changed" = true ] && write_last_state
+    # Always succeed: callers treat a nonzero status as a failed poll
+    # iteration, but "nothing changed" is the normal idle outcome, not
+    # an error -- without this, every idle poll logs a scary (and
+    # masking) "poll iteration errored" line.
+    if [ "$changed" = true ]; then
+        write_last_state || echo "theme-sync-watch: failed to record synced state, will retry next poll" >&2
+    fi
+    return 0
 }
 
 # Pushes this machine's current local theme+wallpaper state to the hub.
