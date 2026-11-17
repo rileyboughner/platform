@@ -77,6 +77,21 @@ class SettingsRepository(context: Context) {
         prefs.edit().putString(KEY_HOME_ASSISTANT_TOKEN, token.trim()).apply()
     }
 
+    /**
+     * One-time migration for devices with no Settings UI (the TV): if no
+     * Home Assistant token has been saved yet but this build carries a
+     * compiled-in default, persist that default into encrypted storage so
+     * it survives later token-less updates (the TV self-updates from the
+     * public token-less releases, which carry no compiled-in token). A
+     * no-op once a token is already saved — never overwrites a saved
+     * value — and a no-op on builds with no compiled-in default.
+     */
+    fun migrateBakedHomeAssistantTokenIfNeeded() {
+        if (prefs.getString(KEY_HOME_ASSISTANT_TOKEN, null)?.isNotBlank() == true) return
+        val baked = BuildConfig.DEFAULT_HOME_ASSISTANT_TOKEN.takeIf { it.isNotBlank() } ?: return
+        prefs.edit().putString(KEY_HOME_ASSISTANT_TOKEN, baked).apply()
+    }
+
     // No token/password involved — Duolingo's unofficial public-profile
     // endpoint only needs a username, so there's no BuildConfig default here.
     fun getDuolingoUsername(): String? =

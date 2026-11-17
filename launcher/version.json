@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.10.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.10.0/app-release.apk",
-  "notes": "TV home: add Steam Link tile; light brightness now channel up/down instead of left/right."
+  "versionCode": 11,
+  "versionName": "0.11.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.11.0/app-release.apk",
+  "notes": "TV home now prompts for updates like the phone does, and saves its Home Assistant token on first launch so self-updates keep working."
 }

@@ -6,7 +6,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * Orchestrates the launch-time update check for [dev.rileyboughner.launcher.MainActivity]
- * only — see `launcher/UPDATES.md`. Suppresses the prompt once Riley has
+ * and [dev.rileyboughner.launcher.TvMainActivity] — see `launcher/UPDATES.md`.
+ * Suppresses the prompt once Riley has
  * tapped "Later" for that exact versionCode; the dismissed versionCode is
  * remembered in a plain (non-secret) SharedPreferences file, separate from
  * [dev.rileyboughner.launcher.settings.SettingsRepository]'s encrypted

@@ -17,9 +17,10 @@ import java.net.URL
  * `HttpURLConnection`, same style as
  * [dev.rileyboughner.launcher.dashboard.DashboardApi] — no DownloadManager,
  * no extra HTTP-client dependency needed for one file), then hands it to
- * the system installer via a FileProvider `content://` URI. Only called
- * from [dev.rileyboughner.launcher.MainActivity] — never from the TV entry
- * point.
+ * the system installer via a FileProvider `content://` URI. Called from
+ * the shared [UpdatePrompt] composable, hosted by both
+ * [dev.rileyboughner.launcher.MainActivity] and
+ * [dev.rileyboughner.launcher.TvMainActivity].
  */
 object UpdateInstaller {
 

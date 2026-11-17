@@ -7,6 +7,8 @@ import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
 import dev.rileyboughner.launcher.ui.TvHomeScreen
+import dev.rileyboughner.launcher.update.UpdatePrompt
+import dev.rileyboughner.launcher.update.UpdateRepository
 
 /**
  * Google TV / Android TV entry point. Declares the LEANBACK_LAUNCHER
@@ -21,19 +23,28 @@ import dev.rileyboughner.launcher.ui.TvHomeScreen
  * repository's underlying [SettingsRepository]-backed server URL/token with
  * the phone UI's Settings screen, but has no TV-side settings screen of its
  * own.
+ *
+ * It also hosts the shared update prompt ([UpdatePrompt]) so the TV
+ * updates itself without ADB, and runs the one-time baked-token migration
+ * ([SettingsRepository.migrateBakedHomeAssistantTokenIfNeeded]) so
+ * token-less self-updates keep Home Assistant working.
  */
 class TvMainActivity : ComponentActivity() {
 
     private lateinit var homeAssistantRepository: HomeAssistantRepository
+    private lateinit var updateRepository: UpdateRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val settingsRepository = SettingsRepository(applicationContext)
+        settingsRepository.migrateBakedHomeAssistantTokenIfNeeded()
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
+        updateRepository = UpdateRepository(applicationContext)
 
         setContent {
             MonoLauncherTheme {
                 TvHomeScreen(homeAssistantRepository = homeAssistantRepository)
+                UpdatePrompt(updateRepository)
             }
         }
     }

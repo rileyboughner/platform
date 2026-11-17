@@ -1,9 +1,10 @@
 # In-app updates
 
 Riley wants to be *prompted* for updates, not auto-updated and not using
-Obtainium. `MainActivity` (phone/tablet only — see below) fetches
-`launcher/version.json` from this public repo's `main` branch over HTTPS on
-every launch and compares `versionCode` against `BuildConfig.VERSION_CODE`.
+Obtainium. Every entry point (`MainActivity` on phone/tablet,
+`TvMainActivity` on TV) fetches `launcher/version.json` from this public
+repo's `main` branch over HTTPS on every launch and compares `versionCode`
+against `BuildConfig.VERSION_CODE`.
 If the remote `versionCode` is higher, it shows an "Update available"
 prompt with two buttons: **Update** (downloads the APK and opens the system
 installer) and **Later** (dismisses; that exact `versionCode` won't prompt
@@ -59,6 +60,14 @@ values survive updates. Before publishing, verify the APK contains no
 token (count-only scan of the extracted dex against the token file) and
 that `aapt dump badging` shows the expected `versionCode`/`versionName`.
 
+The TV has no Settings screen, so its Home Assistant token came from a
+token-injected ADB build. `TvMainActivity` runs a one-time migration
+(`SettingsRepository.migrateBakedHomeAssistantTokenIfNeeded`) that
+persists a compiled-in token into encrypted storage when nothing is saved
+yet, so later token-less self-updates keep Home Assistant working. The
+migration never overwrites a saved token and is a no-op on token-less
+builds.
+
 ## Publishing a new release
 
 1. Bump `versionCode` and `versionName` in `launcher/app/build.gradle.kts`.
@@ -78,10 +87,13 @@ that `aapt dump badging` shows the expected `versionCode`/`versionName`.
 
 ## Where this runs
 
-The check, the prompt, and the download/install flow live entirely in
-`MainActivity` (phone/tablet). `TvMainActivity` never fetches
-`version.json`, never shows the prompt, and never downloads anything — see
-its kdoc. This is intentional: the TV build is handled separately.
+The check, the prompt, and the download/install flow live in the shared
+`UpdatePrompt` composable, hosted by both `MainActivity` (phone/tablet)
+and `TvMainActivity` (TV). The prompt dialog carries the D-pad focus
+handling the TV needs. The TV needs the same one-time "Allow from this
+source" grant as the phone (see "Install permission flow" below); without
+it, tapping Update opens the system settings page for the grant instead of
+installing.
 
 ## Install permission flow
 
