@@ -1,5 +1,6 @@
 package dev.rileyboughner.launcher.ui
 
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,9 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
@@ -211,9 +210,8 @@ private fun LivingRoomContent(
 
 /**
  * CENTER/OK toggles on/off. When the light is on, available, and reports
- * brightness, focused LEFT/RIGHT steps brightness instead of moving focus —
- * [onKeyEvent] on the outer wrapper intercepts those before Compose's
- * default focus-move handling sees them, same way a dialog intercepts Back.
+ * brightness, focused CHANNEL UP/DOWN steps brightness. LEFT/RIGHT are
+ * deliberately left alone so they keep moving focus between tiles.
  */
 @Composable
 internal fun LightTile(
@@ -243,9 +241,9 @@ internal fun LightTile(
         cornerRadius = 16.dp,
         modifier = modifier.onKeyEvent { event ->
             if (!canAdjustBrightness || event.type != KeyEventType.KeyDown) return@onKeyEvent false
-            when (event.key) {
-                Key.DirectionLeft -> { onBrightnessStep(-BRIGHTNESS_STEP_PERCENT); true }
-                Key.DirectionRight -> { onBrightnessStep(BRIGHTNESS_STEP_PERCENT); true }
+            when (event.nativeKeyEvent.keyCode) {
+                KeyEvent.KEYCODE_CHANNEL_UP -> { onBrightnessStep(BRIGHTNESS_STEP_PERCENT); true }
+                KeyEvent.KEYCODE_CHANNEL_DOWN -> { onBrightnessStep(-BRIGHTNESS_STEP_PERCENT); true }
                 else -> false
             }
         },

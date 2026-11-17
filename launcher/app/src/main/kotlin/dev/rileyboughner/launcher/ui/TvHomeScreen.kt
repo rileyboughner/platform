@@ -91,6 +91,7 @@ fun TvHomeScreen(
 
     val jellyfinTile = remember { resolveLeanbackTile(context, "org.jellyfin.androidtv", "Jellyfin") }
     val youtubeTile = remember { resolveLeanbackTile(context, "com.google.android.youtube.tv", "YouTube") }
+    val steamTile = remember { resolveLeanbackTile(context, "com.valvesoftware.steamlink", "Steam Link") }
     val firstFocusRequester = remember { FocusRequester() }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color.Black)) {
@@ -130,12 +131,21 @@ fun TvHomeScreen(
                         TvTileDrawableArtwork(youtubeTile.artwork, contentDescription = youtubeTile.label)
                     }
                 }
+                if (steamTile != null) {
+                    TvTile(
+                        label = steamTile.label,
+                        onClick = { context.startActivity(steamTile.launchIntent) },
+                        focusRequester = if (jellyfinTile == null && youtubeTile == null) firstFocusRequester else null,
+                    ) {
+                        TvTileDrawableArtwork(steamTile.artwork, contentDescription = steamTile.label)
+                    }
+                }
                 TvTile(
                     label = "Movie wheel",
                     onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WHEEL_URL)))
                     },
-                    focusRequester = if (jellyfinTile == null && youtubeTile == null) firstFocusRequester else null,
+                    focusRequester = if (jellyfinTile == null && youtubeTile == null && steamTile == null) firstFocusRequester else null,
                 ) {
                     TvTileResourceArtwork(painterResource(R.drawable.tv_tile_movie_wheel), contentDescription = "Movie wheel")
                 }

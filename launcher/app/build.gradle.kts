@@ -31,8 +31,8 @@ android {
         applicationId = "dev.rileyboughner.launcher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "0.10.0"
 
         // Compiled-in Settings defaults for Riley's own API keys, so he
         // doesn't have to type them into the Settings screen by hand. The

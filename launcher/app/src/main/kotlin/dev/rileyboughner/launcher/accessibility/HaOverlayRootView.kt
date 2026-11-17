@@ -28,7 +28,7 @@ private const val BRIGHTNESS_STEP_PERCENT = 10
  * so this reimplements just enough of [dev.rileyboughner.launcher.ui.TvTile]
  * / [dev.rileyboughner.launcher.ui.LightTile] /
  * [dev.rileyboughner.launcher.ui.SceneTile]'s D-pad behavior (focus scale +
- * ring, left/right brightness step on a focused on/available light) using
+ * ring, channel up/down brightness step on a focused on/available light) using
  * the plain View focus system instead, which needs no such owners.
  *
  * BACK is intercepted in [dispatchKeyEvent] — not a Compose `BackHandler`,
@@ -136,8 +136,8 @@ internal class HaOverlayRootView(
             onKeyDown = { keyCode ->
                 if (!canAdjustBrightness) return@focusableTile false
                 val delta = when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> -BRIGHTNESS_STEP_PERCENT
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> BRIGHTNESS_STEP_PERCENT
+                    KeyEvent.KEYCODE_CHANNEL_DOWN -> -BRIGHTNESS_STEP_PERCENT
+                    KeyEvent.KEYCODE_CHANNEL_UP -> BRIGHTNESS_STEP_PERCENT
                     else -> return@focusableTile false
                 }
                 onBrightnessStep(light.entityId, light.brightnessPercent ?: 0, delta)

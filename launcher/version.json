@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "0.9.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.9.0/app-release.apk",
-  "notes": "Add the Health Connect privacy-policy screen Health Connect requires before it shows the permission sheet, so the Sleep grant can complete."
+  "versionCode": 10,
+  "versionName": "0.10.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.10.0/app-release.apk",
+  "notes": "TV home: add Steam Link tile; light brightness now channel up/down instead of left/right."
 }
