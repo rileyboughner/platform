@@ -1,6 +1,6 @@
 {
-  "versionCode": 13,
-  "versionName": "0.13.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.13.0/app-release.apk",
-  "notes": "Settings now shows the installed version and has a Check for updates button that works even for a version dismissed with Later."
+  "versionCode": 14,
+  "versionName": "0.14.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.14.0/app-release.apk",
+  "notes": "The page dots at the bottom no longer sit on a black bar — they float over the wallpaper. Settings also shows the installed version with a Check for updates button."
 }

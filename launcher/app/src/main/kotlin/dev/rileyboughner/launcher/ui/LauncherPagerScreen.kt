@@ -105,12 +105,14 @@ fun LauncherPagerScreen(
  * anywhere on the strip opens Settings (Riley's feedback: the dots were
  * otherwise dead space).
  *
- * windowInsetsPadding is applied *before* background/clickable here (rather
- * than after) so the reserved nav-bar inset space is left transparent —
- * otherwise the background paint extends into that reserved space too,
- * which combined with the system nav bar showed as a solid black strip
- * below the dots (v8 phone feedback). The dots themselves still sit in the
- * padded, clickable area clear of the bar.
+ * The strip paints NO background: the dots float over the system
+ * wallpaper showing through the window (the activity is edge-to-edge
+ * with FLAG_SHOW_WALLPAPER). An earlier version painted
+ * `colorScheme.background` here, which read as a solid black bar under
+ * the dots on the wallpaper page — Riley asked for it gone (v14).
+ * windowInsetsPadding is applied *before* clickable here so the reserved
+ * nav-bar inset space stays out of the tap area — the dots themselves
+ * still sit in the padded area clear of the bar.
  */
 @Composable
 private fun PageIndicator(pageCount: Int, currentPage: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -118,7 +120,6 @@ private fun PageIndicator(pageCount: Int, currentPage: Int, onClick: () -> Unit,
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-            .background(MaterialTheme.colorScheme.background)
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
