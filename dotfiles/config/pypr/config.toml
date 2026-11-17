@@ -78,3 +78,12 @@ position = "4% 40px"
 animation = ""
 process_tracking = false
 lazy = true
+
+[scratchpads.dashboard]
+command = "vivaldi --app=https://dashboard.rileyboughner.dev"
+class = "vivaldi-dashboard.rileyboughner.dev__-Default"
+size = "92% 92%"
+position = "4% 40px"
+animation = ""
+process_tracking = false
+lazy = true
