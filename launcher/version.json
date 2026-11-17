@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "0.5.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.5.0/app-release.apk",
-  "notes": "Settings UI rework (Main page / Accounts & services / Permissions) and a real main-page app picker: add any installed app as a favorite, rename its display label, and reorder favorites freely, replacing the old fixed favorites list and per-favorite visibility switches."
+  "versionCode": 6,
+  "versionName": "0.6.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.6.0/app-release.apk",
+  "notes": "Fix Health Connect never registering with the controller on some devices: bump the stale connect-client library, attempt registration unconditionally (not gated on the pessimistic SDK-availability check), surface the raw SDK status in Settings for diagnosis, and re-check availability on resume instead of once at first launch."
 }

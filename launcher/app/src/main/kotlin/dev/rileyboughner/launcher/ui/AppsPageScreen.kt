@@ -100,24 +100,6 @@ fun AppsPageScreen(
     var showAllApps by rememberSaveable { mutableStateOf(false) }
     var autoFocusSearch by rememberSaveable { mutableStateOf(false) }
 
-    // Settings lives in a separate Activity, so toggling "Show glance info"
-    // or a favorite's visibility there and hitting Save never disposes this
-    // composable (MainActivity just pauses) — a plain `remember` read here
-    // would otherwise go stale until process death. Re-reading on every
-    // ON_RESUME is what actually picks up the change the moment this page
-    // is shown again, with no app restart.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, allApps) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                showGlanceInfo = settingsRepository.getShowGlanceInfo()
-                visibleFavorites = resolveVisibleFavorites(allApps, settingsRepository)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
     // Seeded from each repository's in-memory/disk cache so a page revisit
     // shows last-known values instantly; each LaunchedEffect below then
     // reissues the (self-throttled, IO-dispatched) fetch and updates these
@@ -128,10 +110,44 @@ fun AppsPageScreen(
     var screenTimeResult by remember { mutableStateOf(ScreenTimeRepository.cachedOrNull()) }
     var duolingoResult by remember { mutableStateOf<DuolingoResult?>(duolingoRepository.peekCachedStats()) }
 
+    // Unconditional, regardless of the status check inside it: Health
+    // Connect's getSdkStatus() never itself talks to the controller — only
+    // getOrCreate() does — and can be pessimistic against a stale client or
+    // a freshly-updated provider. Always attempting registration here is
+    // what makes this app actually show up in Health Connect's app list on
+    // devices where that check alone would otherwise gate it out entirely.
+    LaunchedEffect(Unit) { HealthConnectRepository.attemptRegistration(context) }
+
     if (showGlanceInfo) {
         LaunchedEffect(Unit) { sleepResult = HealthConnectRepository.fetchLatestSleep(context) }
         LaunchedEffect(Unit) { screenTimeResult = ScreenTimeRepository.fetchTodayScreenTime(context) }
         LaunchedEffect(Unit) { duolingoResult = duolingoRepository.fetchStats() }
+    }
+
+    // Settings lives in a separate Activity, so toggling "Show glance info"
+    // or a favorite's visibility there and hitting Save never disposes this
+    // composable (MainActivity just pauses) — a plain `remember` read here
+    // would otherwise go stale until process death. Re-reading on every
+    // ON_RESUME is what actually picks up the change the moment this page
+    // is shown again, with no app restart. The same resume event also
+    // re-attempts Health Connect registration and re-reads sleep, since
+    // getSdkStatus() can flip from unavailable to available between visits
+    // (see HealthConnectRepository.attemptRegistration) and a one-shot
+    // check at first composition would never notice.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, allApps) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                showGlanceInfo = settingsRepository.getShowGlanceInfo()
+                visibleFavorites = resolveVisibleFavorites(allApps, settingsRepository)
+                coroutineScope.launch { HealthConnectRepository.attemptRegistration(context) }
+                if (showGlanceInfo) {
+                    coroutineScope.launch { sleepResult = HealthConnectRepository.fetchLatestSleep(context, forceRefresh = true) }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (showAllApps) {

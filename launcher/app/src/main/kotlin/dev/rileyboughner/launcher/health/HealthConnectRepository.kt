@@ -53,8 +53,42 @@ object HealthConnectRepository {
     private const val STALE_AFTER_MILLIS = 15 * 60 * 1000L
     private val LOOKBACK = Duration.ofHours(36)
 
-    fun isAvailable(context: Context): Boolean =
-        HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
+    /** Raw `getSdkStatus()` return value — see [sdkStatusName] to render it. */
+    fun sdkStatus(context: Context): Int = HealthConnectClient.getSdkStatus(context)
+
+    /** Maps a [sdkStatus] int to its constant name, so a failure is diagnosable from the UI instead of silent. */
+    fun sdkStatusName(status: Int): String = when (status) {
+        HealthConnectClient.SDK_UNAVAILABLE -> "SDK_UNAVAILABLE"
+        HealthConnectClient.SDK_AVAILABLE -> "SDK_AVAILABLE"
+        HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED"
+        else -> "UNKNOWN"
+    }
+
+    fun isAvailable(context: Context): Boolean = sdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
+
+    /**
+     * Unconditionally attempts to bind/register with the Health Connect
+     * controller, regardless of what [sdkStatus] reports. getSdkStatus() is
+     * a static capability check that never itself talks to the controller —
+     * only getOrCreate() does — and can be pessimistic (e.g. against a
+     * stale client library or a newly-updated provider). Gating every path
+     * on it, as this repository previously did everywhere, meant the app
+     * could go its entire lifetime without ever calling getOrCreate() and
+     * so would never appear in Health Connect's own app list. This call
+     * always goes out, off the main thread, with every exception swallowed
+     * into the returned diagnostic text, so Settings/the main page can
+     * surface whatever actually happened instead of guessing from the
+     * status check alone.
+     */
+    suspend fun attemptRegistration(context: Context): String = withContext(Dispatchers.IO) {
+        try {
+            val client = HealthConnectClient.getOrCreate(context)
+            val granted = client.permissionController.getGrantedPermissions()
+            "registered OK (${granted.size} permission(s) granted)"
+        } catch (e: Exception) {
+            "registration failed: ${e::class.simpleName}: ${e.message}"
+        }
+    }
 
     /** Synchronous, no-I/O peek at the last fetched result, to seed Compose state before refresh completes. */
     fun cachedSleepOrNull(): SleepResult? = cachedResult

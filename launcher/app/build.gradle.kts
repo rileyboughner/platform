@@ -31,8 +31,8 @@ android {
         applicationId = "dev.rileyboughner.launcher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
 
         // Compiled-in Settings defaults for Riley's own API keys, so he
         // doesn't have to type them into the Settings screen by hand. The
@@ -129,7 +129,12 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Main-page glance block: Health Connect client, for sleep sessions only.
-    implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
+    // Bumped from the 1.1.0-alpha07 pre-release to 1.1.0-alpha08 (newest compatible with AGP 8.5.2 / compileSdk 34; 1.1.0 stable needs compileSdk 35+) —
+    // the stale alpha's SDK-availability check was pessimistic against newer
+    // platform-integrated Health Connect builds (Android 14+), which meant
+    // getOrCreate() never ran and the app never registered with the
+    // controller at all (see HealthConnectRepository.attemptRegistration).
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha08")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

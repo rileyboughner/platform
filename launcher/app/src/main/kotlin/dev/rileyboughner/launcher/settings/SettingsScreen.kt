@@ -16,22 +16,29 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dev.rileyboughner.launcher.health.HealthConnectRepository
 import dev.rileyboughner.launcher.health.READ_SLEEP_PERMISSIONS
 import dev.rileyboughner.launcher.ui.AppTextRow
 import dev.rileyboughner.launcher.ui.HairlineDivider
+import kotlinx.coroutines.launch
 
 data class SettingsFields(
     val todoistToken: String,
@@ -68,9 +75,39 @@ fun SettingsScreen(
     var showGlanceInfo by rememberSaveable { mutableStateOf(initialFields.showGlanceInfo) }
 
     val context = LocalContext.current
-    val healthConnectAvailable = remember { HealthConnectRepository.isAvailable(context) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Re-read on every ON_RESUME rather than once via a plain `remember` —
+    // getSdkStatus() can flip from unavailable to available between opens
+    // of this screen (provider install/update, or simply after this app's
+    // own getOrCreate() call below finally registers it with the
+    // controller), and a one-shot read would never pick that up without a
+    // full app restart.
+    var sdkStatusRaw by remember { mutableStateOf(HealthConnectRepository.sdkStatus(context)) }
     var hasSleepPermission by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { hasSleepPermission = HealthConnectRepository.hasSleepPermission(context) }
+    var registrationOutcome by remember { mutableStateOf<String?>(null) }
+    val healthConnectAvailable = sdkStatusRaw == HealthConnectClient.SDK_AVAILABLE
+
+    fun refreshHealthConnectState() {
+        sdkStatusRaw = HealthConnectRepository.sdkStatus(context)
+        coroutineScope.launch { hasSleepPermission = HealthConnectRepository.hasSleepPermission(context) }
+        // Unconditional: call getOrCreate()/getGrantedPermissions() regardless of
+        // what the status check above says, so the app actually registers with
+        // the Health Connect controller even when that check is pessimistic.
+        coroutineScope.launch { registrationOutcome = HealthConnectRepository.attemptRegistration(context) }
+    }
+
+    LaunchedEffect(Unit) { refreshHealthConnectState() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshHealthConnectState()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val healthPermissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract(),
     ) { granted -> hasSleepPermission = granted.containsAll(READ_SLEEP_PERMISSIONS) }
@@ -159,6 +196,17 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            // Raw diagnostics: the status check above can be wrong (that's the
+            // whole reason attemptRegistration() runs unconditionally below it),
+            // so surface exactly what the SDK and the registration attempt
+            // actually returned instead of only a derived yes/no.
+            Text(
+                text = "SDK status: ${HealthConnectRepository.sdkStatusName(sdkStatusRaw)} ($sdkStatusRaw)\n" +
+                    "Registration: ${registrationOutcome ?: "checking…"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
             )
             if (healthConnectAvailable && !hasSleepPermission) {
                 AppTextRow(
