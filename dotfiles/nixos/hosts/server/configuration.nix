@@ -13,6 +13,7 @@
       ../../modules/quickemu.nix
       # ../../modules/vm-cyber-defence.nix  # temporarily disabled to free RAM for windows-11 install
       ../../modules/vm-windows-11.nix
+      ../../modules/tailscale.nix
     ];
 
   networking.hostName = "server";

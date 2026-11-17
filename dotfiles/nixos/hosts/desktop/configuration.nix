@@ -8,6 +8,7 @@
       ../../modules/audio.nix
       ../../modules/nfs-client.nix
       ../../modules/wireless-networking.nix
+      ../../modules/tailscale.nix
     ];
 
   networking.hostName = "desktop";
