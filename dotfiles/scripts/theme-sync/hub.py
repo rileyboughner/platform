@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
-# Theme-sync hub: stdlib-only HTTP server holding one shared theme/wallpaper
-# state document plus the wallpaper blobs clients need to apply it. See
+# Theme-sync hub: stdlib-only HTTP server holding theme/wallpaper state
+# documents plus the wallpaper blobs clients need to apply them. See
 # README.md next to this file for the full protocol.
+#
+# State comes in three flavors, each last-write-wins independently:
+#   - the legacy shared document (GET/POST /state) -- back-compat, used by
+#     any client that doesn't care about groups.
+#   - one document per group (GET/POST /state/<group>, group one of
+#     "workstation"/"mobile") -- used when the hub's mode is "split".
+# A global /mode (GET/POST, "unified" or "split") tells clients which of
+# "the shared document" or "their own group's document" to read/write.
+# Wallpaper blobs are content-addressed by sha256 and shared across all of
+# the above -- any state document can reference any blob, so there's
+# nothing group-specific about blob storage.
 import hashlib
 import json
 import os
@@ -12,6 +23,8 @@ from http.server import BaseHTTPRequestHandler
 
 STATE_DIR = os.environ.get("THEME_SYNC_STATE_DIR", "/var/lib/theme-sync")
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
+GROUPS_FILE = os.path.join(STATE_DIR, "groups.json")
+MODE_FILE = os.path.join(STATE_DIR, "mode.json")
 BLOB_DIR = os.path.join(STATE_DIR, "wallpapers")
 PORT = int(os.environ.get("THEME_SYNC_PORT", "8765"))
 # Comma-separated list of addresses to bind to. One listening socket per
@@ -21,27 +34,60 @@ PORT = int(os.environ.get("THEME_SYNC_PORT", "8765"))
 HOSTS = [h.strip() for h in os.environ.get("THEME_SYNC_HOSTS", "127.0.0.1").split(",") if h.strip()]
 
 REQUIRED_FIELDS = {"theme", "pinned", "wallpaper", "wallpaper_sha256", "updated_at", "writer"}
+GROUPS = ("workstation", "mobile")
+MODES = ("unified", "split")
+DEFAULT_MODE = "unified"
 
-# Guards both the in-process read-modify-write of state.json (POST /state)
-# and blob writes, since each bound address runs its own server instance on
-# its own thread.
+# Guards the in-process read-modify-write of state.json/groups.json/mode.json
+# (POST /state, /state/<group>, /mode) and blob writes, since each bound
+# address runs its own server instance on its own thread.
 _lock = threading.Lock()
 
 
-def _read_state():
+def _read_json(path):
     try:
-        with open(STATE_FILE, "r") as f:
+        with open(path, "r") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return None
 
 
-def _write_state(state):
+def _write_json(path, obj):
     os.makedirs(STATE_DIR, exist_ok=True)
-    tmp = STATE_FILE + ".tmp"
+    tmp = path + ".tmp"
     with open(tmp, "w") as f:
-        json.dump(state, f)
-    os.replace(tmp, STATE_FILE)
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
+def _read_state():
+    return _read_json(STATE_FILE)
+
+
+def _write_state(state):
+    _write_json(STATE_FILE, state)
+
+
+def _read_group_state(group):
+    groups = _read_json(GROUPS_FILE) or {}
+    return groups.get(group)
+
+
+def _write_group_state(group, state):
+    groups = _read_json(GROUPS_FILE) or {}
+    groups[group] = state
+    _write_json(GROUPS_FILE, groups)
+
+
+def _read_mode():
+    stored = _read_json(MODE_FILE)
+    if stored and stored.get("mode") in MODES:
+        return stored["mode"]
+    return DEFAULT_MODE
+
+
+def _write_mode(mode):
+    _write_json(MODE_FILE, {"mode": mode})
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -63,6 +109,20 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 state = _read_state()
             self._send_json(200, state if state is not None else {})
+            return
+        if self.path.startswith("/state/"):
+            group = self.path[len("/state/") :]
+            if group not in GROUPS:
+                self._send_json(404, {"error": "unknown group", "groups": list(GROUPS)})
+                return
+            with _lock:
+                state = _read_group_state(group)
+            self._send_json(200, state if state is not None else {})
+            return
+        if self.path == "/mode":
+            with _lock:
+                mode = _read_mode()
+            self._send_json(200, {"mode": mode})
             return
         if self.path.startswith("/wallpaper/"):
             self._serve_blob(self.path[len("/wallpaper/") :], send_body=True)
@@ -125,12 +185,30 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, {"ok": True})
 
     def do_POST(self):
-        if self.path != "/state":
-            self._send_json(404, {"error": "not found"})
+        if self.path == "/state":
+            self._post_state(_read_state, _write_state)
             return
+        if self.path.startswith("/state/"):
+            group = self.path[len("/state/") :]
+            if group not in GROUPS:
+                self._send_json(404, {"error": "unknown group", "groups": list(GROUPS)})
+                return
+            self._post_state(lambda: _read_group_state(group), lambda s: _write_group_state(group, s))
+            return
+        if self.path == "/mode":
+            self._post_mode()
+            return
+        self._send_json(404, {"error": "not found"})
+
+    def _read_body_json(self):
         length = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(length))
+
+    # Shared by /state and /state/<group>: both store a last-write-wins
+    # document with the same schema, just under a different read/write pair.
+    def _post_state(self, read_current, write_new):
         try:
-            incoming = json.loads(self.rfile.read(length))
+            incoming = self._read_body_json()
         except json.JSONDecodeError:
             self._send_json(400, {"error": "invalid json"})
             return
@@ -138,13 +216,27 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "missing fields", "required": sorted(REQUIRED_FIELDS)})
             return
         with _lock:
-            current = _read_state()
+            current = read_current()
             if current is None or incoming["updated_at"] > current["updated_at"]:
-                _write_state(incoming)
+                write_new(incoming)
                 result, accepted = incoming, True
             else:
                 result, accepted = current, False
         self._send_json(200, {"accepted": accepted, "state": result})
+
+    def _post_mode(self):
+        try:
+            incoming = self._read_body_json()
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "invalid json"})
+            return
+        mode = incoming.get("mode") if isinstance(incoming, dict) else None
+        if mode not in MODES:
+            self._send_json(400, {"error": "invalid mode", "allowed": list(MODES)})
+            return
+        with _lock:
+            _write_mode(mode)
+        self._send_json(200, {"mode": mode})
 
 
 class _Server(socketserver.ThreadingMixIn, socketserver.TCPServer):

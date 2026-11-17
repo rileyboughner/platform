@@ -124,8 +124,11 @@ private fun PageIndicator(pageCount: Int, currentPage: Int, onClick: () -> Unit,
         horizontalArrangement = Arrangement.Center,
     ) {
         repeat(pageCount) { index ->
+            // Accent/highlight only (synced-theme color, default white) --
+            // see MonoLauncherTheme. The inactive dots stay the fixed
+            // hairline gray regardless of the synced theme.
             val color = if (index == currentPage) {
-                MaterialTheme.colorScheme.onBackground
+                MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.outline
             }

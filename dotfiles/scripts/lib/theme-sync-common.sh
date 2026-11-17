@@ -31,6 +31,20 @@ THEME_SYNC_STATE_FILE="$THEME_SYNC_DIR/last-state.json"
 THEME_SYNC_WALLPAPERS_DIR="$HOME/.wallpapers"
 THEME_SYNC_BLOB_CACHE_DIR="$HOME/.cache/theme-sync/blobs"
 
+# This repo's bash watcher only ever runs on desktop/laptop -- phones/tablets
+# are the launcher's own (Kotlin) sync client, see
+# launcher/.../theme/ThemeSyncRepository.kt -- so the group for every
+# workstation is always "workstation", never computed or configurable.
+THEME_SYNC_GROUP="workstation"
+
+# Cached locally so a poll that can't reach the hub (or a quick repeat call,
+# e.g. `boner sync status` right after a poll) doesn't need a fresh request
+# just to know which state endpoint to use. Re-checked at most once per
+# THEME_SYNC_MODE_CACHE_TTL seconds; the watcher's own 15s poll loop is what
+# makes a hub-side mode change actually take effect within ~1 cache window.
+THEME_SYNC_MODE_CACHE_FILE="$THEME_SYNC_DIR/mode-cache.json"
+THEME_SYNC_MODE_CACHE_TTL=60
+
 # Exit status 0 == sync is enabled on this machine. Default-off: an
 # absent flag file (the state on every machine until `boner sync on` is
 # run) means disabled, not enabled.
@@ -59,6 +73,53 @@ theme_sync_find_hub() {
         fi
     done
     return 1
+}
+
+# Echoes the hub's current sync mode ("unified" or "split"), using a short
+# local cache (THEME_SYNC_MODE_CACHE_FILE/TTL above) to avoid hitting /mode
+# on every call. Falls back to a stale cached value (any age) if the hub is
+# unreachable, and to "unified" (the hub's own default) if there's no cache
+# either -- never fails outright, since callers need *some* answer to pick
+# a state endpoint.
+theme_sync_get_mode() {
+    local hub_url="$1" now cached_mode="" cached_at=0
+    now=$(date +%s)
+    if [ -f "$THEME_SYNC_MODE_CACHE_FILE" ]; then
+        cached_mode=$(jq -r '.mode // ""' "$THEME_SYNC_MODE_CACHE_FILE" 2>/dev/null)
+        cached_at=$(jq -r '.cached_at // 0' "$THEME_SYNC_MODE_CACHE_FILE" 2>/dev/null)
+        if [ -n "$cached_mode" ] && [ $(( now - cached_at )) -lt "$THEME_SYNC_MODE_CACHE_TTL" ]; then
+            printf '%s\n' "$cached_mode"
+            return 0
+        fi
+    fi
+
+    local fetched
+    fetched=$(curl -sf --max-time 3 "$hub_url/mode" 2>/dev/null | jq -r '.mode // ""' 2>/dev/null)
+    if [ "$fetched" = "unified" ] || [ "$fetched" = "split" ]; then
+        mkdir -p "$THEME_SYNC_DIR"
+        jq -n --arg mode "$fetched" --argjson cached_at "$now" '{mode: $mode, cached_at: $cached_at}' \
+            >"$THEME_SYNC_MODE_CACHE_FILE"
+        printf '%s\n' "$fetched"
+        return 0
+    fi
+
+    if [ -n "$cached_mode" ]; then
+        printf '%s\n' "$cached_mode"
+        return 0
+    fi
+    printf 'unified\n'
+}
+
+# Maps a sync mode ($1) to the hub state path to use for this machine's
+# group -- "state" (the shared/legacy document) in unified mode, or
+# "state/$THEME_SYNC_GROUP" in split mode. Callers build the full URL as
+# "$hub_url/$(theme_sync_state_path "$mode")".
+theme_sync_state_path() {
+    if [ "$1" = "split" ]; then
+        printf 'state/%s\n' "$THEME_SYNC_GROUP"
+    else
+        printf 'state\n'
+    fi
 }
 
 # Resolves the wallpaper ~/.wallpaper currently points at and sets

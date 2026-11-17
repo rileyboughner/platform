@@ -7,8 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
+import dev.rileyboughner.launcher.theme.ThemeSyncRepository
+import dev.rileyboughner.launcher.theme.accentColorFor
+import kotlinx.coroutines.launch
 
 /**
  * Settings, reached from the "Settings" text row on the Apps page. Lets
@@ -22,15 +26,17 @@ class SettingsActivity : ComponentActivity() {
 
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var appListRepository: AppListRepository
+    private lateinit var themeSyncRepository: ThemeSyncRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settingsRepository = SettingsRepository(applicationContext)
         appListRepository = AppListRepository(applicationContext)
+        themeSyncRepository = ThemeSyncRepository(applicationContext, settingsRepository)
         val allApps = appListRepository.getLaunchableApps()
 
         setContent {
-            MonoLauncherTheme {
+            MonoLauncherTheme(accentColor = accentColorFor(settingsRepository.getSyncTheme())) {
                 var showFavoritesPicker by remember { mutableStateOf(false) }
 
                 if (showFavoritesPicker) {
@@ -53,6 +59,9 @@ class SettingsActivity : ComponentActivity() {
                             homeAssistantToken = settingsRepository.getHomeAssistantToken() ?: "",
                             duolingoUsername = settingsRepository.getDuolingoUsername() ?: "",
                             showGlanceInfo = settingsRepository.getShowGlanceInfo(),
+                            syncEnabled = settingsRepository.getSyncEnabled(),
+                            syncTheme = settingsRepository.getSyncTheme(),
+                            syncMode = settingsRepository.getSyncModeCache(),
                         ),
                         onSave = { fields ->
                             settingsRepository.setTodoistToken(fields.todoistToken)
@@ -62,7 +71,18 @@ class SettingsActivity : ComponentActivity() {
                             settingsRepository.setHomeAssistantToken(fields.homeAssistantToken)
                             settingsRepository.setDuolingoUsername(fields.duolingoUsername)
                             settingsRepository.setShowGlanceInfo(fields.showGlanceInfo)
-                            finish()
+                            settingsRepository.setSyncEnabled(fields.syncEnabled)
+                            // Network pushes (theme/mode to the hub) run on
+                            // lifecycleScope rather than finishing first: both
+                            // are no-ops when sync is off, and otherwise need
+                            // to actually complete the write before this
+                            // Activity (and its ThemeSyncRepository instance)
+                            // goes away.
+                            lifecycleScope.launch {
+                                themeSyncRepository.pushMode(fields.syncMode)
+                                themeSyncRepository.pushTheme(fields.syncTheme)
+                                finish()
+                            }
                         },
                         onBack = { finish() },
                         onOpenMainPageFavorites = { showFavoritesPicker = true },

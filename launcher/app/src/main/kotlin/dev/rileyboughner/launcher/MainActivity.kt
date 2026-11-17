@@ -1,12 +1,15 @@
 package dev.rileyboughner.launcher
 
+import android.app.UiModeManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,8 +17,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
@@ -24,6 +30,8 @@ import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.settings.SettingsActivity
 import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
+import dev.rileyboughner.launcher.theme.ThemeSyncRepository
+import dev.rileyboughner.launcher.theme.accentColorFor
 import dev.rileyboughner.launcher.todoist.TodoistRepository
 import dev.rileyboughner.launcher.ui.LauncherPagerScreen
 import dev.rileyboughner.launcher.update.AllowUnknownSourcesDialog
@@ -31,6 +39,9 @@ import dev.rileyboughner.launcher.update.UpdateInfo
 import dev.rileyboughner.launcher.update.UpdateInstaller
 import dev.rileyboughner.launcher.update.UpdatePromptDialog
 import dev.rileyboughner.launcher.update.UpdateRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -52,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var dashboardRepository: DashboardRepository
     private lateinit var duolingoRepository: DuolingoRepository
     private lateinit var updateRepository: UpdateRepository
+    private lateinit var themeSyncRepository: ThemeSyncRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,9 +81,25 @@ class MainActivity : ComponentActivity() {
         dashboardRepository = DashboardRepository()
         duolingoRepository = DuolingoRepository(applicationContext, settingsRepository)
         updateRepository = UpdateRepository(applicationContext)
+        themeSyncRepository = ThemeSyncRepository(applicationContext, settingsRepository)
+
+        // MainActivity is reachable directly (LAUNCHER category, for
+        // development) in addition to via HomeRouterActivity, which already
+        // never sends a television here -- so this re-derives the same
+        // check HomeRouterActivity uses rather than trusting that it's
+        // always the only path in. Theme sync (poll/apply/push) must never
+        // run on TV.
+        val uiModeManager = getSystemService(UI_MODE_SERVICE) as UiModeManager
+        val isTelevision = uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
 
         setContent {
-            MonoLauncherTheme {
+            var accentColor by remember { mutableStateOf(accentColorFor(settingsRepository.getSyncTheme())) }
+
+            if (!isTelevision) {
+                ThemeSyncPoller(themeSyncRepository) { themeKey -> accentColor = accentColorFor(themeKey) }
+            }
+
+            MonoLauncherTheme(accentColor = accentColor) {
                 LauncherPagerScreen(
                     appListRepository = appListRepository,
                     calendarRepository = calendarRepository,
@@ -174,5 +202,44 @@ private fun UpdatePrompt(updateRepository: UpdateRepository) {
             },
             onDismiss = { showUnknownSourcesPrompt = false },
         )
+    }
+}
+
+/**
+ * Polls [ThemeSyncRepository] every ~15s (same cadence family as the
+ * desktop/laptop watcher) while [MainActivity] is actually in the
+ * foreground, plus once immediately on every ON_RESUME -- matching
+ * ON_PAUSE/ON_RESUME rather than a plain always-running loop is what stops
+ * this from polling the hub (or holding a wakelock-free background
+ * coroutine) while the launcher isn't on screen. [ThemeSyncRepository.poll]
+ * itself is a no-op (returns null) when sync is off or the hub is
+ * unreachable, so this never needs its own enabled/reachability check.
+ */
+@Composable
+private fun ThemeSyncPoller(themeSyncRepository: ThemeSyncRepository, onThemeChanged: (String) -> Unit) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+
+    DisposableEffect(lifecycleOwner) {
+        var pollJob: Job? = null
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    pollJob = coroutineScope.launch {
+                        while (isActive) {
+                            themeSyncRepository.poll()?.let(onThemeChanged)
+                            delay(15_000)
+                        }
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> pollJob?.cancel()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            pollJob?.cancel()
+        }
     }
 }

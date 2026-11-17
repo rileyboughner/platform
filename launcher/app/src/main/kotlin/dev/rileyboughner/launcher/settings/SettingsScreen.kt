@@ -2,6 +2,7 @@ package dev.rileyboughner.launcher.settings
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.rileyboughner.launcher.health.HealthConnectRepository
 import dev.rileyboughner.launcher.health.READ_SLEEP_PERMISSIONS
+import dev.rileyboughner.launcher.theme.SYNCED_THEMES
 import dev.rileyboughner.launcher.ui.AppTextRow
 import dev.rileyboughner.launcher.ui.HairlineDivider
 import kotlinx.coroutines.launch
@@ -48,6 +50,9 @@ data class SettingsFields(
     val homeAssistantToken: String,
     val duolingoUsername: String,
     val showGlanceInfo: Boolean,
+    val syncEnabled: Boolean,
+    val syncTheme: String,
+    val syncMode: String,
 )
 
 /**
@@ -73,6 +78,9 @@ fun SettingsScreen(
     var homeAssistantToken by rememberSaveable { mutableStateOf(initialFields.homeAssistantToken) }
     var duolingoUsername by rememberSaveable { mutableStateOf(initialFields.duolingoUsername) }
     var showGlanceInfo by rememberSaveable { mutableStateOf(initialFields.showGlanceInfo) }
+    var syncEnabled by rememberSaveable { mutableStateOf(initialFields.syncEnabled) }
+    var syncTheme by rememberSaveable { mutableStateOf(initialFields.syncTheme) }
+    var syncMode by rememberSaveable { mutableStateOf(initialFields.syncMode) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -141,6 +149,47 @@ fun SettingsScreen(
                 Switch(checked = showGlanceInfo, onCheckedChange = { showGlanceInfo = it })
             }
             AppTextRow(label = "Main-page apps", onClick = onOpenMainPageFavorites)
+        }
+
+        SettingsSection(
+            title = "Theme & wallpaper sync",
+            description = "Syncs the pinned theme (and, on desktop/laptop, the wallpaper) with the server hub. " +
+                "Off by default on every device.",
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Sync with hub",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Switch(checked = syncEnabled, onCheckedChange = { syncEnabled = it })
+            }
+
+            SubSectionLabel(text = "Sync scope")
+            SelectableRow(
+                label = "Unified — every device shares one theme",
+                selected = syncMode == "unified",
+                onClick = { syncMode = "unified" },
+            )
+            SelectableRow(
+                label = "Split — desktop/laptop and phone/tablet sync separately",
+                selected = syncMode == "split",
+                onClick = { syncMode = "split" },
+            )
+
+            SubSectionLabel(text = "Theme")
+            SYNCED_THEMES.forEach { theme ->
+                SelectableRow(
+                    label = theme.displayName,
+                    selected = syncTheme == theme.key,
+                    onClick = { syncTheme = theme.key },
+                )
+            }
         }
 
         SettingsSection(
@@ -235,6 +284,9 @@ fun SettingsScreen(
                         homeAssistantToken = homeAssistantToken,
                         duolingoUsername = duolingoUsername,
                         showGlanceInfo = showGlanceInfo,
+                        syncEnabled = syncEnabled,
+                        syncTheme = syncTheme,
+                        syncMode = syncMode,
                     ),
                 )
             },
@@ -275,6 +327,20 @@ private fun SubSectionLabel(text: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+    )
+}
+
+/** One option in a single-choice list (sync scope, synced theme) — a checkmark plus the accent color (via MaterialTheme.colorScheme.primary) mark the selected row, text-only like the rest of this screen. */
+@Composable
+private fun SelectableRow(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Text(
+        text = if (selected) "✓ $label" else "   $label",
+        style = MaterialTheme.typography.bodyLarge,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 8.dp),
     )
 }
 

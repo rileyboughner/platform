@@ -6,6 +6,7 @@ import androidx.security.crypto.MasterKey
 import dev.rileyboughner.launcher.BuildConfig
 import dev.rileyboughner.launcher.FavoritesRepository
 import dev.rileyboughner.launcher.LauncherAppInfo
+import dev.rileyboughner.launcher.theme.DEFAULT_SYNCED_THEME_KEY
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -91,6 +92,57 @@ class SettingsRepository(context: Context) {
         prefs.edit().putBoolean(KEY_SHOW_GLANCE_INFO, show).apply()
     }
 
+    // Theme/wallpaper sync with the server hub (dotfiles/scripts/theme-sync) --
+    // see dev.rileyboughner.launcher.theme.ThemeSyncRepository for the client.
+    // Default off, matching the workstation watcher's own default-off.
+    fun getSyncEnabled(): Boolean = prefs.getBoolean(KEY_SYNC_ENABLED, false)
+
+    fun setSyncEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SYNC_ENABLED, enabled).apply()
+    }
+
+    // The theme key (dotfiles/config/themes/<key>.json stem) currently applied
+    // to this device's accent color -- either picked locally in Settings, or
+    // last pulled from the hub. Persisted so the accent survives a process
+    // restart with no network round-trip.
+    fun getSyncTheme(): String = prefs.getString(KEY_SYNC_THEME, null) ?: DEFAULT_SYNCED_THEME_KEY
+
+    fun setSyncTheme(themeKey: String) {
+        prefs.edit().putString(KEY_SYNC_THEME, themeKey).apply()
+    }
+
+    // Last known hub sync mode ("unified"/"split"), cached locally the same
+    // way the watcher caches it (theme_sync_get_mode in
+    // lib/theme-sync-common.sh) so a hub-unreachable moment still has an
+    // answer for which state endpoint to use.
+    fun getSyncModeCache(): String = prefs.getString(KEY_SYNC_MODE_CACHE, null) ?: "unified"
+
+    fun setSyncModeCache(mode: String) {
+        prefs.edit().putString(KEY_SYNC_MODE_CACHE, mode).apply()
+    }
+
+    fun getSyncModeCacheFetchedAt(): Long = prefs.getLong(KEY_SYNC_MODE_CACHE_AT, 0L)
+
+    fun setSyncModeCacheFetchedAt(epochMillis: Long) {
+        prefs.edit().putLong(KEY_SYNC_MODE_CACHE_AT, epochMillis).apply()
+    }
+
+    // The full hub state document last applied to (or accepted from) this
+    // device, serialized as JSON. Lets a theme-only push carry forward the
+    // wallpaper fields it doesn't itself know about, instead of clobbering
+    // them -- the hub's POST /state is a whole-document replace, not a merge.
+    fun getSyncLastStateJson(): String? = prefs.getString(KEY_SYNC_LAST_STATE_JSON, null)
+
+    fun setSyncLastStateJson(json: String) {
+        prefs.edit().putString(KEY_SYNC_LAST_STATE_JSON, json).apply()
+    }
+
+    fun getSyncLastAppliedUpdatedAt(): Long = prefs.getLong(KEY_SYNC_LAST_APPLIED_AT, 0L)
+
+    fun setSyncLastAppliedUpdatedAt(updatedAt: Long) {
+        prefs.edit().putLong(KEY_SYNC_LAST_APPLIED_AT, updatedAt).apply()
+    }
+
     // Per-favorite main-page visibility, keyed by the favorite's display
     // label (stable — see FavoritesRepository.FAVORITE_LABELS). Stored in
     // this same per-device EncryptedSharedPreferences file, so each device
@@ -166,6 +218,12 @@ class SettingsRepository(context: Context) {
         private const val KEY_SHOW_GLANCE_INFO = "show_glance_info"
         private const val KEY_FAVORITE_VISIBLE_PREFIX = "favorite_visible_"
         private const val KEY_MAIN_PAGE_FAVORITES = "main_page_favorites_v1"
+        private const val KEY_SYNC_ENABLED = "theme_sync_enabled"
+        private const val KEY_SYNC_THEME = "theme_sync_theme"
+        private const val KEY_SYNC_MODE_CACHE = "theme_sync_mode_cache"
+        private const val KEY_SYNC_MODE_CACHE_AT = "theme_sync_mode_cache_at"
+        private const val KEY_SYNC_LAST_STATE_JSON = "theme_sync_last_state_json"
+        private const val KEY_SYNC_LAST_APPLIED_AT = "theme_sync_last_applied_at"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
         const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"

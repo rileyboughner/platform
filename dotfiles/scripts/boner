@@ -67,7 +67,8 @@ _rows_remote() {
 _rows_sync() {
     _row "sync on"     "Enable theme/wallpaper sync with the server hub on this machine"
     _row "sync off"    "Disable sync on this machine (no push, no pull)"
-    _row "sync status" "Show sync state, last push/pull times, and hub reachability"
+    _row "sync mode <unified|split>" "Set whether all devices share one theme or sync in two groups"
+    _row "sync status" "Show sync state, mode, group, last push/pull times, and hub reachability"
 }
 
 # Per-subcommand usage, shown whenever that subcommand is called with a
@@ -93,7 +94,7 @@ _usage_vm() {
 }
 
 _usage_sync() {
-    printf 'Usage: boner sync %s<on|off|status>%s\n\n' "$dim" "$reset" >&2
+    printf 'Usage: boner sync %s<on|off|mode|status>%s\n\n' "$dim" "$reset" >&2
     _rows_sync
 }
 
@@ -226,6 +227,7 @@ cmd_sync() {
     case "$subcmd" in
         on) cmd_sync_on ;;
         off) cmd_sync_off ;;
+        mode) cmd_sync_mode "${2:-}" ;;
         status) cmd_sync_status ;;
         *)
             _usage_sync
@@ -248,6 +250,38 @@ cmd_sync_off() {
     echo "Theme/wallpaper sync disabled on this machine."
 }
 
+cmd_sync_mode() {
+    local mode="$1"
+    case "$mode" in
+        unified|split) ;;
+        *)
+            echo "Usage: boner sync mode <unified|split>" >&2
+            exit 1
+            ;;
+    esac
+
+    # shellcheck source=lib/theme-sync-common.sh
+    . "$DOTFILES_TARGET/scripts/lib/theme-sync-common.sh"
+
+    local hub_url
+    hub_url=$(theme_sync_find_hub) || {
+        echo "Error: hub unreachable (tried: $THEME_SYNC_HUB_URLS)." >&2
+        exit 1
+    }
+
+    local response accepted_mode
+    response=$(curl -sf --max-time 5 -X POST -H "Content-Type: application/json" -d "{\"mode\":\"$mode\"}" "$hub_url/mode" 2>/dev/null) || {
+        echo "Error: failed to set mode on hub ($hub_url)." >&2
+        exit 1
+    }
+    accepted_mode=$(printf '%s' "$response" | jq -r '.mode // ""')
+    if [ "$accepted_mode" != "$mode" ]; then
+        echo "Error: hub rejected mode '$mode' (response: $response)." >&2
+        exit 1
+    fi
+    echo "Sync mode set to: $accepted_mode"
+}
+
 cmd_sync_status() {
     # shellcheck source=lib/theme-sync-common.sh
     . "$DOTFILES_TARGET/scripts/lib/theme-sync-common.sh"
@@ -257,6 +291,7 @@ cmd_sync_status() {
     else
         echo "sync: off"
     fi
+    echo "group: $THEME_SYNC_GROUP"
 
     if [ -f "$THEME_SYNC_STATE_FILE" ]; then
         local last_push last_pull
@@ -273,7 +308,11 @@ cmd_sync_status() {
     local hub_url
     if hub_url=$(theme_sync_find_hub); then
         echo "hub: $hub_url"
-        curl -sf --max-time 2 "$hub_url/state" | jq .
+        local mode state_path
+        mode=$(theme_sync_get_mode "$hub_url")
+        echo "mode: $mode"
+        state_path=$(theme_sync_state_path "$mode")
+        curl -sf --max-time 2 "$hub_url/$state_path" | jq .
     else
         echo "hub: unreachable"
     fi

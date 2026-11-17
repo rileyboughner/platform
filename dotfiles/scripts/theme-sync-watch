@@ -154,7 +154,7 @@ apply_hub_state() {
 # If the hub rejects it (something newer already landed there), applies
 # that newer state instead of clobbering it.
 push_local_state() {
-    local hub_url="$1" theme_name="$2" pinned="$3" wp_id="$4" wp_sha="$5" wp_target="$6"
+    local hub_url="$1" state_path="$2" theme_name="$3" pinned="$4" wp_id="$5" wp_sha="$6" wp_target="$7"
     local now
     now=$(date +%s)
 
@@ -177,7 +177,7 @@ push_local_state() {
           updated_at: $updated_at, writer: $writer}')
 
     local response
-    response=$(curl -sf --max-time 10 -X POST -H "Content-Type: application/json" -d "$payload" "$hub_url/state" 2>/dev/null) || {
+    response=$(curl -sf --max-time 10 -X POST -H "Content-Type: application/json" -d "$payload" "$hub_url/$state_path" 2>/dev/null) || {
         echo "theme-sync-watch: push to hub failed, will retry next poll" >&2
         return 0
     }
@@ -208,6 +208,10 @@ poll_once() {
     local hub_url
     hub_url=$(theme_sync_find_hub) || return 0
 
+    local mode state_path
+    mode=$(theme_sync_get_mode "$hub_url")
+    state_path=$(theme_sync_state_path "$mode")
+
     local local_theme_name="" local_pinned=false
     if local_theme_name=$(theme_active_name 2>/dev/null); then
         local_pinned=true
@@ -232,10 +236,10 @@ poll_once() {
     fi
 
     if [ "$theme_changed" = true ] || [ "$wallpaper_changed" = true ]; then
-        push_local_state "$hub_url" "$local_theme_name" "$local_pinned" "$local_wp_id" "$local_wp_sha" "$local_wp_target"
+        push_local_state "$hub_url" "$state_path" "$local_theme_name" "$local_pinned" "$local_wp_id" "$local_wp_sha" "$local_wp_target"
     else
         local hub_state
-        hub_state=$(curl -sf --max-time 5 "$hub_url/state" 2>/dev/null) || return 0
+        hub_state=$(curl -sf --max-time 5 "$hub_url/$state_path" 2>/dev/null) || return 0
         apply_hub_state "$hub_state" "$hub_url"
     fi
 }

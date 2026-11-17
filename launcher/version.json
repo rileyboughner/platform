@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "0.6.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.6.0/app-release.apk",
-  "notes": "Fix Health Connect never registering with the controller on some devices: bump the stale connect-client library, attempt registration unconditionally (not gated on the pessimistic SDK-availability check), surface the raw SDK status in Settings for diagnosis, and re-check availability on resume instead of once at first launch."
+  "versionCode": 7,
+  "versionName": "0.7.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.7.0/app-release.apk",
+  "notes": "Add theme/wallpaper sync: choose unified (every device shares one theme) or split (desktop/laptop and phone/tablet sync independently) from the hub. Settings gets a sync toggle (off by default), a theme picker that writes back to the hub, and a sync-scope picker. Synced themes show as an accent color on Switches and the page indicator; the minimal black-and-white look is otherwise unchanged. TV is never affected."
 }

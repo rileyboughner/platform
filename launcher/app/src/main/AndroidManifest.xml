@@ -6,8 +6,13 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
-    <!-- Todo page: Todoist REST API calls. -->
+    <!-- Todo page: Todoist REST API calls. Also covers the theme-sync hub
+         client (dev.rileyboughner.launcher.theme.ThemeSyncRepository). -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Theme-sync hub client: applies a wallpaper pulled from the hub via
+         WallpaperManager.setBitmap. Normal permission, no runtime prompt. -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
 
     <!-- Phone main page: in-app update check + install (see launcher/UPDATES.md).
          Still requires the per-app "Allow from this source" grant at runtime
