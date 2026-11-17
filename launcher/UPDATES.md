@@ -27,15 +27,13 @@ Fields:
 | `apkUrl`      | string | Direct URL to the GitHub Release asset for that build.               |
 | `notes`       | string | Short release notes shown in the update prompt. Optional, may be "". |
 
-The committed file currently matches the app's actual shipped version
-(`versionCode` 1, `versionName` "0.1.0-skeleton"), so installs never prompt
-until a real newer release is published. `apkUrl` in the committed file is
-a placeholder (no release has been cut yet) — it is never fetched while
-`versionCode` stays at 1.
+The committed file always matches the latest published release. Releases
+are cut from this repo's `main` branch; see "Publishing a new release"
+below.
 
 ## versionCode scheme
 
-Plain incrementing integer, starting at 1 (the current skeleton build).
+Plain incrementing integer, starting at 1 (the first skeleton build).
 Bump by exactly 1 for every release that should be installable as an
 update, in `launcher/app/build.gradle.kts` (`defaultConfig.versionCode`).
 Never reuse or decrease a versionCode, even if a release is later deleted
@@ -44,15 +42,36 @@ or superseded — the comparison in `UpdateRepository` is a strict `>`.
 `versionName` stays human-readable (e.g. `0.2.0`) and does not need to be
 strictly semver, but should read sensibly in the update prompt.
 
+## Release build convention
+
+Release APKs are the debug-signed `assembleDebug` build from the server
+build machine — the same debug keystore as every ADB install, so a
+release installs cleanly over an existing install with no uninstall and
+no settings loss. Do not ship a release-signed APK: a different signing
+key would force an uninstall/reinstall on every device.
+
+Release builds MUST be built with the `LAUNCHER_HOME_ASSISTANT_TOKEN`,
+`LAUNCHER_JELLYFIN_API_KEY`, and `LAUNCHER_TODOIST_TOKEN` environment
+variables unset. Release assets are public (this repo is public), so no
+token may be baked into them. Tokens are entered once in the launcher's
+Settings screen instead; Settings stores them encrypted, and the stored
+values survive updates. Before publishing, verify the APK contains no
+token (count-only scan of the extracted dex against the token file) and
+that `aapt dump badging` shows the expected `versionCode`/`versionName`.
+
 ## Publishing a new release
 
 1. Bump `versionCode` and `versionName` in `launcher/app/build.gradle.kts`.
-2. Build the APK to ship (`./gradlew assembleRelease` or `assembleDebug`,
-   whichever this project is distributing).
+2. Build the APK to ship: clean `./gradlew assembleDebug` with all
+   `LAUNCHER_*` token variables unset, then verify it per "Release build
+   convention" above.
 3. Create a GitHub Release on `rileyboughner/platform` (tag matching the
-   new `versionName`, e.g. `v0.2.0`) and upload the APK as a release asset.
-4. Copy that asset's download URL into `launcher/version.json`'s `apkUrl`,
-   and update `versionCode`, `versionName`, and `notes` to match.
+   new `versionName`, e.g. `v0.2.0`, targeting the release commit) and
+   upload the APK as a release asset named `app-release.apk`.
+4. Copy that asset's download URL
+   (`https://github.com/rileyboughner/platform/releases/download/<tag>/app-release.apk`)
+   into `launcher/version.json`'s `apkUrl`, and update `versionCode`,
+   `versionName`, and `notes` to match.
 5. Commit and push `launcher/version.json` to `main`. Existing installs
    pick it up on their next launch (allow a few minutes for
    `raw.githubusercontent.com`'s CDN cache to refresh).
