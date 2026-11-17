@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Config for HaPopupAccessibilityService. canRequestFilterKeyEvents is
+     what lets onKeyEvent() see the Menu key system-wide before the
+     foreground app does; canRetrieveWindowContent is left off since the
+     service never needs to inspect any app's screen content. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="false"
+    android:canRequestFilterKeyEvents="true"
+    android:notificationTimeout="100"
+    android:description="@string/ha_popup_accessibility_description" />

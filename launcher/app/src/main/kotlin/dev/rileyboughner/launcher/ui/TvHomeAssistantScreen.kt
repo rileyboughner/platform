@@ -44,18 +44,20 @@ import dev.rileyboughner.launcher.homeassistant.Presence
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val LIVING_ROOM_NAME = "Living Room"
+internal const val LIVING_ROOM_NAME = "Living Room"
 private const val BRIGHTNESS_STEP_PERCENT = 10
 private const val SCENE_FEEDBACK_MS = 1500L
 
 /**
- * TV-native Home Assistant screen — Apple TV-style [TvTile]s, D-pad only,
- * living-room-only (the TV lives in the living room; see
+ * TV-native Home Assistant screen. No longer reachable as its own TV
+ * destination — [dev.rileyboughner.launcher.ui.TvHomeScreen] folds the
+ * living-room lights/scenes rows directly into the TV main page, reusing
+ * [LightTile]/[SceneTile]/[SectionLabel] from this file (made `internal`
+ * for that reuse) rather than this whole screen. This composable and its
+ * living-room-only, D-pad-first design (see
  * [dev.rileyboughner.launcher.homeassistant.HomeAssistantEntities.ROOMS] for
- * the single source of truth on which lights/scenes that room has). The
- * phone's room-tabbed, touch-oriented [HomeAssistantScreen] stays as-is for
- * the phone; this is a separate, purpose-built screen for the TV instead of
- * reusing it, because a Switch/Slider pair doesn't have a sane D-pad mapping.
+ * the single source of truth on which lights/scenes that room has) are kept
+ * around since [LightTile]/[SceneTile] are still used from here.
  */
 @Composable
 fun TvHomeAssistantScreen(
@@ -214,7 +216,7 @@ private fun LivingRoomContent(
  * default focus-move handling sees them, same way a dialog intercepts Back.
  */
 @Composable
-private fun LightTile(
+internal fun LightTile(
     light: HomeAssistantLight,
     onToggle: () -> Unit,
     onBrightnessStep: (Int) -> Unit,
@@ -262,7 +264,7 @@ private fun LightTile(
 }
 
 @Composable
-private fun SceneTile(
+internal fun SceneTile(
     scene: HomeAssistantScene,
     isActivated: Boolean,
     onActivate: () -> Unit,
@@ -286,7 +288,7 @@ private fun SceneTile(
 }
 
 @Composable
-private fun SectionLabel(title: String, modifier: Modifier = Modifier) {
+internal fun SectionLabel(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleLarge,

@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "0.3.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.3.0/app-release.apk",
-  "notes": "Adds per-favorite visibility toggles, fixes the glance info toggle not taking effect without a restart, and fixes Health Connect sleep permission grants never landing."
+  "versionCode": 4,
+  "versionName": "0.4.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.4.0/app-release.apk",
+  "notes": "TV-only redesign: single home page (apps row + living-room lights/scenes), movie wheel opens the web app, new global Menu-key Home Assistant popup. Also fixes the phone Health Connect queries grant on newer Health Connect app builds."
 }

@@ -27,13 +27,24 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- TV universal Home Assistant popup (HaPopupAccessibilityService):
+         draws its lights/scenes overlay as a TYPE_APPLICATION_OVERLAY
+         window, which requires this permission plus the one-time "Appear
+         on top" grant in system Settings (not a runtime dialog). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Required so HealthConnectClient can even detect the Health Connect
          provider app under API 30+ package-visibility filtering (targetSdk
          34 here) — without this, isAvailable()/getSdkStatus() reports the
          SDK unavailable and the grant flow in SettingsScreen never shows,
-         regardless of the READ_SLEEP permission above being declared. -->
+         regardless of the READ_SLEEP permission above being declared.
+         Both the legacy Health Connect APK (healthdata) and the newer
+         Health Connect app package name (healthconnect.controller) are
+         queried since different OEM/Android versions ship it under either
+         package name. -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <package android:name="com.google.android.healthconnect.controller" />
     </queries>
 
     <!-- Declared so this APK is installable on a phone/tablet without
@@ -114,6 +125,26 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- TV universal Home Assistant popup — see HaPopupAccessibilityService's
+             kdoc for the exact one-time setup (Accessibility + "Appear on
+             top", both manual, nothing here auto-enables either). Disabled
+             by default like any accessibility service; exported="true" is
+             required for the system to bind it, but the
+             BIND_ACCESSIBILITY_SERVICE permission check means only the
+             system itself can actually do so. -->
+        <service
+            android:name=".accessibility.HaPopupAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="@string/ha_popup_accessibility_label">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/ha_popup_accessibility_service" />
+        </service>
 
         <!-- Hands the downloaded update APK (in app cache) to the system
              installer as a content:// URI — see UpdateInstaller. Only ever
