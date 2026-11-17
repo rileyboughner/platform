@@ -2,8 +2,10 @@ package dev.rileyboughner.launcher.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,38 +28,48 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.rileyboughner.launcher.FavoritesRepository
 import dev.rileyboughner.launcher.LauncherAppInfo
+import dev.rileyboughner.launcher.R
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
+import dev.rileyboughner.launcher.resolveLeanbackTile
 import dev.rileyboughner.launcher.todoist.TodoistRepository
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Google TV / Leanback home screen. Same minimal black-and-white text style
- * as the phone launcher (via [dev.rileyboughner.launcher.theme.MonoLauncherTheme],
- * applied by the caller) — solid black background, large white text rows,
- * no icons, no grids — but a single D-pad-navigable list instead of the
- * phone's swipeable pager, since there's no touchscreen here. Up/down moves
- * focus (see [TvTextRow]), center/OK opens the focused row, back returns to
- * this home list from any sub-screen.
+ * Google TV / Leanback home screen. Apple TV-style: large poster/banner
+ * tiles for Jellyfin, YouTube, Weave music, and the movie wheel (see
+ * [TvTileRow]) that scale up and gain a focus ring on D-pad focus (see
+ * [TvTile]), on a dark background, with the big clock/date header above
+ * them. A second, smaller row below keeps Dashboard/Home Assistant/
+ * Calendar/Todo reachable — those are first-party launcher features with no
+ * real "brand artwork" of their own, so they stay compact labeled tiles
+ * rather than full posters. "All apps" and Settings stay as plain text rows
+ * beneath both tile rows, same as before the redesign.
  *
- * The Dashboard, Home Assistant, Calendar, and Todo rows reuse the phone's
- * screens unmodified (see [TvSubScreen]) — only their framing (a back row
- * above, initial D-pad focus) is TV-specific. "All apps" is TV-only code
- * ([TvAllAppsScreen]): the phone's [AllAppsScreen] is shared with the phone's
- * swipe-down gesture and sized for touch, so reusing it here would mean
- * either shrinking TV text back down or changing phone text size — this
- * avoids that tradeoff entirely.
+ * Weave and the movie wheel have no installed Android app, so they open as
+ * an in-launcher [TvWebViewScreen] instead of a launch intent — see that
+ * file for why a WebView is used here over handing off to a browser.
+ *
+ * The Dashboard, Home Assistant, Calendar, and Todo screens reuse the
+ * phone's screens unmodified (see [TvSubScreen]) — only their framing (a
+ * back row above, initial D-pad focus) is TV-specific. "All apps" is TV-only
+ * code ([TvAllAppsScreen]).
  */
-private enum class TvDestination { HOME, ALL_APPS, DASHBOARD, HOME_ASSISTANT, CALENDAR, TODO }
+private enum class TvDestination { HOME, ALL_APPS, DASHBOARD, HOME_ASSISTANT, CALENDAR, TODO, WEB_VIEW }
+
+private const val WEAVE_URL = "https://weave.rileyboughner.dev"
+private const val MOVIE_WHEEL_URL = "https://movies.rileyboughner.dev"
 
 @Composable
 fun TvHomeScreen(
@@ -73,6 +85,8 @@ fun TvHomeScreen(
     modifier: Modifier = Modifier,
 ) {
     var destination by rememberSaveable { mutableStateOf(TvDestination.HOME) }
+    var webViewTitle by rememberSaveable { mutableStateOf("") }
+    var webViewUrl by rememberSaveable { mutableStateOf("") }
 
     when (destination) {
         TvDestination.HOME -> TvHomeContent(
@@ -83,6 +97,11 @@ fun TvHomeScreen(
             onOpenHomeAssistant = { destination = TvDestination.HOME_ASSISTANT },
             onOpenCalendar = { destination = TvDestination.CALENDAR },
             onOpenTodo = { destination = TvDestination.TODO },
+            onOpenWebTarget = { title, url ->
+                webViewTitle = title
+                webViewUrl = url
+                destination = TvDestination.WEB_VIEW
+            },
             onOpenSettings = onOpenSettings,
             modifier = modifier,
         )
@@ -119,6 +138,13 @@ fun TvHomeScreen(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
+
+        TvDestination.WEB_VIEW -> TvWebViewScreen(
+            title = webViewTitle,
+            url = webViewUrl,
+            onBack = { destination = TvDestination.HOME },
+            modifier = modifier,
+        )
     }
 }
 
@@ -131,10 +157,14 @@ private fun TvHomeContent(
     onOpenHomeAssistant: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenTodo: () -> Unit,
+    onOpenWebTarget: (title: String, url: String) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val favorites = remember(apps) { FavoritesRepository.resolveFavorites(apps) }
+    val jellyfinTile = remember { resolveLeanbackTile(context, "org.jellyfin.androidtv", "Jellyfin") }
+    val youtubeTile = remember { resolveLeanbackTile(context, "com.google.android.youtube.tv", "YouTube") }
     val firstFocusRequester = remember { FocusRequester() }
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
@@ -149,28 +179,66 @@ private fun TvHomeContent(
             TvClockHeader()
             Spacer(modifier = Modifier.height(48.dp))
 
-            favorites.forEachIndexed { index, app ->
-                TvTextRow(
-                    label = app.label,
-                    onClick = { onAppClick(app) },
-                    focusRequester = if (index == 0) firstFocusRequester else null,
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+                if (jellyfinTile != null) {
+                    TvTile(
+                        label = jellyfinTile.label,
+                        onClick = { context.startActivity(jellyfinTile.launchIntent) },
+                        focusRequester = firstFocusRequester,
+                    ) {
+                        TvTileDrawableArtwork(jellyfinTile.artwork, contentDescription = jellyfinTile.label)
+                    }
+                }
+                if (youtubeTile != null) {
+                    TvTile(
+                        label = youtubeTile.label,
+                        onClick = { context.startActivity(youtubeTile.launchIntent) },
+                        focusRequester = if (jellyfinTile == null) firstFocusRequester else null,
+                    ) {
+                        TvTileDrawableArtwork(youtubeTile.artwork, contentDescription = youtubeTile.label)
+                    }
+                }
+                TvTile(
+                    label = "Weave",
+                    onClick = { onOpenWebTarget("Weave", WEAVE_URL) },
+                    focusRequester = if (jellyfinTile == null && youtubeTile == null) firstFocusRequester else null,
+                ) {
+                    TvTileResourceArtwork(painterResource(R.drawable.tv_tile_weave), contentDescription = "Weave")
+                }
+                TvTile(
+                    label = "Movie wheel",
+                    onClick = { onOpenWebTarget("the movie wheel", MOVIE_WHEEL_URL) },
+                ) {
+                    TvTileResourceArtwork(painterResource(R.drawable.tv_tile_movie_wheel), contentDescription = "Movie wheel")
+                }
             }
 
-            if (favorites.isNotEmpty()) Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
-            TvTextRow(
-                label = "All apps",
-                onClick = onOpenAllApps,
-                focusRequester = if (favorites.isEmpty()) firstFocusRequester else null,
-            )
-            TvTextRow(label = "Dashboard", onClick = onOpenDashboard)
-            TvTextRow(label = "Home Assistant", onClick = onOpenHomeAssistant)
-            TvTextRow(label = "Calendar", onClick = onOpenCalendar)
-            TvTextRow(label = "Todo", onClick = onOpenTodo)
+            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                TvTile(label = "Dashboard", onClick = onOpenDashboard, width = 170.dp, height = 96.dp, cornerRadius = 12.dp) {
+                    TvGlyphArtwork("▦")
+                }
+                TvTile(label = "Home Assistant", onClick = onOpenHomeAssistant, width = 170.dp, height = 96.dp, cornerRadius = 12.dp) {
+                    TvGlyphArtwork("⌂")
+                }
+                TvTile(label = "Calendar", onClick = onOpenCalendar, width = 170.dp, height = 96.dp, cornerRadius = 12.dp) {
+                    TvGlyphArtwork("▤")
+                }
+                TvTile(label = "Todo", onClick = onOpenTodo, width = 170.dp, height = 96.dp, cornerRadius = 12.dp) {
+                    TvGlyphArtwork("✓")
+                }
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(40.dp))
             HairlineDivider()
+
+            favorites.forEach { app ->
+                TvTextRow(label = app.label, onClick = { onAppClick(app) })
+            }
+            if (favorites.isNotEmpty()) Spacer(modifier = Modifier.height(8.dp))
+
+            TvTextRow(label = "All apps", onClick = onOpenAllApps)
             TvTextRow(label = "Settings", onClick = onOpenSettings)
 
             Spacer(modifier = Modifier.height(56.dp))
@@ -180,6 +248,11 @@ private fun TvHomeContent(
     LaunchedEffect(Unit) {
         firstFocusRequester.requestFocus()
     }
+}
+
+@Composable
+private fun TvGlyphArtwork(glyph: String, modifier: Modifier = Modifier) {
+    Text(text = glyph, style = MaterialTheme.typography.displaySmall, color = Color.White.copy(alpha = 0.85f), modifier = modifier)
 }
 
 @Composable

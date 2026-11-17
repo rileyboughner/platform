@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Movie wheel tile artwork for the TV home screen. movies.rileyboughner.dev
+  ("What should I watch?") only serves a 🎬 emoji favicon — not something a
+  vector drawable can embed reliably — so this is a tasteful bundled
+  recreation in the same dark-tile style as the other TV tiles: an amber
+  play-button disc (the wheel's own accent color scheme is warm/amber)
+  standing in for "pick something to watch". Not a generic placeholder box.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#141414" android:pathData="M0,38 A38,38 0 0 1 38,0 H154 A38,38 0 0 1 192,38 V154 A38,38 0 0 1 154,192 H38 A38,38 0 0 1 0,154 Z" />
+    <path android:fillColor="#F59E0B" android:pathData="M96,36 A60,60 0 1 1 95.9,36 Z" />
+    <path android:fillColor="#141414" android:pathData="M78,64 L130,96 L78,128 Z" />
+</vector>

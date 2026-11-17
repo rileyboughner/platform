@@ -39,10 +39,30 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.Launcher">
 
-        <!-- Phone / tablet entry point: default-home candidate. Uses the
-             wallpaper-showing theme variant (see themes.xml) so the Apps
-             page can show the real system wallpaper; SettingsActivity and
-             TvMainActivity below stay on the plain opaque Theme.Launcher. -->
+        <!-- The *only* HOME candidate in this manifest — see
+             HomeRouterActivity's kdoc for the incident (TV stuck on the
+             phone UI) that made MainActivity/TvMainActivity declaring their
+             own HOME category unsafe. Routes to the correct activity below
+             based on UiModeManager at runtime, then finishes invisibly. -->
+        <activity
+            android:name=".HomeRouterActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Phone / tablet entry point. Reached only via HomeRouterActivity
+             on a real HOME press, or directly from an app drawer (LAUNCHER
+             category below, for development). Uses the wallpaper-showing
+             theme variant (see themes.xml) so the Apps page can show the
+             real system wallpaper; SettingsActivity and TvMainActivity below
+             stay on the plain opaque Theme.Launcher. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -51,7 +71,6 @@
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
@@ -65,8 +84,10 @@
             android:exported="false"
             android:theme="@style/Theme.Launcher" />
 
-        <!-- Google TV / Android TV entry point: shown as the Leanback home
-             launcher stub. Separate activity so the TV "10-foot" Compose UI
+        <!-- Google TV / Android TV entry point. Reached only via
+             HomeRouterActivity on a real HOME press, or directly from the
+             Android TV apps row (LEANBACK_LAUNCHER category below, for
+             development). Separate activity so the TV "10-foot" Compose UI
              never loads on phone/tablet, and vice versa. -->
         <activity
             android:name=".TvMainActivity"
@@ -75,7 +96,6 @@
             android:theme="@style/Theme.Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>

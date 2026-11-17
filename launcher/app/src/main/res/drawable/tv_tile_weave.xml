@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Weave music tile artwork for the TV home screen. Recreated as a vector
+  from the real app icon served at https://weave.rileyboughner.dev/icon-192.png
+  (dark rounded tile, green soundwave bars) rather than a generic placeholder,
+  since Weave has no installed Android app / Leanback banner to load from
+  PackageManager — this is a web target opened in the in-launcher WebView.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#141414" android:pathData="M0,38 A38,38 0 0 1 38,0 H154 A38,38 0 0 1 192,38 V154 A38,38 0 0 1 154,192 H38 A38,38 0 0 1 0,154 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M44,78 H60 V114 H44 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M66,64 H82 V128 H66 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M88,34 H104 V158 H88 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M110,64 H126 V128 H110 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M132,78 H148 V114 H132 Z" />
+</vector>
