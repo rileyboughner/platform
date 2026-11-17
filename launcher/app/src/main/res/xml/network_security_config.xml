@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Theme-sync hub (dotfiles/scripts/theme-sync/hub.py) speaks plain HTTP
-     on two private addresses only -- the server's LAN address and its
-     Tailscale MagicDNS name -- and Android blocks cleartext traffic by
-     default (targetSdk 34), which silently broke every hub request from
-     the phone/tablet/TV clients (all failures are swallowed by the
+     on two private addresses only: the server's LAN address and its
+     Tailscale MagicDNS name. Android blocks cleartext traffic by default
+     (targetSdk 34), which silently broke every hub request from the
+     phone/tablet/TV clients (all failures are swallowed by the
      repository). Permit cleartext to exactly those two hosts; everything
      else keeps the platform default (cleartext denied). -->
 <network-security-config>
