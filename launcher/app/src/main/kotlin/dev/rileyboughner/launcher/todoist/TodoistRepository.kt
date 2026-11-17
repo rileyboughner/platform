@@ -7,7 +7,9 @@ import java.io.IOException
 
 sealed interface TodoistResult<out T> {
     data class Success<T>(val value: T) : TodoistResult<T>
-    data class Error(val message: String) : TodoistResult<Nothing>
+
+    /** [detail] is the real failure (HTTP status or exception message) shown alongside [message]. */
+    data class Error(val message: String, val detail: String? = null) : TodoistResult<Nothing>
 }
 
 /**
@@ -26,9 +28,9 @@ class TodoistRepository(private val settingsRepository: SettingsRepository) {
         try {
             TodoistResult.Success(TodoistApi.fetchTasks(token))
         } catch (e: IOException) {
-            TodoistResult.Error("Couldn't reach Todoist. Check your connection and try again.")
+            TodoistResult.Error("Couldn't reach Todoist. Check your connection and try again.", detail = e.message)
         } catch (e: Exception) {
-            TodoistResult.Error("Couldn't load tasks from Todoist.")
+            TodoistResult.Error("Couldn't load tasks from Todoist.", detail = e.message ?: e::class.java.simpleName)
         }
     }
 
@@ -39,9 +41,9 @@ class TodoistRepository(private val settingsRepository: SettingsRepository) {
             TodoistApi.closeTask(token, taskId)
             TodoistResult.Success(Unit)
         } catch (e: IOException) {
-            TodoistResult.Error("Couldn't reach Todoist. Check your connection and try again.")
+            TodoistResult.Error("Couldn't reach Todoist. Check your connection and try again.", detail = e.message)
         } catch (e: Exception) {
-            TodoistResult.Error("Couldn't complete that task.")
+            TodoistResult.Error("Couldn't complete that task.", detail = e.message ?: e::class.java.simpleName)
         }
     }
 }

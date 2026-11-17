@@ -53,7 +53,7 @@ fun TodoScreen(todoistRepository: TodoistRepository, modifier: Modifier = Modifi
                     tasks = sortTasks(result.value)
                     errorMessage = null
                 }
-                is TodoistResult.Error -> errorMessage = result.message
+                is TodoistResult.Error -> errorMessage = formatError(result)
             }
             isLoading = false
         }
@@ -75,9 +75,9 @@ fun TodoScreen(todoistRepository: TodoistRepository, modifier: Modifier = Modifi
                         task = task,
                         onComplete = {
                             scope.launch {
-                                when (todoistRepository.closeTask(task.id)) {
+                                when (val result = todoistRepository.closeTask(task.id)) {
                                     is TodoistResult.Success -> tasks = tasks.filterNot { it.id == task.id }
-                                    is TodoistResult.Error -> errorMessage = "Couldn't complete that task."
+                                    is TodoistResult.Error -> errorMessage = formatError(result)
                                 }
                             }
                         },
@@ -130,6 +130,10 @@ private fun EmptyState(message: String, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** Friendly message plus the real failure (HTTP status or exception detail), so it's diagnosable. */
+private fun formatError(error: TodoistResult.Error): String =
+    if (error.detail != null) "${error.message}\n(${error.detail})" else error.message
 
 /** Overdue first, then due today, then upcoming, then no due date — each bucket ordered by date. */
 private fun sortTasks(tasks: List<TodoistTask>): List<TodoistTask> {

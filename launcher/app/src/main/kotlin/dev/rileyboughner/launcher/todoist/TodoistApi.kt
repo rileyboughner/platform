@@ -1,20 +1,22 @@
 package dev.rileyboughner.launcher.todoist
 
-import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
 /**
- * Raw Todoist REST API v2 client (https://api.todoist.com/rest/v2). Blocking
- * I/O — callers (see [TodoistRepository]) run this on [kotlinx.coroutines.Dispatchers.IO].
+ * Raw Todoist API v1 client (https://api.todoist.com/api/v1) — the old REST
+ * v2 base this used to hit was sunset and now returns HTTP 410 for every
+ * request. Blocking I/O — callers (see [TodoistRepository]) run this on
+ * [kotlinx.coroutines.Dispatchers.IO].
  *
  * The API token is only ever placed in the Authorization header, never
  * logged, and never included in any exception message thrown from here.
  */
 internal object TodoistApi {
 
-    private const val BASE_URL = "https://api.todoist.com/rest/v2"
+    private const val BASE_URL = "https://api.todoist.com/api/v1"
     private const val TIMEOUT_MS = 10_000
 
     fun fetchTasks(token: String): List<TodoistTask> {
@@ -57,7 +59,8 @@ internal object TodoistApi {
     }
 
     private fun parseTasks(body: String): List<TodoistTask> {
-        val array = JSONArray(body)
+        // v1 list endpoints return a cursor-paginated wrapper, not a bare array.
+        val array = JSONObject(body).getJSONArray("results")
         return buildList {
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
