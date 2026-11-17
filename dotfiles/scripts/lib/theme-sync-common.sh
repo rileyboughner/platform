@@ -174,8 +174,8 @@ theme_sync_wallpaper_matches() {
 }
 
 # True if a Hyprland session is actually running on this machine right
-# now -- set-wallpaper blocks indefinitely waiting for hyprpaper's IPC
-# socket, so wallpaper pulls must only be attempted when it exists.
+# now -- set-wallpaper waits on the swww daemon,
+# so wallpaper pulls must only be attempted when a session exists.
 #
 # Also exports HYPRLAND_INSTANCE_SIGNATURE for the found session: this
 # watcher process is started by systemd --user (default.target), not by

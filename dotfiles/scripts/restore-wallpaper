@@ -1,14 +1,26 @@
 #!/bin/sh
 
-# Wait for hyprpaper IPC socket to be ready before issuing wallpaper commands
-until [ -S "/run/user/$(id -u)/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.hyprpaper.sock" ]; do
+# swww transition: super fast fade, matching set-wallpaper.
+SWWW_TRANSITION_TYPE="fade"
+SWWW_TRANSITION_DURATION="0.2"
+SWWW_TRANSITION_FPS="60"
+
+# Wait for the swww daemon to answer before issuing wallpaper
+# commands (bounded: at startup the daemon may still be coming up).
+_i=0
+until swww query >/dev/null 2>&1; do
+    _i=$((_i + 1))
+    [ "$_i" -ge 35 ] && break
     sleep 0.3
 done
 
 WALLPAPER="$HOME/.wallpaper"
 
 if [ -e "$WALLPAPER" ]; then
-    hyprctl hyprpaper wallpaper ",$(realpath "$WALLPAPER")"
+    swww img "$(realpath "$WALLPAPER")" \
+        --transition-type "$SWWW_TRANSITION_TYPE" \
+        --transition-duration "$SWWW_TRANSITION_DURATION" \
+        --transition-fps "$SWWW_TRANSITION_FPS"
 else
     random-wallpaper
 fi

@@ -32,7 +32,7 @@ theme_ensure_hypr_session() {
             return 0
         fi
     fi
-    for _hypr_sock in /run/user/"$(id -u)"/hypr/*/.hyprpaper.sock; do
+    for _hypr_sock in /run/user/"$(id -u)"/hypr/*/.socket.sock; do
         [ -S "$_hypr_sock" ] || continue
         _hypr_dir=$(dirname "$_hypr_sock")
         [ -f "$_hypr_dir/hyprland.lock" ] || continue

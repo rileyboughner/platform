@@ -83,7 +83,7 @@ apply_hub_state() {
     # Side effect: exports HYPRLAND_INSTANCE_SIGNATURE when a session is
     # found, so the theme-set/theme-auto call below (via theme_reload_all)
     # and the wallpaper apply further down both resolve the real
-    # hyprctl/hyprpaper socket instead of failing silently.
+    # Hyprland socket (and the swww daemon) instead of failing silently.
     local hypr_active=false
     theme_sync_hypr_session_active && hypr_active=true
 

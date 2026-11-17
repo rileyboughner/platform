@@ -161,9 +161,9 @@ hub document that isn't newer than that watermark.
 
 ## No-session safety
 
-`set-wallpaper` blocks indefinitely waiting for hyprpaper's IPC socket.
-The watcher only attempts a wallpaper apply (push or pull) when that
-socket actually exists (`theme_sync_hypr_session_active` in
+`set-wallpaper` waits on the swww daemon.
+The watcher only attempts a wallpaper apply (push or pull) when a live session
+exists (`theme_sync_hypr_session_active` in
 `../lib/theme-sync-common.sh`); with no Hyprland session it still applies
 the theme half and retries the wallpaper half on a later poll. It never
 blocks forever and never crash-loops -- failures (hub down, blob missing,
@@ -173,7 +173,7 @@ apply failed) are logged and retried next poll, not treated as fatal.
 for the session it finds: the watcher runs as a systemd `--user` service
 under `default.target`, not launched from inside Hyprland, so it never
 inherits that variable the way an interactive shell does. Without it,
-`set-wallpaper`/`theme-set`/`theme-auto`'s own `hyprctl`/hyprpaper calls
+`set-wallpaper`/`theme-set`/`theme-auto`'s own `hyprctl`/`swww` calls
 can't find the real socket even when a session exists.
 
 ## Hub reachability
