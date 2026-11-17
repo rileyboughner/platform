@@ -183,11 +183,25 @@ theme_sync_wallpaper_matches() {
 # set-wallpaper's own socket wait (and hyprctl/theme_reload_all's calls)
 # resolve a socket path with an empty signature and silently can't find
 # the real one.
+#
+# Session dirs are NOT cleaned up when a session ends uncleanly (a
+# restarted compositor leaves the old dir behind, stale .hyprpaper.sock
+# included), and glob order puts the oldest dir first -- so a bare
+# "first dir with a hyprpaper socket" check happily picks a DEAD
+# session, and every hyprctl call then fails silently while the
+# symlink/state half of the sync still succeeds (exactly the
+# "themes follow but the wallpaper doesn't" failure seen 2026-11-17).
+# A dir only counts as a live session when it ALSO holds
+# hyprland.lock (held by a running Hyprland) and .socket.sock
+# (Hyprland's own IPC socket, absent from stale dirs).
 theme_sync_hypr_session_active() {
-    local sock sig
+    local sock sig dir
     for sock in /run/user/"$(id -u)"/hypr/*/.hyprpaper.sock; do
         [ -S "$sock" ] || continue
-        sig=$(basename "$(dirname "$sock")")
+        dir=$(dirname "$sock")
+        [ -f "$dir/hyprland.lock" ] || continue
+        [ -S "$dir/.socket.sock" ] || continue
+        sig=$(basename "$dir")
         export HYPRLAND_INSTANCE_SIGNATURE="$sig"
         return 0
     done
