@@ -13,7 +13,7 @@ REPO_ROOT=$(dirname "$SCRIPT_DIR")
 # on an already set-up system. virt-viewer is deliberately left out here -
 # see cmd_vm, which is the only command that needs it.
 missing=()
-for bin in stow git jq; do
+for bin in stow git jq curl; do
     command -v "$bin" >/dev/null 2>&1 || missing+=("$bin")
 done
 if [ "${#missing[@]}" -gt 0 ]; then
@@ -64,6 +64,12 @@ _rows_remote() {
     _row "vm cyber-defence" "Connect to the cyber-defence VM hosted on server"
 }
 
+_rows_sync() {
+    _row "sync on"     "Enable theme/wallpaper sync with the server hub on this machine"
+    _row "sync off"    "Disable sync on this machine (no push, no pull)"
+    _row "sync status" "Show sync state, last push/pull times, and hub reachability"
+}
+
 # Per-subcommand usage, shown whenever that subcommand is called with a
 # missing/unrecognized argument instead of a bare bash error.
 _usage_wallpaper() {
@@ -84,6 +90,11 @@ _usage_theme() {
 _usage_vm() {
     printf 'Usage: boner vm %s<name>%s\n\n' "$dim" "$reset" >&2
     _rows_remote
+}
+
+_usage_sync() {
+    printf 'Usage: boner sync %s<on|off|status>%s\n\n' "$dim" "$reset" >&2
+    _rows_sync
 }
 
 cmd_rebuild() {
@@ -208,6 +219,64 @@ cmd_theme_current() {
     # shellcheck source=lib/theme-common.sh
     . "$DOTFILES_TARGET/scripts/lib/theme-common.sh"
     theme_active_name || echo graphite
+}
+
+cmd_sync() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        on) cmd_sync_on ;;
+        off) cmd_sync_off ;;
+        status) cmd_sync_status ;;
+        *)
+            _usage_sync
+            exit 1
+            ;;
+    esac
+}
+
+cmd_sync_on() {
+    # shellcheck source=lib/theme-sync-common.sh
+    . "$DOTFILES_TARGET/scripts/lib/theme-sync-common.sh"
+    theme_sync_set_enabled on
+    echo "Theme/wallpaper sync enabled on this machine."
+}
+
+cmd_sync_off() {
+    # shellcheck source=lib/theme-sync-common.sh
+    . "$DOTFILES_TARGET/scripts/lib/theme-sync-common.sh"
+    theme_sync_set_enabled off
+    echo "Theme/wallpaper sync disabled on this machine."
+}
+
+cmd_sync_status() {
+    # shellcheck source=lib/theme-sync-common.sh
+    . "$DOTFILES_TARGET/scripts/lib/theme-sync-common.sh"
+
+    if theme_sync_enabled; then
+        echo "sync: on"
+    else
+        echo "sync: off"
+    fi
+
+    if [ -f "$THEME_SYNC_STATE_FILE" ]; then
+        local last_push last_pull
+        last_push=$(jq -r '.last_push_at // 0' "$THEME_SYNC_STATE_FILE")
+        last_pull=$(jq -r '.last_pull_at // 0' "$THEME_SYNC_STATE_FILE")
+        if [ "$last_push" != 0 ]; then
+            echo "last push: $(date -d "@$last_push")"
+        fi
+        if [ "$last_pull" != 0 ]; then
+            echo "last pull: $(date -d "@$last_pull")"
+        fi
+    fi
+
+    local hub_url
+    if hub_url=$(theme_sync_find_hub); then
+        echo "hub: $hub_url"
+        curl -sf --max-time 2 "$hub_url/state" | jq .
+    else
+        echo "hub: unreachable"
+    fi
 }
 
 cmd_vm() {
@@ -348,6 +417,10 @@ print_usage() {
 
     _section "Remote"
     _rows_remote
+    echo >&2
+
+    _section "Sync"
+    _rows_sync
 }
 
 case "${1:-}" in
@@ -360,6 +433,7 @@ case "${1:-}" in
     vm) cmd_vm "${@:2}" ;;
     wallpaper) cmd_wallpaper "${@:2}" ;;
     theme) cmd_theme "${@:2}" ;;
+    sync) cmd_sync "${@:2}" ;;
     help|-h|--help) print_usage ;;
     *)
         print_usage

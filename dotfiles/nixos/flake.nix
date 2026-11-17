@@ -64,6 +64,7 @@
         ./modules/docker.nix
         ./modules/kubernetes.nix
         ./modules/secrets.nix
+        ./modules/theme-sync-watch.nix
       ];
     };
 
@@ -80,6 +81,7 @@
         ./modules/keyd.nix
         ./modules/secrets.nix
         ./modules/gaming.nix
+        ./modules/theme-sync-watch.nix
       ];
     };
 
@@ -94,6 +96,7 @@
         ./modules/git-credentials.nix
         ./modules/youtube-secret.nix
         ./modules/server-remote-access.nix
+        ./modules/theme-sync-hub.nix
       ];
     };
   };

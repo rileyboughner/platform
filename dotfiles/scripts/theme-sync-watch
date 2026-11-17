@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# Theme/wallpaper sync watcher: polls the theme-sync hub every 15s and
+# reconciles it against this machine's local theme/wallpaper state. See
+# theme-sync/README.md for the full design.
+#
+# Deliberately does NOT use `set -e`: this is a long-lived daemon, not a
+# one-shot script, so an unexpected failure in one poll iteration must
+# not crash the whole service -- it should be logged and retried on the
+# next iteration instead. Every command whose failure is expected
+# (hub down, blob missing, no session) is checked explicitly instead.
+set -u
+
+DOTFILES_TARGET="$HOME/.platform/dotfiles"
+# shellcheck source=lib/theme-sync-common.sh
+. "$DOTFILES_TARGET/scripts/lib/theme-sync-common.sh"
+
+# Populates LAST_THEME_NAME, LAST_THEME_PINNED, LAST_THEME_SYNCED_AT,
+# LAST_WP_ID, LAST_WP_SHA, LAST_WP_SYNCED_AT, LAST_PUSH_AT, LAST_PULL_AT
+# from THEME_SYNC_STATE_FILE (this machine's record of the last hub
+# revision it fully pushed or pulled -- the anti-loop bookkeeping).
+read_last_state() {
+    local f="$THEME_SYNC_STATE_FILE"
+    if [ -f "$f" ]; then
+        LAST_THEME_NAME=$(jq -r '.theme_name // ""' "$f")
+        LAST_THEME_PINNED=$(jq -r '.theme_pinned // false' "$f")
+        LAST_THEME_SYNCED_AT=$(jq -r '.theme_synced_at // 0' "$f")
+        LAST_WP_ID=$(jq -r '.wallpaper_id // ""' "$f")
+        LAST_WP_SHA=$(jq -r '.wallpaper_sha256 // ""' "$f")
+        LAST_WP_SYNCED_AT=$(jq -r '.wallpaper_synced_at // 0' "$f")
+        LAST_PUSH_AT=$(jq -r '.last_push_at // 0' "$f")
+        LAST_PULL_AT=$(jq -r '.last_pull_at // 0' "$f")
+    else
+        LAST_THEME_NAME=""
+        LAST_THEME_PINNED=false
+        LAST_THEME_SYNCED_AT=0
+        LAST_WP_ID=""
+        LAST_WP_SHA=""
+        LAST_WP_SYNCED_AT=0
+        LAST_PUSH_AT=0
+        LAST_PULL_AT=0
+    fi
+}
+
+write_last_state() {
+    mkdir -p "$THEME_SYNC_DIR"
+    local tmp="$THEME_SYNC_STATE_FILE.tmp"
+    jq -n \
+        --arg theme_name "$LAST_THEME_NAME" \
+        --argjson theme_pinned "$LAST_THEME_PINNED" \
+        --argjson theme_synced_at "$LAST_THEME_SYNCED_AT" \
+        --arg wallpaper_id "$LAST_WP_ID" \
+        --arg wallpaper_sha256 "$LAST_WP_SHA" \
+        --argjson wallpaper_synced_at "$LAST_WP_SYNCED_AT" \
+        --argjson last_push_at "$LAST_PUSH_AT" \
+        --argjson last_pull_at "$LAST_PULL_AT" \
+        '{theme_name: $theme_name, theme_pinned: $theme_pinned, theme_synced_at: $theme_synced_at,
+          wallpaper_id: $wallpaper_id, wallpaper_sha256: $wallpaper_sha256, wallpaper_synced_at: $wallpaper_synced_at,
+          last_push_at: $last_push_at, last_pull_at: $last_pull_at}' >"$tmp" \
+        && mv -f "$tmp" "$THEME_SYNC_STATE_FILE"
+}
+
+# Reconciles a hub state document ($1, JSON) against what this machine has
+# already applied, theme and wallpaper independently (so a machine with no
+# graphical session yet can still pick up the theme half -- see
+# theme_sync_hypr_session_active below). Updates THEME_SYNC_STATE_FILE for
+# whichever half actually advances.
+apply_hub_state() {
+    local json="$1" hub_url="$2"
+    local hub_updated_at hub_theme hub_pinned hub_wp_id hub_wp_sha
+    hub_updated_at=$(printf '%s' "$json" | jq -r '.updated_at // 0')
+    hub_theme=$(printf '%s' "$json" | jq -r '.theme // ""')
+    hub_pinned=$(printf '%s' "$json" | jq -r '.pinned // false')
+    hub_wp_id=$(printf '%s' "$json" | jq -r '.wallpaper // ""')
+    hub_wp_sha=$(printf '%s' "$json" | jq -r '.wallpaper_sha256 // ""')
+
+    read_last_state
+    local changed=false
+
+    # Side effect: exports HYPRLAND_INSTANCE_SIGNATURE when a session is
+    # found, so the theme-set/theme-auto call below (via theme_reload_all)
+    # and the wallpaper apply further down both resolve the real
+    # hyprctl/hyprpaper socket instead of failing silently.
+    local hypr_active=false
+    theme_sync_hypr_session_active && hypr_active=true
+
+    if [ "${hub_updated_at%.*}" -gt "${LAST_THEME_SYNCED_AT%.*}" ] 2>/dev/null; then
+        if [ "$hub_theme" != "$LAST_THEME_NAME" ] || [ "$hub_pinned" != "$LAST_THEME_PINNED" ]; then
+            local ok=false
+            if [ "$hub_pinned" = "true" ]; then
+                timeout 20 theme-set "$hub_theme" >/dev/null 2>&1 && ok=true
+            else
+                timeout 20 theme-auto >/dev/null 2>&1 && ok=true
+            fi
+            if [ "$ok" = true ]; then
+                LAST_THEME_NAME="$hub_theme"
+                LAST_THEME_PINNED="$hub_pinned"
+                LAST_THEME_SYNCED_AT="$hub_updated_at"
+                LAST_PULL_AT=$(date +%s)
+                changed=true
+                echo "theme-sync-watch: applied theme from hub (pinned=$hub_pinned theme=$hub_theme)" >&2
+            else
+                echo "theme-sync-watch: failed to apply theme from hub, will retry next poll" >&2
+            fi
+        else
+            LAST_THEME_SYNCED_AT="$hub_updated_at"
+            changed=true
+        fi
+    fi
+
+    if [ "${hub_updated_at%.*}" -gt "${LAST_WP_SYNCED_AT%.*}" ] 2>/dev/null; then
+        if [ "$hub_wp_id" != "$LAST_WP_ID" ] || [ "$hub_wp_sha" != "$LAST_WP_SHA" ]; then
+            if [ -n "$hub_wp_id" ] && [ -n "$hub_wp_sha" ] && [ "$hypr_active" = true ]; then
+                local path
+                path=$(theme_sync_wallpaper_path_for_id "$hub_wp_id")
+                if ! theme_sync_wallpaper_matches "$path" "$hub_wp_sha"; then
+                    mkdir -p "$(dirname "$path")"
+                    if curl -sf --max-time 30 -o "$path.part" "$hub_url/wallpaper/$hub_wp_sha" 2>/dev/null \
+                        && theme_sync_wallpaper_matches "$path.part" "$hub_wp_sha"; then
+                        mv -f "$path.part" "$path"
+                    else
+                        rm -f "$path.part"
+                    fi
+                fi
+                if theme_sync_wallpaper_matches "$path" "$hub_wp_sha"; then
+                    if timeout 30 set-wallpaper "$path" >/dev/null 2>&1; then
+                        LAST_WP_ID="$hub_wp_id"
+                        LAST_WP_SHA="$hub_wp_sha"
+                        LAST_WP_SYNCED_AT="$hub_updated_at"
+                        LAST_PULL_AT=$(date +%s)
+                        changed=true
+                        echo "theme-sync-watch: applied wallpaper from hub ($hub_wp_id)" >&2
+                    else
+                        echo "theme-sync-watch: failed to apply wallpaper from hub, will retry next poll" >&2
+                    fi
+                else
+                    echo "theme-sync-watch: wallpaper blob $hub_wp_sha unavailable, will retry next poll" >&2
+                fi
+            fi
+            # else: no graphical session right now, or no wallpaper set on the
+            # hub yet -- skip quietly, retry on a later poll once a session
+            # exists. Never block: set-wallpaper is only ever reached above
+            # when theme_sync_hypr_session_active already found the socket,
+            # and is still wrapped in `timeout` in case it disappears mid-call.
+        else
+            LAST_WP_SYNCED_AT="$hub_updated_at"
+            changed=true
+        fi
+    fi
+
+    [ "$changed" = true ] && write_last_state
+}
+
+# Pushes this machine's current local theme+wallpaper state to the hub.
+# If the hub rejects it (something newer already landed there), applies
+# that newer state instead of clobbering it.
+push_local_state() {
+    local hub_url="$1" theme_name="$2" pinned="$3" wp_id="$4" wp_sha="$5" wp_target="$6"
+    local now
+    now=$(date +%s)
+
+    if [ -n "$wp_id" ] && [ -n "$wp_sha" ] && [ -n "$wp_target" ]; then
+        if ! curl -sf --max-time 2 -I "$hub_url/wallpaper/$wp_sha" >/dev/null 2>&1; then
+            curl -sf --max-time 30 --upload-file "$wp_target" "$hub_url/wallpaper/$wp_sha" >/dev/null 2>&1
+        fi
+    fi
+
+    local payload
+    payload=$(jq -n \
+        --arg theme "$theme_name" \
+        --argjson pinned "$pinned" \
+        --arg wallpaper "$wp_id" \
+        --arg wallpaper_sha256 "$wp_sha" \
+        --argjson updated_at "$now" \
+        --arg writer "$(theme_sync_hostname)" \
+        '{theme: (if $theme == "" then null else $theme end), pinned: $pinned,
+          wallpaper: $wallpaper, wallpaper_sha256: $wallpaper_sha256,
+          updated_at: $updated_at, writer: $writer}')
+
+    local response
+    response=$(curl -sf --max-time 10 -X POST -H "Content-Type: application/json" -d "$payload" "$hub_url/state" 2>/dev/null) || {
+        echo "theme-sync-watch: push to hub failed, will retry next poll" >&2
+        return 0
+    }
+
+    local accepted
+    accepted=$(printf '%s' "$response" | jq -r '.accepted // false')
+
+    if [ "$accepted" = "true" ]; then
+        LAST_THEME_NAME="$theme_name"
+        LAST_THEME_PINNED="$pinned"
+        LAST_THEME_SYNCED_AT="$now"
+        LAST_WP_ID="$wp_id"
+        LAST_WP_SHA="$wp_sha"
+        LAST_WP_SYNCED_AT="$now"
+        LAST_PUSH_AT="$now"
+        write_last_state
+        echo "theme-sync-watch: pushed local state to hub" >&2
+    else
+        local hub_state
+        hub_state=$(printf '%s' "$response" | jq -c '.state // {}')
+        apply_hub_state "$hub_state" "$hub_url"
+    fi
+}
+
+poll_once() {
+    theme_sync_enabled || return 0
+
+    local hub_url
+    hub_url=$(theme_sync_find_hub) || return 0
+
+    local local_theme_name="" local_pinned=false
+    if local_theme_name=$(theme_active_name 2>/dev/null); then
+        local_pinned=true
+    else
+        local_theme_name=""
+        local_pinned=false
+    fi
+
+    theme_sync_local_wallpaper
+    local local_wp_id="$THEME_SYNC_LOCAL_WP_ID"
+    local local_wp_sha="$THEME_SYNC_LOCAL_WP_SHA256"
+    local local_wp_target="$THEME_SYNC_LOCAL_WP_TARGET"
+
+    read_last_state
+
+    local theme_changed=false wallpaper_changed=false
+    if [ "$local_theme_name" != "$LAST_THEME_NAME" ] || [ "$local_pinned" != "$LAST_THEME_PINNED" ]; then
+        theme_changed=true
+    fi
+    if [ "$local_wp_id" != "$LAST_WP_ID" ] || [ "$local_wp_sha" != "$LAST_WP_SHA" ]; then
+        wallpaper_changed=true
+    fi
+
+    if [ "$theme_changed" = true ] || [ "$wallpaper_changed" = true ]; then
+        push_local_state "$hub_url" "$local_theme_name" "$local_pinned" "$local_wp_id" "$local_wp_sha" "$local_wp_target"
+    else
+        local hub_state
+        hub_state=$(curl -sf --max-time 5 "$hub_url/state" 2>/dev/null) || return 0
+        apply_hub_state "$hub_state" "$hub_url"
+    fi
+}
+
+echo "theme-sync-watch: starting (poll interval 15s, hub candidates: $THEME_SYNC_HUB_URLS)" >&2
+while true; do
+    poll_once || echo "theme-sync-watch: poll iteration errored unexpectedly, continuing" >&2
+    sleep 15
+done

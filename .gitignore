@@ -2,6 +2,8 @@ node_modules/
 .gradle/
 *.iml
 .DS_Store
+__pycache__/
+*.pyc
 
 # build/ output is ignored everywhere except theme/build/, which is
 # committed so consumers don't need Node to use the generated theme outputs.

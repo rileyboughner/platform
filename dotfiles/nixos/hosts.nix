@@ -21,6 +21,10 @@
   server = {
     ip = "192.168.1.2";
     tailnetName = "server.taila93a39.ts.net";
+    # Tailscale-assigned address for this host (`tailscale ip -4`), stable
+    # across reboots for a given node key. Needed by theme-sync-hub.nix,
+    # which has to bind an explicit address rather than resolve a hostname.
+    tailnetIp = "100.124.77.118";
     user = "admin";
   };
 
