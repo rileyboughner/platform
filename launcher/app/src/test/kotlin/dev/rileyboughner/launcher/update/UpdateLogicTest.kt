@@ -1,5 +1,6 @@
 package dev.rileyboughner.launcher.update
 
+import dev.rileyboughner.launcher.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,8 +23,8 @@ class UpdateLogicTest {
 
         val info = UpdateApi.parseUpdateInfo(file.readText())
 
-        assertEquals(1, info.versionCode)
-        assertEquals("0.1.0-skeleton", info.versionName)
+        assertEquals(BuildConfig.VERSION_CODE, info.versionCode)
+        assertEquals(BuildConfig.VERSION_NAME, info.versionName)
         assertTrue(info.apkUrl.isNotBlank())
     }
 

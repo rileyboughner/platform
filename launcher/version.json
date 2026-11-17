@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "0.7.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.7.0/app-release.apk",
-  "notes": "Add theme/wallpaper sync: choose unified (every device shares one theme) or split (desktop/laptop and phone/tablet sync independently) from the hub. Settings gets a sync toggle (off by default), a theme picker that writes back to the hub, and a sync-scope picker. Synced themes show as an accent color on Switches and the page indicator; the minimal black-and-white look is otherwise unchanged. TV is never affected."
+  "versionCode": 8,
+  "versionName": "0.8.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.8.0/app-release.apk",
+  "notes": "Fix All Apps search list hiding behind the keyboard, and add Health Connect grant diagnostics in Settings."
 }

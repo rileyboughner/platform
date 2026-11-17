@@ -94,6 +94,7 @@ fun SettingsScreen(
     var sdkStatusRaw by remember { mutableStateOf(HealthConnectRepository.sdkStatus(context)) }
     var hasSleepPermission by remember { mutableStateOf(false) }
     var registrationOutcome by remember { mutableStateOf<String?>(null) }
+    var grantOutcome by remember { mutableStateOf<String?>(null) }
     val healthConnectAvailable = sdkStatusRaw == HealthConnectClient.SDK_AVAILABLE
 
     fun refreshHealthConnectState() {
@@ -118,7 +119,11 @@ fun SettingsScreen(
 
     val healthPermissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract(),
-    ) { granted -> hasSleepPermission = granted.containsAll(READ_SLEEP_PERMISSIONS) }
+    ) { granted ->
+        hasSleepPermission = granted.containsAll(READ_SLEEP_PERMISSIONS)
+        grantOutcome = "Last grant attempt: ${granted.size} permission(s) returned, " +
+            "sleep included: ${granted.containsAll(READ_SLEEP_PERMISSIONS)}"
+    }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         AppTextRow(label = "← Back", onClick = onBack)
@@ -257,10 +262,24 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
             )
+            grantOutcome?.let { outcome ->
+                Text(
+                    text = outcome,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                )
+            }
             if (healthConnectAvailable && !hasSleepPermission) {
                 AppTextRow(
                     label = "Grant Health Connect access",
-                    onClick = { healthPermissionLauncher.launch(READ_SLEEP_PERMISSIONS) },
+                    onClick = {
+                        try {
+                            healthPermissionLauncher.launch(READ_SLEEP_PERMISSIONS)
+                        } catch (e: Exception) {
+                            grantOutcome = "Grant launch failed: ${e::class.simpleName}: ${e.message}"
+                        }
+                    },
                 )
             }
 
