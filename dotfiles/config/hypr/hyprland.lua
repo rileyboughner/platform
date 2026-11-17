@@ -173,6 +173,16 @@ hl.window_rule({
 	no_anim = true,
 })
 
+-- Disable animations for the KDE Connect SMS scratchpad
+hl.window_rule({
+  name = "no-animation-kdeconnect-sms",
+  match = {
+    class = "org.kde.kdeconnect.sms",
+  },
+  float = true,
+  no_anim = true,
+})
+
 -- Disable animations for terminal Pyprland scratchpads
 hl.window_rule({
 	name = "no-animation-terminal-scratchpads",
