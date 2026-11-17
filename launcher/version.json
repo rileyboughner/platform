@@ -1,6 +1,6 @@
 {
-  "versionCode": 17,
-  "versionName": "0.17.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.17.0/app-release.apk",
-  "notes": "Phone theme sync: wallpapers are downsampled before applying, a failed apply retries instead of getting stuck, and the current wallpaper is re-asserted once after updating."
+  "versionCode": 18,
+  "versionName": "0.18.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.18.0/app-release.apk",
+  "notes": "Push sync: the launcher holds the hub's live event stream and applies theme/wallpaper changes within about a second, with a slow 60s poll as a fallback."
 }

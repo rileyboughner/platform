@@ -1,5 +1,9 @@
 package dev.rileyboughner.launcher.theme
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 import java.io.OutputStream
@@ -28,6 +32,10 @@ internal object ThemeSyncApi {
     private const val PROBE_TIMEOUT_MS = 2_000
     private const val REQUEST_TIMEOUT_MS = 5_000
     private const val BLOB_TIMEOUT_MS = 30_000
+    private const val EVENT_CONNECT_TIMEOUT_MS = 10_000
+
+    /** Must stay comfortably above the hub's ~20s heartbeat interval, so a quiet-but-alive stream is never mistaken for a dead one. */
+    private const val EVENT_READ_TIMEOUT_MS = 45_000
 
     /** First candidate that answers `GET /mode`, in LAN-then-tailnet order; null if neither does. */
     fun findHubBaseUrl(): String? {
@@ -76,6 +84,39 @@ internal object ThemeSyncApi {
             connection.disconnect()
         }
     }.getOrNull()
+
+    /**
+     * Opens the hub's Server-Sent Events stream (`GET /events`) and
+     * invokes [onEvent] for every `data:` line until the stream ends, the
+     * read times out (no bytes -- not even a heartbeat -- for
+     * [EVENT_READ_TIMEOUT_MS]), or the calling coroutine is cancelled
+     * (which disconnects immediately instead of waiting out the read).
+     * The hub sends a `sync` nudge on connect and another on every
+     * state/mode change; `: ping` heartbeats are ignored here. Returns
+     * normally on a clean stream end; throws on connect/read failure so
+     * the caller can back off and reconnect. Runs its blocking I/O on
+     * `Dispatchers.IO` itself.
+     */
+    suspend fun collectEvents(baseUrl: String, onEvent: suspend () -> Unit): Unit = withContext(Dispatchers.IO) {
+        val connection = openConnection(baseUrl, "/events", "GET", EVENT_CONNECT_TIMEOUT_MS).apply {
+            setRequestProperty("Accept", "text/event-stream")
+            readTimeout = EVENT_READ_TIMEOUT_MS
+        }
+        currentCoroutineContext()[Job]?.invokeOnCompletion { runCatching { connection.disconnect() } }
+        try {
+            if (connection.responseCode != 200) {
+                throw IOException("theme-sync hub events failed: GET /events -> HTTP ${connection.responseCode}")
+            }
+            connection.inputStream.bufferedReader().use { reader ->
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.startsWith("data:")) onEvent()
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
 
     private fun openConnection(baseUrl: String, path: String, method: String, timeoutMs: Int): HttpURLConnection {
         val connection = URL(baseUrl + path).openConnection() as HttpURLConnection
