@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "0.15.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.15.0/app-release.apk",
-  "notes": "Sync tokens from server in Settings (TV pulls its Home Assistant token on launch). TV home: Apps focus scrolls back to the clock, light tiles show bulb icons, tile labels stay visible, and the Jellyfin banner fills its tile."
+  "versionCode": 16,
+  "versionName": "0.16.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.16.0/app-release.apk",
+  "notes": "TV theme sync: the TV now re-downloads the synced wallpaper when it turns on, instead of staying black until the next wallpaper change."
 }

@@ -13,7 +13,7 @@ import org.json.JSONObject
 private const val GROUP_MOBILE = "mobile"
 private const val MODE_CACHE_TTL_MS = 60_000L
 
-/** Result of one [ThemeSyncRepository.pollTv] cycle: the theme key to show as the launcher's accent, plus a freshly downloaded wallpaper bitmap when the hub's wallpaper actually changed (null when unchanged -- callers keep showing whatever bitmap they already have). */
+/** Result of one [ThemeSyncRepository.pollTv] cycle: the theme key to show as the launcher's accent, plus a freshly downloaded wallpaper bitmap when the hub's wallpaper actually changed or this process hasn't downloaded it yet (null when the caller already holds this run's bitmap — callers keep showing whatever bitmap they already have). */
 data class TvSyncResult(val themeKey: String, val wallpaperBitmap: Bitmap?)
 
 /**
@@ -41,6 +41,17 @@ class ThemeSyncRepository(
     private val settingsRepository: SettingsRepository,
 ) {
 
+    /**
+     * The wallpaper hash whose bitmap THIS process already downloaded for
+     * the TV. In-memory on purpose, never persisted: the TV's bitmap
+     * lives only in memory (TvMainActivity holds it in a remember{}), so
+     * a fresh process must re-download even when the hub state is
+     * unchanged — keying the skip off the persisted "last applied"
+     * timestamp instead left the TV black after every power-on until the
+     * next wallpaper change (2026-11-17). A failed download leaves this
+     * unset, so the next 5s poll cycle retries.
+     */
+    private var lastTvWallpaperSha256: String? = null
     /**
      * One poll cycle: finds the hub, reads this device's group/shared state,
      * and -- only if it's newer than what was last applied -- applies the
@@ -73,17 +84,31 @@ class ThemeSyncRepository(
      * the downloaded bitmap back for the TV home screen to draw as its
      * background. Returns null when nothing changed (hub unreachable, hub
      * has no state yet, or the hub's state is no newer than what's already
-     * applied) -- callers keep whatever accent/bitmap they're already
-     * showing in that case.
+     * applied AND this process already holds the wallpaper bitmap) --
+     * callers keep whatever accent/bitmap they're already showing in that
+     * case. A fresh process re-downloads the bitmap even with an
+     * unchanged hub state, since the bitmap it would "keep showing"
+     * doesn't exist yet.
      */
     suspend fun pollTv(): TvSyncResult? = withContext(Dispatchers.IO) {
         val baseUrl = ThemeSyncApi.findHubBaseUrl() ?: return@withContext null
         val path = statePath(resolveMode(baseUrl))
         val doc = ThemeSyncApi.getState(baseUrl, path)?.let { ThemeSyncStateDoc.fromJsonOrNull(it) }
             ?: return@withContext null
-        if (doc.updatedAt <= settingsRepository.getSyncLastAppliedUpdatedAt()) return@withContext null
+        val bitmapNeeded = doc.wallpaperSha256.isNotBlank() && lastTvWallpaperSha256 != doc.wallpaperSha256
+        val stateIsNewer = doc.updatedAt > settingsRepository.getSyncLastAppliedUpdatedAt()
+        if (!stateIsNewer && !bitmapNeeded) return@withContext null
 
-        val bitmap = downloadWallpaperBytes(baseUrl, doc)?.let { decodeDownsampled(it) }
+        // Deliberately NOT downloadWallpaperBytes: that one skips off the
+        // PERSISTED last-state hash, which is exactly the check that must
+        // not apply to a fresh TV process (see lastTvWallpaperSha256).
+        val bitmap = if (bitmapNeeded) {
+            ThemeSyncApi.getBlob(baseUrl, doc.wallpaperSha256)
+                ?.let { decodeDownsampled(it) }
+                ?.also { lastTvWallpaperSha256 = doc.wallpaperSha256 }
+        } else {
+            null
+        }
         settingsRepository.setSyncLastAppliedUpdatedAt(doc.updatedAt)
         settingsRepository.setSyncLastStateJson(doc.toJson().toString())
         val themeKey = if (doc.pinned) doc.theme else null
