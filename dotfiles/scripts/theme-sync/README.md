@@ -21,7 +21,7 @@ not per-device.
   document per group, and the wallpaper blobs needed to apply any of them.
   Packaged and run via `../../nixos/modules/theme-sync-hub.nix`.
 - **Watcher** (`../theme-sync-watch`, desktop + laptop only): a systemd
-  user service that polls the hub every 15s, pushes local changes up, and
+  user service that polls the hub every 5s, pushes local changes up, and
   pulls hub changes down — against the shared state in unified mode, or
   the `workstation` group's state in split mode. Packaged and run via
   `../../nixos/modules/theme-sync-watch.nix`.
@@ -192,7 +192,7 @@ crashes or blocks waiting for the hub.
 - `ThemeSyncApi.kt` — raw HTTP client (stdlib `HttpURLConnection`, same
   shape as the rest of the launcher's network code), hub discovery as
   above.
-- `ThemeSyncRepository.kt` — polls every ~15s while the launcher is in
+- `ThemeSyncRepository.kt` — polls every ~5s while the launcher is in
   the foreground, plus once on resume (never while backgrounded, never
   on the UI thread). Pulls the `mobile` group's state in split mode, the
   shared state in unified mode; applies a newer wallpaper via

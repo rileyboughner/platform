@@ -1,5 +1,5 @@
 # Theme/wallpaper sync watcher -- workstation-only (desktop + laptop). Polls
-# the theme-sync-hub (server, see theme-sync-hub.nix) every 15s and
+# the theme-sync-hub (server, see theme-sync-hub.nix) every 5s and
 # reconciles this machine's local theme/wallpaper state against it. Design,
 # protocol and the `boner sync` toggle: ../../scripts/theme-sync/README.md.
 { pkgs, ... }:

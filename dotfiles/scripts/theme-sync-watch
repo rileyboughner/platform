@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme/wallpaper sync watcher: polls the theme-sync hub every 15s and
+# Theme/wallpaper sync watcher: polls the theme-sync hub every 5s and
 # reconciles it against this machine's local theme/wallpaper state. See
 # theme-sync/README.md for the full design.
 #
@@ -251,8 +251,8 @@ poll_once() {
     fi
 }
 
-echo "theme-sync-watch: starting (poll interval 15s, hub candidates: $THEME_SYNC_HUB_URLS)" >&2
+echo "theme-sync-watch: starting (poll interval 5s, hub candidates: $THEME_SYNC_HUB_URLS)" >&2
 while true; do
     poll_once || echo "theme-sync-watch: poll iteration errored unexpectedly, continuing" >&2
-    sleep 15
+    sleep 5
 done

@@ -12,7 +12,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Runs [poll] every ~15s (same cadence family as the desktop/laptop
+ * Runs [poll] every ~5s (same cadence family as the desktop/laptop
  * watcher) while the hosting activity is actually in the foreground, plus
  * once immediately on every ON_RESUME -- matching ON_PAUSE/ON_RESUME
  * rather than a plain always-running loop is what stops this from polling
@@ -40,7 +40,7 @@ internal fun ThemeSyncPoller(poll: suspend () -> Unit) {
                     pollJob = coroutineScope.launch {
                         while (isActive) {
                             poll()
-                            delay(15_000)
+                            delay(5_000)
                         }
                     }
                 }
