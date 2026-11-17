@@ -181,6 +181,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         sidePanel.visible = false
         todoistPanel.visible = false
         calendarPanel.visible = false
+        smsPanel.visible = false
 
         target.visible = !wasVisible
     }
@@ -656,6 +657,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(calendarPanel)
+        }
+    }
+
+    IpcHandler {
+        target: "sms"
+
+        function toggle(): void {
+            root.togglePopup(smsPanel)
         }
     }
 
@@ -3467,6 +3476,748 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                             delegate: calendarEventRowComponent
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // SMS Panel (KDE Connect, v1 -- parallel toggle alongside the existing
+    // SUPER+P kdeconnect-sms scratchpad; does not replace it yet)
+    // ─────────────────────────────────────────────
+
+    PanelWindow {
+        id: smsPanel
+
+        // "", "no-daemon", "no-device", "not-paired", "unreachable",
+        // "sms-disabled", or "ok" -- see kdeconnect-sms-dbus status
+        property string deviceState: ""
+        property string deviceId: ""
+        property string deviceName: ""
+        property string statusError: ""
+        property string conversationsError: ""
+        property string sendError: ""
+        property bool sendPending: false
+
+        // threadId(string) -> latest message object, for the conversation list
+        property var threads: ({})
+        // sorted (newest-first) cache of Object.keys(threads); recomputed
+        // whenever threads changes so the Repeater model is a plain array
+        property var threadIdList: []
+        // normalized 10-digit number(string) -> contact name, from the vcard
+        // cache kdeconnectd's own contacts plugin already maintains
+        property var contactNames: ({})
+
+        // "" = conversation list is showing; otherwise the threadId open
+        property string openThreadId: ""
+        // uid(string) -> message object, only populated for the open thread
+        property var openThreadMessages: ({})
+
+        function normalizeNumber(addr) {
+            const digits = (addr || "").replace(/[^0-9]/g, "")
+            return digits.length > 10 ? digits.slice(-10) : digits
+        }
+
+        function displayNameFor(addresses) {
+            if (!addresses || addresses.length === 0) return "Unknown"
+            return addresses
+                .map((a) => smsPanel.contactNames[smsPanel.normalizeNumber(a)] || a)
+                .join(", ")
+        }
+
+        function refreshThreadIdList() {
+            const ids = Object.keys(smsPanel.threads)
+            ids.sort((a, b) => smsPanel.threads[b].date - smsPanel.threads[a].date)
+            smsPanel.threadIdList = ids
+        }
+
+        // Shared by the initial activeConversations() fetch and every
+        // conversationCreated/conversationUpdated event off the watch
+        // stream -- only overwrites a thread's list-row summary when the
+        // incoming message is at least as new, so a late-arriving older
+        // backfill message can't clobber the current snippet.
+        function mergeThreadSummary(msg) {
+            const key = String(msg.threadId)
+            const existing = smsPanel.threads[key]
+            if (existing && msg.date < existing.date) return
+            const next = Object.assign({}, smsPanel.threads)
+            next[key] = msg
+            smsPanel.threads = next
+            smsPanel.refreshThreadIdList()
+        }
+
+        function removeThread(threadId) {
+            const key = String(threadId)
+            if (!(key in smsPanel.threads)) return
+            const next = Object.assign({}, smsPanel.threads)
+            delete next[key]
+            smsPanel.threads = next
+            smsPanel.refreshThreadIdList()
+            if (smsPanel.openThreadId === key) smsPanel.closeThreadView()
+        }
+
+        function mergeOpenMessage(msg) {
+            if (String(msg.threadId) !== smsPanel.openThreadId) return
+            const key = String(msg.uid)
+            const next = Object.assign({}, smsPanel.openThreadMessages)
+            next[key] = msg
+            smsPanel.openThreadMessages = next
+        }
+
+        function sortedOpenMessages() {
+            const vals = Object.values(smsPanel.openThreadMessages)
+            vals.sort((a, b) => a.date - b.date)
+            return vals
+        }
+
+        function openThreadView(threadId) {
+            smsPanel.openThreadId = String(threadId)
+            smsPanel.openThreadMessages = {}
+            smsPanel.sendError = ""
+            threadFetchProcess.command = ["kdeconnect-sms-dbus", "thread", smsPanel.deviceId, smsPanel.openThreadId, "50"]
+            threadFetchProcess.running = true
+            Qt.callLater(() => composeInput.forceActiveFocus())
+        }
+
+        function closeThreadView() {
+            smsPanel.openThreadId = ""
+            smsPanel.openThreadMessages = {}
+        }
+
+        function sendCurrentMessage() {
+            const text = composeInput.text.trim()
+            if (text.length === 0 || smsPanel.openThreadId === "" || smsPanel.sendPending) return
+            smsPanel.sendError = ""
+            smsPanel.sendPending = true
+            sendProcess.command = ["kdeconnect-sms-dbus", "send", smsPanel.deviceId, smsPanel.openThreadId, text]
+            sendProcess.running = true
+            composeInput.text = ""
+        }
+
+        // Re-checks device/daemon state; on a fresh transition into "ok"
+        // this (re)fetches the conversation list/contacts and (re)starts
+        // the signal watcher, so a cold start or a device reconnect both
+        // self-heal without re-fetching anything that's already cached.
+        function refreshStatus() {
+            statusProcess.running = true
+        }
+
+        function manualRefresh() {
+            smsPanel.refreshStatus()
+            if (smsPanel.deviceState === "ok" && smsPanel.deviceId !== "") {
+                conversationsProcess.command = ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId]
+                conversationsProcess.running = true
+            }
+        }
+
+        function statusLineText() {
+            switch (smsPanel.deviceState) {
+                case "no-daemon": return "KDE Connect isn't running."
+                case "no-device": return "No KDE Connect device found."
+                case "not-paired": return "Pair " + (smsPanel.deviceName || "your phone") + " in KDE Connect first."
+                case "unreachable": return (smsPanel.deviceName || "Device") + " is unreachable."
+                case "sms-disabled": return "SMS plugin isn't enabled on " + (smsPanel.deviceName || "your phone") + "."
+                case "": return "Checking…"
+                default: return "Unknown status."
+            }
+        }
+
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.namespace: "sms-panel"
+
+        anchors.top: true
+        anchors.bottom: true
+        anchors.right: true
+
+        implicitWidth: 380
+        margins.top: root.visible ? root.implicitHeight : 0
+
+        color: root.colBg
+        visible: false
+
+        onVisibleChanged: {
+            if (visible) {
+                smsPanel.statusError = ""
+                smsPanel.refreshStatus()
+                smsStatusTimer.running = true
+            } else {
+                smsStatusTimer.running = false
+                watchProcess.running = false
+                smsPanel.closeThreadView()
+            }
+        }
+
+        Timer {
+            id: smsStatusTimer
+            // Message delivery itself is purely signal-driven (watchProcess
+            // below); this is only a slow fallback to notice the phone
+            // going unreachable or being re-paired while the panel is open.
+            interval: 30000
+            repeat: true
+            running: false
+            onTriggered: smsPanel.refreshStatus()
+        }
+
+        Process {
+            id: statusProcess
+
+            command: ["kdeconnect-sms-dbus", "status"]
+
+            stdout: StdioCollector { id: statusStdout }
+            stderr: StdioCollector { id: statusStderr }
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) {
+                    smsPanel.deviceState = "no-daemon"
+                    smsPanel.deviceId = ""
+                    smsPanel.statusError = statusStderr.text.trim().split("\n")[0]
+                    watchProcess.running = false
+                    return
+                }
+                try {
+                    const parsed = JSON.parse(statusStdout.text)
+                    const wasOk = smsPanel.deviceState === "ok" && smsPanel.deviceId !== ""
+
+                    smsPanel.deviceState = parsed.state || "no-daemon"
+                    smsPanel.deviceId = parsed.deviceId || ""
+                    smsPanel.deviceName = parsed.deviceName || ""
+                    smsPanel.statusError = ""
+
+                    const nowOk = smsPanel.deviceState === "ok" && smsPanel.deviceId !== ""
+
+                    if (nowOk && !wasOk) {
+                        smsPanel.threads = {}
+                        smsPanel.threadIdList = []
+                        conversationsProcess.command = ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId]
+                        conversationsProcess.running = true
+                        contactsProcess.command = ["kdeconnect-sms-dbus", "contacts", smsPanel.deviceId]
+                        contactsProcess.running = true
+                        watchProcess.command = ["kdeconnect-sms-dbus", "watch", smsPanel.deviceId]
+                        watchProcess.running = true
+                    } else if (!nowOk && wasOk) {
+                        watchProcess.running = false
+                        smsPanel.closeThreadView()
+                    }
+                } catch (error) {
+                    smsPanel.deviceState = "no-daemon"
+                    smsPanel.statusError = "Failed to parse status"
+                }
+            }
+        }
+
+        Process {
+            id: conversationsProcess
+
+            stdout: StdioCollector { id: conversationsStdout }
+            stderr: StdioCollector { id: conversationsStderr }
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) {
+                    const firstLine = conversationsStderr.text.trim().split("\n")[0]
+                    smsPanel.conversationsError = firstLine || "conversations failed"
+                    return
+                }
+                try {
+                    const list = JSON.parse(conversationsStdout.text)
+                    smsPanel.conversationsError = ""
+                    for (const msg of list) smsPanel.mergeThreadSummary(msg)
+                } catch (error) {
+                    smsPanel.conversationsError = "Failed to parse conversations"
+                }
+            }
+        }
+
+        Process {
+            id: contactsProcess
+
+            stdout: StdioCollector { id: contactsStdout }
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) return
+                try {
+                    const list = JSON.parse(contactsStdout.text)
+                    const map = {}
+                    for (const entry of list) map[entry.number] = entry.name
+                    smsPanel.contactNames = map
+                } catch (error) {
+                    // Best-effort only -- rows just fall back to raw numbers.
+                }
+            }
+        }
+
+        // Fire-and-forget: asks kdeconnectd to (re)fill its local cache for
+        // this thread. The actual messages arrive as conversationUpdated
+        // events on watchProcess below, same as live-incoming messages.
+        Process {
+            id: threadFetchProcess
+
+            stderr: StdioCollector { id: threadFetchStderr }
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) {
+                    smsPanel.sendError = threadFetchStderr.text.trim().split("\n")[0] || "Failed to load thread"
+                }
+            }
+        }
+
+        Process {
+            id: sendProcess
+
+            stderr: StdioCollector { id: sendStderr }
+
+            onExited: (exitCode) => {
+                smsPanel.sendPending = false
+                if (exitCode !== 0) {
+                    smsPanel.sendError = sendStderr.text.trim().split("\n")[0] || "Send failed"
+                }
+            }
+        }
+
+        // Long-lived while the panel is visible: one JSON object per line,
+        // decoded straight from kdeconnectd's D-Bus signals by
+        // kdeconnect-sms-dbus (no polling -- see its `watch` subcommand).
+        Process {
+            id: watchProcess
+
+            stdout: SplitParser {
+                splitMarker: "\n"
+
+                onRead: (line) => {
+                    if (!line || line.trim().length === 0) return
+                    try {
+                        const evt = JSON.parse(line)
+                        if (evt.signal === "conversationCreated" || evt.signal === "conversationUpdated") {
+                            smsPanel.mergeThreadSummary(evt)
+                            smsPanel.mergeOpenMessage(evt)
+                        } else if (evt.signal === "conversationRemoved") {
+                            smsPanel.removeThread(evt.threadId)
+                        }
+                    } catch (error) {
+                        // Ignore a malformed/partial line; the stream continues.
+                    }
+                }
+            }
+        }
+
+        Component {
+            id: threadRowComponent
+
+            Rectangle {
+                id: threadRow
+
+                required property var modelData // threadId as a string
+
+                readonly property var msg: smsPanel.threads[threadRow.modelData]
+                readonly property bool unread: threadRow.msg
+                    && threadRow.msg.read === 0 && threadRow.msg.type === 1
+
+                width: parent.width
+                height: threadRowLayout.implicitHeight + 10
+
+                radius: 6
+                color: threadRowArea.containsMouse
+                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                    : "transparent"
+
+                MouseArea {
+                    id: threadRowArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    onClicked: smsPanel.openThreadView(threadRow.modelData)
+
+                    ColumnLayout {
+                        id: threadRowLayout
+
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+
+                        spacing: 2
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Rectangle {
+                                visible: threadRow.unread
+                                width: 6
+                                height: 6
+                                radius: 3
+                                color: root.colAccent
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+
+                                text: threadRow.msg ? smsPanel.displayNameFor(threadRow.msg.addresses) : threadRow.modelData
+                                elide: Text.ElideRight
+
+                                color: root.colFg
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 1
+                                    bold: threadRow.unread
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+
+                            text: threadRow.msg ? threadRow.msg.body : ""
+                            elide: Text.ElideRight
+
+                            color: root.colMuted
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 2
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Component {
+            id: messageBubbleComponent
+
+            Item {
+                id: bubbleItem
+
+                required property var modelData // a decoded ConversationMessage
+
+                // Types.MessageTypeSent/Draft/Outbox/Failed/Queued, per
+                // ConversationMessage::isOutgoing() -- models/conversationmessage.cpp
+                readonly property bool outgoing: [2, 3, 4, 5, 6].includes(bubbleItem.modelData.type)
+                readonly property string statusNote: bubbleItem.modelData.type === 5
+                    ? "Failed"
+                    : (bubbleItem.modelData.type === 4 || bubbleItem.modelData.type === 6)
+                        ? "Sending…" : ""
+
+                width: parent.width
+                height: bubbleColumn.implicitHeight + 10
+
+                Column {
+                    id: bubbleColumn
+
+                    anchors.right: bubbleItem.outgoing ? parent.right : undefined
+                    anchors.left: bubbleItem.outgoing ? undefined : parent.left
+                    width: Math.min(parent.width * 0.78, bubbleInner.implicitWidth + 20)
+                    spacing: 2
+
+                    Rectangle {
+                        width: parent.width
+                        height: bubbleInner.implicitHeight + 16
+                        radius: 10
+
+                        color: bubbleItem.outgoing
+                            ? root.colAccent
+                            : Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+
+                        Text {
+                            id: bubbleInner
+
+                            anchors.fill: parent
+                            anchors.margins: 8
+
+                            text: bubbleItem.modelData.body
+                            wrapMode: Text.Wrap
+
+                            color: bubbleItem.outgoing ? root.colBg : root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.right: bubbleItem.outgoing ? parent.right : undefined
+
+                        text: bubbleItem.statusNote.length > 0
+                            ? bubbleItem.statusNote
+                            : Qt.formatDateTime(new Date(bubbleItem.modelData.date), "h:mm AP")
+
+                        color: bubbleItem.modelData.type === 5 ? root.colRed : root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 3
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Chrome: thin left border matching the bar-popup borders ----
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: root.colMuted
+            opacity: 0.4
+        }
+
+        ColumnLayout {
+            id: smsPanelLayout
+
+            anchors.fill: parent
+            anchors.margins: 8
+
+            spacing: 8
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                MouseArea {
+                    id: smsBackArea
+
+                    visible: smsPanel.openThreadId !== ""
+                    implicitWidth: smsBackText.implicitWidth
+                    implicitHeight: smsBackText.implicitHeight
+                    hoverEnabled: true
+
+                    onClicked: smsPanel.closeThreadView()
+
+                    Text {
+                        id: smsBackText
+                        text: "‹"
+                        color: smsBackArea.containsMouse ? root.colFg : root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+
+                    text: smsPanel.openThreadId === ""
+                        ? "Messages"
+                        : smsPanel.displayNameFor(
+                            smsPanel.threads[smsPanel.openThreadId]
+                                ? smsPanel.threads[smsPanel.openThreadId].addresses : [])
+                    elide: Text.ElideRight
+
+                    color: root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize
+                        bold: true
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+
+                    visible: smsPanel.conversationsError.length > 0 && smsPanel.openThreadId === ""
+                    elide: Text.ElideRight
+
+                    text: smsPanel.conversationsError
+                    color: root.colRed
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 2
+                    }
+                }
+
+                MouseArea {
+                    id: smsRefreshArea
+
+                    visible: smsPanel.openThreadId === ""
+                    implicitWidth: smsRefreshText.implicitWidth
+                    implicitHeight: smsRefreshText.implicitHeight
+                    hoverEnabled: true
+
+                    onClicked: smsPanel.manualRefresh()
+
+                    Text {
+                        id: smsRefreshText
+
+                        text: "⟳"
+                        color: smsRefreshArea.containsMouse ? root.colFg : root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+
+                visible: smsPanel.deviceState !== "ok"
+                elide: Text.ElideRight
+
+                text: smsPanel.statusError.length > 0 ? smsPanel.statusError : smsPanel.statusLineText()
+                color: root.colMuted
+
+                font {
+                    family: root.fontFamily
+                    pixelSize: root.fontSize - 1
+                }
+            }
+
+            Flickable {
+                id: smsListFlick
+
+                visible: smsPanel.deviceState === "ok" && smsPanel.openThreadId === ""
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                contentWidth: width
+                contentHeight: smsListContent.implicitHeight
+                clip: true
+
+                Column {
+                    id: smsListContent
+
+                    width: smsListFlick.width
+                    spacing: 4
+
+                    Text {
+                        visible: smsPanel.threadIdList.length === 0
+                        text: "No conversations yet."
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Repeater {
+                        model: smsPanel.threadIdList
+                        delegate: threadRowComponent
+                    }
+                }
+            }
+
+            Flickable {
+                id: smsThreadFlick
+
+                visible: smsPanel.openThreadId !== ""
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                contentWidth: width
+                contentHeight: smsThreadContent.implicitHeight
+                clip: true
+
+                onContentHeightChanged: smsThreadFlick.contentY = Math.max(0, smsThreadFlick.contentHeight - smsThreadFlick.height)
+
+                Column {
+                    id: smsThreadContent
+
+                    width: smsThreadFlick.width
+                    spacing: 4
+
+                    Repeater {
+                        model: smsPanel.sortedOpenMessages()
+                        delegate: messageBubbleComponent
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: smsPanel.openThreadId !== ""
+                spacing: 6
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 30
+
+                    radius: 6
+                    color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                    border.color: root.colMuted
+                    border.width: 1
+
+                    TextInput {
+                        id: composeInput
+
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+
+                        enabled: !smsPanel.sendPending
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                        }
+
+                        onAccepted: smsPanel.sendCurrentMessage()
+                        Keys.onEscapePressed: smsPanel.closeThreadView()
+                    }
+                }
+
+                MouseArea {
+                    id: smsSendArea
+
+                    enabled: !smsPanel.sendPending
+                    implicitWidth: smsSendText.implicitWidth + 12
+                    implicitHeight: 30
+                    hoverEnabled: true
+
+                    onClicked: smsPanel.sendCurrentMessage()
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: smsSendArea.containsMouse
+                            ? root.colAccent
+                            : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.7)
+                    }
+
+                    Text {
+                        id: smsSendText
+                        anchors.centerIn: parent
+                        text: "Send"
+                        color: root.colBg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                            bold: true
+                        }
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                visible: smsPanel.sendError.length > 0
+                elide: Text.ElideRight
+                text: smsPanel.sendError
+                color: root.colRed
+
+                font {
+                    family: root.fontFamily
+                    pixelSize: root.fontSize - 2
                 }
             }
         }

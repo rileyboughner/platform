@@ -1,0 +1,272 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Bridges the KDE Connect SMS panel (quickshell) to kdeconnectd over D-Bus.
+#
+# D-Bus surface used below (service org.kde.kdeconnect, session bus), every
+# path/interface/method/signal confirmed by reading kdeconnect-kde 26.04.3
+# source (not guessed, not introspected live -- no paired device was
+# available while building this):
+#
+#   /modules/kdeconnect                                org.kde.kdeconnect.daemon
+#     devices(bb) -> as                 core/daemon.h:61 (also registers the
+#                                        well-known name "org.kde.kdeconnect",
+#                                        see core/daemon.cpp:72-73)
+#
+#   /modules/kdeconnect/devices/<id>                    org.kde.kdeconnect.device
+#     Properties: name, isReachable, isPaired, supportedPlugins
+#                                        core/device.h Q_PROPERTY block;
+#                                        device.cpp:78 registers this path with
+#                                        ExportScriptableContents, which is why
+#                                        plain Q_PROPERTY is readable via
+#                                        org.freedesktop.DBus.Properties
+#
+#   /modules/kdeconnect/devices/<id>                    org.kde.kdeconnect.device.conversations
+#     (ConversationsDbusInterface is a QDBusAbstractAdaptor parented to the
+#     Device object -- plugins/sms/conversationsdbusinterface.cpp:21 -- so it
+#     lives at the DEVICE path, not the sms plugin's own /sms sub-path)
+#     activeConversations() -> av                         .h:68
+#     requestConversation(x threadId, i start, i end)      .h:78 (indices into
+#                                                           the local cache;
+#                                                           backfills from the
+#                                                           phone and re-emits
+#                                                           conversationUpdated
+#                                                           for the full range
+#                                                           either way -- see
+#                                                           requestconversationworker.cpp)
+#     replyToConversation(x threadId, s message, av urls)  .h:83
+#     requestAllConversationThreads()                      .h:93
+#     Signals: conversationCreated(v) conversationUpdated(v)
+#              conversationLoaded(x,t) conversationRemoved(x)
+#                                                           .h:112-129
+#
+# ConversationMessage wire struct (plugins/../models/conversationmessage.h
+# operator<<, lines 225-232), decoded positionally below:
+#   (i eventField, s body, a(s) addresses, x date, i type, i read,
+#    x threadId, i uid, x subId, a(xsss) attachments)
+#
+# Contact names: there is no D-Bus method to resolve a phone number to a
+# name -- the real kdeconnect-sms app does it in-process via KPeople
+# (smsapp/smshelper.cpp). What *is* on disk is the vcard cache that
+# kdeconnectd's own contacts plugin already writes automatically on every
+# connection (plugins/contacts/contactsplugin.cpp: connected() ->
+# synchronizeRemoteWithLocal(), vcardsPath = plugins/contacts/contactsplugin.cpp:25).
+# `contacts` below only *reads* that existing cache -- it never triggers a
+# sync itself.
+#
+# UNVERIFIED (no paired device to test against): exact `read` polarity
+# (assumed Android Telephony convention: 0 = unread, 1 = read), and whether
+# `busctl monitor` sees kdeconnectd's signals with no extra bus policy on a
+# real desktop session (confirmed working against this machine's own
+# session bus in a sandbox with no kdeconnectd running, so the mechanism
+# itself -- busctl monitor --json=short on the user session bus -- is
+# verified; kdeconnectd actually emitting on it is not).
+
+SERVICE="org.kde.kdeconnect"
+DAEMON_PATH="/modules/kdeconnect"
+DAEMON_IFACE="org.kde.kdeconnect.daemon"
+DEVICE_IFACE="org.kde.kdeconnect.device"
+CONV_IFACE="org.kde.kdeconnect.device.conversations"
+SMS_PLUGIN_ID="kdeconnect_sms"
+
+die() {
+    echo "kdeconnect-sms-dbus: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: kdeconnect-sms-dbus <command> [args]
+
+Commands:
+  status                              Print JSON {state, deviceId, deviceName}
+  conversations <deviceId>            Print JSON array of latest-message-per-thread
+  thread <deviceId> <threadId> <n>    Request last <n> messages of a thread (async; arrives via watch)
+  send <deviceId> <threadId> <text>   Send a reply in an existing thread (async)
+  watch <deviceId>                    Stream JSON-per-line conversation events until killed
+  contacts <deviceId>                 Print JSON array of {number, name} from the synced vcard cache
+EOF
+}
+
+devpath() { echo "/modules/kdeconnect/devices/$1"; }
+
+# Calls a method with --json=short and prints only the reply payload JSON
+# (busctl already prints just {"type":...,"data":[...]} for `call`).
+bcall() {
+    busctl --user --json=short call "$SERVICE" "$@"
+}
+
+device_property() {
+    local id="$1" prop="$2"
+    busctl --user --json=short get-property "$SERVICE" "$(devpath "$id")" "$DEVICE_IFACE" "$prop" 2>/dev/null \
+        | jq -r '.data[0]'
+}
+
+device_supported_plugins() {
+    local id="$1"
+    busctl --user --json=short get-property "$SERVICE" "$(devpath "$id")" "$DEVICE_IFACE" supportedPlugins 2>/dev/null \
+        | jq -r '.data[0][]' 2>/dev/null || true
+}
+
+cmd_status() {
+    local all_ids
+    if ! all_ids=$(bcall "$DAEMON_PATH" "$DAEMON_IFACE" devices bb false false 2>/dev/null | jq -r '.data[0][]' 2>/dev/null); then
+        printf '{"state":"no-daemon"}\n'
+        return 0
+    fi
+
+    if [ -z "$all_ids" ]; then
+        printf '{"state":"no-device"}\n'
+        return 0
+    fi
+
+    local best_unreachable_id="" best_unreachable_name=""
+    local best_unpaired_id="" best_unpaired_name=""
+    local best_nosms_id="" best_nosms_name=""
+
+    local id
+    while IFS= read -r id; do
+        [ -n "$id" ] || continue
+        local paired reachable name
+        paired=$(device_property "$id" isPaired)
+        reachable=$(device_property "$id" isReachable)
+        name=$(device_property "$id" name)
+
+        if [ "$paired" != "true" ]; then
+            [ -n "$best_unpaired_id" ] || { best_unpaired_id="$id"; best_unpaired_name="$name"; }
+            continue
+        fi
+
+        if [ "$reachable" != "true" ]; then
+            [ -n "$best_unreachable_id" ] || { best_unreachable_id="$id"; best_unreachable_name="$name"; }
+            continue
+        fi
+
+        if device_supported_plugins "$id" | grep -qx "$SMS_PLUGIN_ID"; then
+            printf '{"state":"ok","deviceId":%s,"deviceName":%s}\n' "$(jq -Rn --arg v "$id" '$v')" "$(jq -Rn --arg v "$name" '$v')"
+            return 0
+        fi
+
+        [ -n "$best_nosms_id" ] || { best_nosms_id="$id"; best_nosms_name="$name"; }
+    done <<<"$all_ids"
+
+    if [ -n "$best_nosms_id" ]; then
+        printf '{"state":"sms-disabled","deviceId":%s,"deviceName":%s}\n' "$(jq -Rn --arg v "$best_nosms_id" '$v')" "$(jq -Rn --arg v "$best_nosms_name" '$v')"
+    elif [ -n "$best_unreachable_id" ]; then
+        printf '{"state":"unreachable","deviceId":%s,"deviceName":%s}\n' "$(jq -Rn --arg v "$best_unreachable_id" '$v')" "$(jq -Rn --arg v "$best_unreachable_name" '$v')"
+    elif [ -n "$best_unpaired_id" ]; then
+        printf '{"state":"not-paired","deviceId":%s,"deviceName":%s}\n' "$(jq -Rn --arg v "$best_unpaired_id" '$v')" "$(jq -Rn --arg v "$best_unpaired_name" '$v')"
+    else
+        printf '{"state":"no-device"}\n'
+    fi
+}
+
+# Shared jq filter: turns one raw ConversationMessage struct array ($m, per
+# the wire layout documented at the top of this file) into our flat schema.
+MESSAGE_FILTER='. as $m | {
+    threadId: $m[6],
+    uid: $m[7],
+    body: $m[1],
+    date: $m[3],
+    type: $m[4],
+    read: $m[5],
+    subId: $m[8],
+    addresses: ($m[2] | map(.[0]))
+}'
+
+cmd_conversations() {
+    local id="${1:-}"
+    [ -n "$id" ] || { usage; exit 1; }
+
+    # Kick the remote for anything newer than what's cached; the reply (if
+    # any) arrives as conversationCreated/conversationUpdated on `watch`,
+    # not here -- this call itself returns void.
+    bcall "$(devpath "$id")" "$CONV_IFACE" requestAllConversationThreads >/dev/null 2>&1 || true
+
+    bcall "$(devpath "$id")" "$CONV_IFACE" activeConversations \
+        | jq -c '.data[0][] | .data' \
+        | jq -c "$MESSAGE_FILTER" \
+        | jq -s -c .
+}
+
+cmd_thread() {
+    local id="${1:-}" threadId="${2:-}" count="${3:-50}"
+    [ -n "$id" ] && [ -n "$threadId" ] || { usage; exit 1; }
+    bcall "$(devpath "$id")" "$CONV_IFACE" requestConversation xii "$threadId" 0 "$count" >/dev/null
+}
+
+cmd_send() {
+    local id="${1:-}" threadId="${2:-}"
+    [ -n "$id" ] && [ -n "$threadId" ] || { usage; exit 1; }
+    shift 2
+    local text="$*"
+    [ -n "$text" ] || die "empty message"
+    bcall "$(devpath "$id")" "$CONV_IFACE" replyToConversation xsav "$threadId" "$text" 0 >/dev/null
+}
+
+cmd_watch() {
+    local id="${1:-}"
+    [ -n "$id" ] || { usage; exit 1; }
+    local path
+    path=$(devpath "$id")
+
+    # --unbuffered on both ends: this feeds a long-lived QML Process that
+    # reads stdout line-by-line, so nothing may sit in a stdio buffer.
+    stdbuf -oL busctl --user --json=short monitor "$SERVICE" 2>/dev/null \
+        | jq -c --unbuffered --arg path "$path" --arg iface "$CONV_IFACE" '
+            select(.type == "signal" and .path == $path and .interface == $iface) |
+            if .member == "conversationCreated" or .member == "conversationUpdated" then
+                (.payload.data[0].data) as $m | {
+                    signal: .member,
+                    threadId: $m[6], uid: $m[7], body: $m[1], date: $m[3],
+                    type: $m[4], read: $m[5], subId: $m[8],
+                    addresses: ($m[2] | map(.[0]))
+                }
+            elif .member == "conversationLoaded" then
+                {signal: "conversationLoaded", threadId: .payload.data[0], count: .payload.data[1]}
+            elif .member == "conversationRemoved" then
+                {signal: "conversationRemoved", threadId: .payload.data[0]}
+            else
+                empty
+            end
+        '
+}
+
+# Reads whatever vcards kdeconnectd's own contacts plugin has already
+# synced for this device (see header comment) and prints {number, name}
+# pairs. Numbers are reduced to their last 10 digits so "+15551234567",
+# "15551234567" and "5551234567" all collapse to one key -- a US/CA-centric
+# heuristic, unverified against a real contact list.
+cmd_contacts() {
+    local id="${1:-}"
+    [ -n "$id" ] || { usage; exit 1; }
+
+    local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+    local vdir="$data_home/kpeoplevcard/kdeconnect-$id"
+    [ -d "$vdir" ] || { echo "[]"; return 0; }
+
+    local out="[]"
+    local f name number digits
+    for f in "$vdir"/*.vcf "$vdir"/*.vcard; do
+        [ -f "$f" ] || continue
+        name=$(grep -m1 '^FN:' "$f" | cut -d: -f2- | tr -d '\r')
+        [ -n "$name" ] || continue
+        while IFS= read -r number; do
+            digits=$(echo "$number" | tr -dc '0-9')
+            [ -n "$digits" ] || continue
+            digits=${digits: -10}
+            out=$(jq -c --arg n "$digits" --arg name "$name" '. + [{number:$n,name:$name}]' <<<"$out")
+        done < <(grep -o '^TEL[^:]*:.*' "$f" | cut -d: -f2- | tr -d '\r')
+    done
+    echo "$out"
+}
+
+case "${1:-}" in
+    status) shift; cmd_status "$@" ;;
+    conversations) shift; cmd_conversations "$@" ;;
+    thread) shift; cmd_thread "$@" ;;
+    send) shift; cmd_send "$@" ;;
+    watch) shift; cmd_watch "$@" ;;
+    contacts) shift; cmd_contacts "$@" ;;
+    *) usage; exit 1 ;;
+esac
