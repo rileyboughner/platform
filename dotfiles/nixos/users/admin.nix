@@ -1,20 +1,47 @@
 { config, pkgs, username, ...}:
 let
-  # git-credential-store matches by exact path when credential.useHttpPath is
-  # on, so a stored entry without a path (one PAT covering a whole org) never
-  # matches a real repo query. Config-section selection already picked the
-  # right org by path prefix before this helper runs, so it can just hand
-  # back that secret's username/password unconditionally instead of
-  # re-matching path itself.
+  # One credential helper for all of github.com. It reads the request path
+  # git hands it on stdin and picks the right agenix secret itself.
+  # Per-URL config sections cannot do this routing: git tries credential
+  # helpers in config-file order, home-manager emits the sections
+  # alphabetically, and the broad github.com/rileyboughner section sorts
+  # ahead of github.com/rileyboughner/platform -- so pushes to platform
+  # were sent the wrong token and GitHub rejected them. Routing here, in
+  # code order with the most specific path first, instead. useHttpPath
+  # must stay on: without it git sends no path and this cannot route.
   gitCredentialAgenix = pkgs.writeShellScript "git-credential-agenix" ''
     set -euo pipefail
-    secret_file="$1"
-    op="$2"
+    op="$1"
 
     if [ "$op" != "get" ]; then
       cat >/dev/null
       exit 0
     fi
+
+    # Credential context from git: key=value lines, blank line to end.
+    path=""
+    while IFS='=' read -r key value; do
+      [ -z "$key" ] && break
+      if [ "$key" = "path" ]; then path="$value"; fi
+    done
+
+    # Most specific first.
+    case "$path" in
+      rileyboughner/platform|rileyboughner/platform/*|rileyboughner/platform.git|rileyboughner/platform.git/*)
+        secret_file="/run/agenix/git-credentials-platform" ;;
+      BonerLinux/*)
+        secret_file="/run/agenix/git-credentials-bonerlinux" ;;
+      boughnerengineering/*)
+        secret_file="/run/agenix/git-credentials-boughnerengineering" ;;
+      weave-music/*)
+        secret_file="/run/agenix/git-credentials-weave-music" ;;
+      rileyboughner/*)
+        secret_file="/run/agenix/git-credentials-rileyboughner" ;;
+      *)
+        exit 0 ;;
+    esac
+
+    [ -r "$secret_file" ] || exit 0
 
     line=$(cat "$secret_file")
     rest=''${line#https://}
@@ -39,12 +66,13 @@ in
     settings.user.name = "Riley Boughner";
     settings.user.email = "riley@clownweb.net";
     settings = {
+      # One dispatcher helper for all of github.com (see
+      # gitCredentialAgenix above): it routes by request path. Do not
+      # split this back out into per-URL sections -- git tries helpers
+      # in config-file order and the broad section shadows the specific
+      # one. useHttpPath must stay on or git sends no path to route on.
       credential."https://github.com".useHttpPath = true;
-      credential."https://github.com/rileyboughner/platform".helper = "!${gitCredentialAgenix} /run/agenix/git-credentials-platform";
-      credential."https://github.com/rileyboughner".helper = "!${gitCredentialAgenix} /run/agenix/git-credentials-rileyboughner";
-      credential."https://github.com/boughnerengineering".helper = "!${gitCredentialAgenix} /run/agenix/git-credentials-boughnerengineering";
-      credential."https://github.com/BonerLinux".helper = "!${gitCredentialAgenix} /run/agenix/git-credentials-bonerlinux";
-      credential."https://github.com/weave-music".helper = "!${gitCredentialAgenix} /run/agenix/git-credentials-weave-music";
+      credential."https://github.com".helper = "!${gitCredentialAgenix}";
     };
   };
 
