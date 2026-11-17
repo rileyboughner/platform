@@ -309,8 +309,14 @@ if command -v inotifywait >/dev/null 2>&1; then
         # matters on a real inotifywait error, where it keeps a
         # failing wait from spinning the loop; the 1s after a
         # 60s timeout is unnoticeable.
+        # inotifywait's --include matches the event's FULL path, not the
+        # bare filename -- an anchored bare-name pattern never matches
+        # and the wait silently degrades to the 60s timeout (caught live
+        # 2026-11-17: the trigger touch and symlink replace woke the
+        # unfiltered wait instantly but never the anchored pattern).
+        # Match the trailing path component instead.
         inotifywait -qq -t 60 -e close_write,modify,moved_to,create,delete,attrib \
-            --include '^(current|\.wallpaper|trigger)$' \
+            --include '/(current|\.wallpaper|trigger)$' \
             "$THEME_SYNC_THEME_DIR" "$HOME" "$THEME_SYNC_DIR" >/dev/null 2>&1 || sleep 1
     done
 else
