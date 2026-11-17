@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.rileyboughner.launcher.AppListRepository
-import dev.rileyboughner.launcher.FavoritesRepository
+import dev.rileyboughner.launcher.LauncherAppInfo
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoResult
 import dev.rileyboughner.launcher.health.HealthConnectRepository
@@ -93,10 +93,9 @@ fun AppsPageScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val allApps = remember { appListRepository.getLaunchableApps() }
-    val favorites = remember(allApps) { FavoritesRepository.resolveFavorites(allApps) }
     var showGlanceInfo by remember { mutableStateOf(settingsRepository.getShowGlanceInfo()) }
-    var visibleFavorites by remember(favorites) {
-        mutableStateOf(favorites.filter { settingsRepository.isFavoriteVisible(it.label) })
+    var visibleFavorites by remember(allApps) {
+        mutableStateOf(resolveVisibleFavorites(allApps, settingsRepository))
     }
     var showAllApps by rememberSaveable { mutableStateOf(false) }
     var autoFocusSearch by rememberSaveable { mutableStateOf(false) }
@@ -108,11 +107,11 @@ fun AppsPageScreen(
     // ON_RESUME is what actually picks up the change the moment this page
     // is shown again, with no app restart.
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, favorites) {
+    DisposableEffect(lifecycleOwner, allApps) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 showGlanceInfo = settingsRepository.getShowGlanceInfo()
-                visibleFavorites = favorites.filter { settingsRepository.isFavoriteVisible(it.label) }
+                visibleFavorites = resolveVisibleFavorites(allApps, settingsRepository)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -282,6 +281,23 @@ fun AppsPageScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+}
+
+/**
+ * [SettingsRepository.getEffectiveMainPageFavorites] returns package name +
+ * custom label pairs; this maps each back onto the matching installed
+ * [LauncherAppInfo] (carrying the custom label), silently dropping any
+ * package no longer installed — the same single source of truth the picker
+ * seeds itself from, so the two never drift apart.
+ */
+private fun resolveVisibleFavorites(
+    allApps: List<LauncherAppInfo>,
+    settingsRepository: SettingsRepository,
+): List<LauncherAppInfo> {
+    val byPackage = allApps.associateBy { it.packageName }
+    return settingsRepository.getEffectiveMainPageFavorites(allApps).mapNotNull { favorite ->
+        byPackage[favorite.packageName]?.copy(label = favorite.label)
     }
 }
 

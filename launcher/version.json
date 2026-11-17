@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "0.4.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.4.0/app-release.apk",
-  "notes": "TV-only redesign: single home page (apps row + living-room lights/scenes), movie wheel opens the web app, new global Menu-key Home Assistant popup. Also fixes the phone Health Connect queries grant on newer Health Connect app builds."
+  "versionCode": 5,
+  "versionName": "0.5.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.5.0/app-release.apk",
+  "notes": "Settings UI rework (Main page / Accounts & services / Permissions) and a real main-page app picker: add any installed app as a favorite, rename its display label, and reorder favorites freely, replacing the old fixed favorites list and per-favorite visibility switches."
 }

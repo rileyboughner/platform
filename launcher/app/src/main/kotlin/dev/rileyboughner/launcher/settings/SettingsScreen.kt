@@ -18,7 +18,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
-import dev.rileyboughner.launcher.FavoritesRepository
 import dev.rileyboughner.launcher.health.HealthConnectRepository
 import dev.rileyboughner.launcher.health.READ_SLEEP_PERMISSIONS
 import dev.rileyboughner.launcher.ui.AppTextRow
@@ -43,21 +41,22 @@ data class SettingsFields(
     val homeAssistantToken: String,
     val duolingoUsername: String,
     val showGlanceInfo: Boolean,
-    val favoriteVisibility: Map<String, Boolean>,
 )
 
 /**
- * Minimal, one-screen Settings: paste in the Todoist API token, Jellyfin
- * server URL + API key, and Home Assistant server URL + long-lived token,
- * then save. Riley generates/enters all of these himself — this app never
- * asks for one on his behalf and never hardcodes one (other than the
- * default Home Assistant server URL).
+ * Settings, grouped into Main page (glance toggle + the main-page app
+ * picker entry point), Accounts & services (Todoist, Jellyfin, Home
+ * Assistant, Duolingo), and Permissions (Health Connect, screen time).
+ * Riley generates/enters all the accounts & services values himself — this
+ * app never asks for one on his behalf and never hardcodes one (other than
+ * the default Home Assistant/Jellyfin server URLs).
  */
 @Composable
 fun SettingsScreen(
     initialFields: SettingsFields,
     onSave: (SettingsFields) -> Unit,
     onBack: () -> Unit,
+    onOpenMainPageFavorites: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var todoistToken by rememberSaveable { mutableStateOf(initialFields.todoistToken) }
@@ -67,9 +66,6 @@ fun SettingsScreen(
     var homeAssistantToken by rememberSaveable { mutableStateOf(initialFields.homeAssistantToken) }
     var duolingoUsername by rememberSaveable { mutableStateOf(initialFields.duolingoUsername) }
     var showGlanceInfo by rememberSaveable { mutableStateOf(initialFields.showGlanceInfo) }
-    val favoriteVisibility = remember {
-        mutableStateMapOf<String, Boolean>().apply { putAll(initialFields.favoriteVisibility) }
-    }
 
     val context = LocalContext.current
     val healthConnectAvailable = remember { HealthConnectRepository.isAvailable(context) }
@@ -90,34 +86,9 @@ fun SettingsScreen(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
         )
 
-        SettingsSection(title = "Todoist", description = "Todoist → Settings → Integrations → Developer.") {
-            LabeledField(label = "API token", value = todoistToken, onValueChange = { todoistToken = it })
-        }
-
-        SettingsSection(title = "Jellyfin", description = "Server URL and an API key (Jellyfin dashboard → API Keys).") {
-            LabeledField(label = "Server URL", value = jellyfinServerUrl, onValueChange = { jellyfinServerUrl = it })
-            LabeledField(label = "API key", value = jellyfinApiKey, onValueChange = { jellyfinApiKey = it })
-        }
-
-        SettingsSection(
-            title = "Home Assistant",
-            description = "Server URL and a long-lived access token (profile → Security → Long-lived access tokens).",
-        ) {
-            LabeledField(
-                label = "Server URL",
-                value = homeAssistantServerUrl,
-                onValueChange = { homeAssistantServerUrl = it },
-            )
-            LabeledField(label = "Access token", value = homeAssistantToken, onValueChange = { homeAssistantToken = it })
-        }
-
-        SettingsSection(title = "Duolingo", description = "Your public Duolingo username — no password needed.") {
-            LabeledField(label = "Username", value = duolingoUsername, onValueChange = { duolingoUsername = it })
-        }
-
         SettingsSection(
             title = "Main page",
-            description = "The glance block (sleep, screen time, Duolingo) under the clock on the main page.",
+            description = "The glance block (sleep, screen time, Duolingo) and which apps show under the clock.",
         ) {
             Row(
                 modifier = Modifier
@@ -132,38 +103,52 @@ fun SettingsScreen(
                 )
                 Switch(checked = showGlanceInfo, onCheckedChange = { showGlanceInfo = it })
             }
+            AppTextRow(label = "Main-page apps", onClick = onOpenMainPageFavorites)
         }
 
         SettingsSection(
-            title = "Favorites",
-            description = "Which favorites show on this device's main page. Per-device — a tablet and a phone can " +
-                "each show a different set.",
+            title = "Accounts & services",
+            description = "Server URLs and tokens for the integrations used elsewhere in the app.",
         ) {
-            FavoritesRepository.FAVORITE_LABELS.forEach { label ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    Switch(
-                        checked = favoriteVisibility[label] ?: true,
-                        onCheckedChange = { favoriteVisibility[label] = it },
-                    )
-                }
-            }
+            SubSectionLabel(text = "Todoist (Settings → Integrations → Developer)")
+            LabeledField(label = "Todoist API token", value = todoistToken, onValueChange = { todoistToken = it })
+
+            SubSectionLabel(text = "Jellyfin (dashboard → API Keys)")
+            LabeledField(
+                label = "Jellyfin server URL",
+                value = jellyfinServerUrl,
+                onValueChange = { jellyfinServerUrl = it },
+            )
+            LabeledField(label = "Jellyfin API key", value = jellyfinApiKey, onValueChange = { jellyfinApiKey = it })
+
+            SubSectionLabel(text = "Home Assistant (profile → Security → Long-lived access tokens)")
+            LabeledField(
+                label = "Home Assistant server URL",
+                value = homeAssistantServerUrl,
+                onValueChange = { homeAssistantServerUrl = it },
+            )
+            LabeledField(
+                label = "Home Assistant access token",
+                value = homeAssistantToken,
+                onValueChange = { homeAssistantToken = it },
+            )
+
+            SubSectionLabel(text = "Duolingo (public username, no password needed)")
+            LabeledField(
+                label = "Duolingo username",
+                value = duolingoUsername,
+                onValueChange = { duolingoUsername = it },
+            )
         }
 
         SettingsSection(
-            title = "Health",
-            description = "Sleep on the main page reads from Health Connect. Fitbit sleep only shows up here if " +
-                "the Fitbit app is set to sync sleep to Health Connect (Fitbit app → Health Connect settings).",
+            title = "Permissions",
+            description = "Access this app needs from the system to show the main-page glance info.",
         ) {
+            SubSectionLabel(
+                text = "Sleep on the main page reads from Health Connect. Fitbit sleep only shows up here if " +
+                    "the Fitbit app is set to sync sleep to Health Connect (Fitbit app → Health Connect settings).",
+            )
             val statusLabel = when {
                 !healthConnectAvailable -> "Health Connect isn't available on this device"
                 hasSleepPermission -> "Sleep access granted"
@@ -181,12 +166,8 @@ fun SettingsScreen(
                     onClick = { healthPermissionLauncher.launch(READ_SLEEP_PERMISSIONS) },
                 )
             }
-        }
 
-        SettingsSection(
-            title = "Screen time",
-            description = "Needed to show today's total foreground time on the main page.",
-        ) {
+            SubSectionLabel(text = "Needed to show today's total foreground time on the main page.")
             AppTextRow(
                 label = "Grant usage access",
                 onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
@@ -206,7 +187,6 @@ fun SettingsScreen(
                         homeAssistantToken = homeAssistantToken,
                         duolingoUsername = duolingoUsername,
                         showGlanceInfo = showGlanceInfo,
-                        favoriteVisibility = favoriteVisibility.toMap(),
                     ),
                 )
             },
@@ -237,6 +217,17 @@ private fun SettingsSection(
         content()
         HairlineDivider()
     }
+}
+
+/** A small label introducing one service/permission within a [SettingsSection] that groups several. */
+@Composable
+private fun SubSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+    )
 }
 
 @Composable

@@ -4,6 +4,13 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dev.rileyboughner.launcher.BuildConfig
+import dev.rileyboughner.launcher.FavoritesRepository
+import dev.rileyboughner.launcher.LauncherAppInfo
+import org.json.JSONArray
+import org.json.JSONObject
+
+/** One main-page favorite as picked in [MainPageFavoritesPickerScreen]: an installed app plus its custom display label. */
+data class MainPageFavorite(val packageName: String, val label: String)
 
 /**
  * Stores user-entered server URLs and API tokens (Todoist, Jellyfin, Home
@@ -96,6 +103,58 @@ class SettingsRepository(context: Context) {
 
     private fun favoriteVisibilityKey(label: String) = "$KEY_FAVORITE_VISIBLE_PREFIX$label"
 
+    /**
+     * The ordered, per-device main-page favorites list, or null when nothing has been saved from
+     * the picker yet. Null is distinct from an empty (but present) list: the former means "fall
+     * back to the legacy [FavoritesRepository.resolveFavorites] + [isFavoriteVisible] behavior",
+     * the latter means "the user picked a saved favorites list that happens to be empty".
+     * Unparseable stored JSON (e.g. a corrupted write) is treated the same as absent — never crashes.
+     */
+    fun getMainPageFavorites(): List<MainPageFavorite>? {
+        val raw = prefs.getString(KEY_MAIN_PAGE_FAVORITES, null) ?: return null
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).map { index ->
+                val entry = array.getJSONObject(index)
+                MainPageFavorite(
+                    packageName = entry.getString("packageName"),
+                    label = entry.getString("label"),
+                )
+            }
+        }.getOrNull()
+    }
+
+    fun setMainPageFavorites(favorites: List<MainPageFavorite>) {
+        val array = JSONArray()
+        favorites.forEach { favorite ->
+            array.put(
+                JSONObject().apply {
+                    put("packageName", favorite.packageName)
+                    put("label", favorite.label)
+                },
+            )
+        }
+        prefs.edit().putString(KEY_MAIN_PAGE_FAVORITES, array.toString()).apply()
+    }
+
+    /**
+     * The main-page favorites that should actually render, in order: the saved picker list when
+     * one exists, otherwise the legacy [FavoritesRepository.resolveFavorites] output filtered by
+     * [isFavoriteVisible] — i.e. exactly what the main page rendered before the picker existed.
+     * This is the single source of truth both [MainPageFavoritesPickerScreen] (to seed its
+     * starting state) and the main page (to render) must use, so the two never drift apart.
+     */
+    fun getEffectiveMainPageFavorites(allApps: List<LauncherAppInfo>): List<MainPageFavorite> {
+        val stored = getMainPageFavorites()
+        if (stored != null) {
+            val installedPackages = allApps.mapTo(HashSet()) { it.packageName }
+            return stored.filter { it.packageName in installedPackages }
+        }
+        return FavoritesRepository.resolveFavorites(allApps)
+            .filter { isFavoriteVisible(it.label) }
+            .map { MainPageFavorite(packageName = it.packageName, label = it.label) }
+    }
+
     companion object {
         private const val PREFS_FILE_NAME = "launcher_secure_settings"
         private const val KEY_TODOIST_TOKEN = "todoist_api_token"
@@ -106,6 +165,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_DUOLINGO_USERNAME = "duolingo_username"
         private const val KEY_SHOW_GLANCE_INFO = "show_glance_info"
         private const val KEY_FAVORITE_VISIBLE_PREFIX = "favorite_visible_"
+        private const val KEY_MAIN_PAGE_FAVORITES = "main_page_favorites_v1"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
         const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"
