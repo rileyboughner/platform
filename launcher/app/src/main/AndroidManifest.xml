@@ -114,6 +114,31 @@
             android:exported="false"
             android:theme="@style/Theme.Launcher" />
 
+        <!-- Health Connect privacy-policy / rationale screen: Health Connect
+             shows the permission sheet only when the app declares an activity
+             for ACTION_SHOW_PERMISSIONS_RATIONALE (through Android 13) plus
+             the VIEW_PERMISSION_USAGE alias (Android 14+, platform Health
+             Connect). Both open PermissionsRationaleActivity, which states
+             what sleep data is read and that it never leaves the device. -->
+        <activity
+            android:name=".PermissionsRationaleActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Launcher">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".PermissionsRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
         <!-- Google TV / Android TV entry point. Reached only via
              HomeRouterActivity on a real HOME press, or directly from the
              Android TV apps row (LEANBACK_LAUNCHER category below, for

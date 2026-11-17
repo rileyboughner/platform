@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "0.8.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.8.0/app-release.apk",
-  "notes": "Fix All Apps search list hiding behind the keyboard, and add Health Connect grant diagnostics in Settings."
+  "versionCode": 9,
+  "versionName": "0.9.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.9.0/app-release.apk",
+  "notes": "Add the Health Connect privacy-policy screen Health Connect requires before it shows the permission sheet, so the Sleep grant can complete."
 }
