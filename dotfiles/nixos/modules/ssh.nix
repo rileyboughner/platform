@@ -19,7 +19,7 @@
       # Reached over Tailscale MagicDNS, not the LAN -- this box isn't
       # part of hosts.nix's LAN/tunnel address scheme.
       Host devbits
-        HostName nixos
+        HostName devbits
         User boner
         IdentityFile ~/.ssh/devbits
 
