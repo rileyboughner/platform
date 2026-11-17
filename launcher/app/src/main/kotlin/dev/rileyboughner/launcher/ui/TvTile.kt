@@ -16,8 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.relocation.rememberBringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -74,7 +74,7 @@ fun TvTile(
     val isFocused by interactionSource.collectIsFocusedAsState()
     val scale by animateFloatAsState(targetValue = if (isFocused) 1.12f else 1f, label = "tvTileScale")
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
-    val bringIntoViewRequester = rememberBringIntoViewRequester()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
 
     Column(

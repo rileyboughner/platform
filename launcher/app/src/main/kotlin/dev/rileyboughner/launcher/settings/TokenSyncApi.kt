@@ -26,7 +26,7 @@ import java.net.URL
  * (server down, off the LAN and off the tailnet, malformed response)
  * yields null: the caller keeps whatever tokens it already has.
  */
-internal object TokenSyncApi {
+object TokenSyncApi {
 
     private val SERVER_CANDIDATES = listOf(
         "http://192.168.1.2:8766",
