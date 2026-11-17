@@ -27,6 +27,15 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Required so HealthConnectClient can even detect the Health Connect
+         provider app under API 30+ package-visibility filtering (targetSdk
+         34 here) — without this, isAvailable()/getSdkStatus() reports the
+         SDK unavailable and the grant flow in SettingsScreen never shows,
+         regardless of the READ_SLEEP permission above being declared. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
     <!-- Declared so this APK is installable on a phone/tablet without
          Leanback (feature is optional, matching the Google TV entry point
          below also being optional on handheld devices). -->

@@ -18,6 +18,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
+import dev.rileyboughner.launcher.FavoritesRepository
 import dev.rileyboughner.launcher.health.HealthConnectRepository
 import dev.rileyboughner.launcher.health.READ_SLEEP_PERMISSIONS
 import dev.rileyboughner.launcher.ui.AppTextRow
@@ -41,6 +43,7 @@ data class SettingsFields(
     val homeAssistantToken: String,
     val duolingoUsername: String,
     val showGlanceInfo: Boolean,
+    val favoriteVisibility: Map<String, Boolean>,
 )
 
 /**
@@ -64,6 +67,9 @@ fun SettingsScreen(
     var homeAssistantToken by rememberSaveable { mutableStateOf(initialFields.homeAssistantToken) }
     var duolingoUsername by rememberSaveable { mutableStateOf(initialFields.duolingoUsername) }
     var showGlanceInfo by rememberSaveable { mutableStateOf(initialFields.showGlanceInfo) }
+    val favoriteVisibility = remember {
+        mutableStateMapOf<String, Boolean>().apply { putAll(initialFields.favoriteVisibility) }
+    }
 
     val context = LocalContext.current
     val healthConnectAvailable = remember { HealthConnectRepository.isAvailable(context) }
@@ -129,6 +135,31 @@ fun SettingsScreen(
         }
 
         SettingsSection(
+            title = "Favorites",
+            description = "Which favorites show on this device's main page. Per-device — a tablet and a phone can " +
+                "each show a different set.",
+        ) {
+            FavoritesRepository.FAVORITE_LABELS.forEach { label ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Switch(
+                        checked = favoriteVisibility[label] ?: true,
+                        onCheckedChange = { favoriteVisibility[label] = it },
+                    )
+                }
+            }
+        }
+
+        SettingsSection(
             title = "Health",
             description = "Sleep on the main page reads from Health Connect. Fitbit sleep only shows up here if " +
                 "the Fitbit app is set to sync sleep to Health Connect (Fitbit app → Health Connect settings).",
@@ -175,6 +206,7 @@ fun SettingsScreen(
                         homeAssistantToken = homeAssistantToken,
                         duolingoUsername = duolingoUsername,
                         showGlanceInfo = showGlanceInfo,
+                        favoriteVisibility = favoriteVisibility.toMap(),
                     ),
                 )
             },

@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,9 +94,30 @@ fun AppsPageScreen(
     val coroutineScope = rememberCoroutineScope()
     val allApps = remember { appListRepository.getLaunchableApps() }
     val favorites = remember(allApps) { FavoritesRepository.resolveFavorites(allApps) }
-    val showGlanceInfo = remember { settingsRepository.getShowGlanceInfo() }
+    var showGlanceInfo by remember { mutableStateOf(settingsRepository.getShowGlanceInfo()) }
+    var visibleFavorites by remember(favorites) {
+        mutableStateOf(favorites.filter { settingsRepository.isFavoriteVisible(it.label) })
+    }
     var showAllApps by rememberSaveable { mutableStateOf(false) }
     var autoFocusSearch by rememberSaveable { mutableStateOf(false) }
+
+    // Settings lives in a separate Activity, so toggling "Show glance info"
+    // or a favorite's visibility there and hitting Save never disposes this
+    // composable (MainActivity just pauses) — a plain `remember` read here
+    // would otherwise go stale until process death. Re-reading on every
+    // ON_RESUME is what actually picks up the change the moment this page
+    // is shown again, with no app restart.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, favorites) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                showGlanceInfo = settingsRepository.getShowGlanceInfo()
+                visibleFavorites = favorites.filter { settingsRepository.isFavoriteVisible(it.label) }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // Seeded from each repository's in-memory/disk cache so a page revisit
     // shows last-known values instantly; each LaunchedEffect below then
@@ -250,7 +275,7 @@ fun AppsPageScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                favorites.forEach { app ->
+                visibleFavorites.forEach { app ->
                     FavoriteRow(label = app.label, onClick = { appListRepository.launchApp(app.packageName) })
                 }
             }

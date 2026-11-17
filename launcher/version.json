@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "0.2.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.2.0/app-release.apk",
-  "notes": "Adds Obsidian and SongBook Pro favorites, and a Settings toggle to hide the glance info block."
+  "versionCode": 3,
+  "versionName": "0.3.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.3.0/app-release.apk",
+  "notes": "Adds per-favorite visibility toggles, fixes the glance info toggle not taking effect without a restart, and fixes Health Connect sleep permission grants never landing."
 }

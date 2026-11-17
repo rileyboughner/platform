@@ -34,6 +34,9 @@ object FavoritesRepository {
         FavoriteSpec("SongBook Pro", packages = listOf("com.songbookpro.songbookpro")),
     )
 
+    /** Favorite display labels in main-page order, for rendering one visibility toggle per favorite in Settings. */
+    val FAVORITE_LABELS: List<String> = FAVORITES.map { it.displayLabel }
+
     fun resolveFavorites(allApps: List<LauncherAppInfo>): List<LauncherAppInfo> {
         val byPackage = allApps.associateBy { it.packageName }
         return FAVORITES.mapNotNull { spec -> resolve(spec, allApps, byPackage) }

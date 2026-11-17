@@ -3,6 +3,7 @@ package dev.rileyboughner.launcher.settings
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import dev.rileyboughner.launcher.FavoritesRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
 
 /**
@@ -30,6 +31,9 @@ class SettingsActivity : ComponentActivity() {
                         homeAssistantToken = settingsRepository.getHomeAssistantToken() ?: "",
                         duolingoUsername = settingsRepository.getDuolingoUsername() ?: "",
                         showGlanceInfo = settingsRepository.getShowGlanceInfo(),
+                        favoriteVisibility = FavoritesRepository.FAVORITE_LABELS.associateWith { label ->
+                            settingsRepository.isFavoriteVisible(label)
+                        },
                     ),
                     onSave = { fields ->
                         settingsRepository.setTodoistToken(fields.todoistToken)
@@ -39,6 +43,9 @@ class SettingsActivity : ComponentActivity() {
                         settingsRepository.setHomeAssistantToken(fields.homeAssistantToken)
                         settingsRepository.setDuolingoUsername(fields.duolingoUsername)
                         settingsRepository.setShowGlanceInfo(fields.showGlanceInfo)
+                        fields.favoriteVisibility.forEach { (label, visible) ->
+                            settingsRepository.setFavoriteVisible(label, visible)
+                        }
                         finish()
                     },
                     onBack = { finish() },

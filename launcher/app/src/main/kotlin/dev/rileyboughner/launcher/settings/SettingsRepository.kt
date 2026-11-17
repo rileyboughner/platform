@@ -84,6 +84,18 @@ class SettingsRepository(context: Context) {
         prefs.edit().putBoolean(KEY_SHOW_GLANCE_INFO, show).apply()
     }
 
+    // Per-favorite main-page visibility, keyed by the favorite's display
+    // label (stable — see FavoritesRepository.FAVORITE_LABELS). Stored in
+    // this same per-device EncryptedSharedPreferences file, so each device
+    // (e.g. phone vs. tablet) keeps its own on/off choices with no sync.
+    fun isFavoriteVisible(label: String): Boolean = prefs.getBoolean(favoriteVisibilityKey(label), true)
+
+    fun setFavoriteVisible(label: String, visible: Boolean) {
+        prefs.edit().putBoolean(favoriteVisibilityKey(label), visible).apply()
+    }
+
+    private fun favoriteVisibilityKey(label: String) = "$KEY_FAVORITE_VISIBLE_PREFIX$label"
+
     companion object {
         private const val PREFS_FILE_NAME = "launcher_secure_settings"
         private const val KEY_TODOIST_TOKEN = "todoist_api_token"
@@ -93,6 +105,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_HOME_ASSISTANT_TOKEN = "home_assistant_token"
         private const val KEY_DUOLINGO_USERNAME = "duolingo_username"
         private const val KEY_SHOW_GLANCE_INFO = "show_glance_info"
+        private const val KEY_FAVORITE_VISIBLE_PREFIX = "favorite_visible_"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
         const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"
