@@ -20,7 +20,8 @@ import java.net.URL
  * the system installer via a FileProvider `content://` URI. Called from
  * the shared [UpdatePrompt] composable, hosted by both
  * [dev.rileyboughner.launcher.MainActivity] and
- * [dev.rileyboughner.launcher.TvMainActivity].
+ * [dev.rileyboughner.launcher.TvMainActivity], and from the manual update
+ * check in Settings.
  */
 object UpdateInstaller {
 
@@ -48,10 +49,25 @@ object UpdateInstaller {
         outFile
     }
 
+    /**
+     * Downloads the APK and hands it to the system installer. Returns true
+     * when the installer was launched, false when Android blocks the
+     * install because this app isn't allowed to install unknown apps yet
+     * (callers show the unknown-sources prompt in that case). Throws on
+     * download failure. Shared by [UpdatePrompt] and the manual update
+     * check in Settings so the install flow can't drift between the two
+     * entry points.
+     */
+    suspend fun downloadAndInstall(context: Context, apkUrl: String): Boolean {
+        val apkFile = downloadApk(context, apkUrl)
+        if (!canInstallPackages(context)) return false
+        context.startActivity(installIntent(context, apkFile))
+        return true
+    }
+
     /** Per-app "install unknown apps" grant — required alongside the manifest's REQUEST_INSTALL_PACKAGES permission. */
     fun canInstallPackages(context: Context): Boolean =
         context.packageManager.canRequestPackageInstalls()
-
     /** Sends Riley to the per-app "Allow from this source" toggle for this app specifically. */
     fun unknownSourcesSettingsIntent(context: Context): Intent =
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))

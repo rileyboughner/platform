@@ -28,6 +28,22 @@ class UpdateRepository(context: Context) {
         }
     }
 
+    /**
+     * Manual check from Settings: ignores any dismissed version (an
+     * explicit tap means "check anyway") and reports reachability instead
+     * of swallowing it, so the screen can say "couldn't reach GitHub"
+     * rather than wrongly claiming the app is up to date.
+     */
+    suspend fun checkForUpdateManual(currentVersionCode: Int): ManualUpdateCheckResult = withContext(Dispatchers.IO) {
+        try {
+            val info = UpdateApi.fetchVersionInfo()
+            if (info.versionCode > currentVersionCode) ManualUpdateCheckResult.Available(info)
+            else ManualUpdateCheckResult.UpToDate
+        } catch (e: Exception) {
+            ManualUpdateCheckResult.Unreachable
+        }
+    }
+
     fun dismiss(versionCode: Int) {
         prefs.edit().putInt(KEY_DISMISSED_VERSION_CODE, versionCode).apply()
     }
@@ -38,6 +54,18 @@ class UpdateRepository(context: Context) {
         private const val PREFS_FILE_NAME = "launcher_update_prefs"
         private const val KEY_DISMISSED_VERSION_CODE = "dismissed_version_code"
     }
+}
+
+/**
+ * Result of an explicit, user-tapped update check (Settings) — unlike
+ * [UpdateRepository.checkForUpdate], this distinguishes "up to date" from
+ * "couldn't reach GitHub", and never suppresses a version for having been
+ * dismissed with Later.
+ */
+sealed interface ManualUpdateCheckResult {
+    data class Available(val info: UpdateInfo) : ManualUpdateCheckResult
+    data object UpToDate : ManualUpdateCheckResult
+    data object Unreachable : ManualUpdateCheckResult
 }
 
 /**

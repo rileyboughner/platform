@@ -37,9 +37,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.rileyboughner.launcher.health.HealthConnectRepository
 import dev.rileyboughner.launcher.health.READ_SLEEP_PERMISSIONS
+import dev.rileyboughner.launcher.BuildConfig
 import dev.rileyboughner.launcher.theme.SYNCED_THEMES
 import dev.rileyboughner.launcher.ui.AppTextRow
 import dev.rileyboughner.launcher.ui.HairlineDivider
+import dev.rileyboughner.launcher.update.ManualUpdateCheckResult
 import kotlinx.coroutines.launch
 
 data class SettingsFields(
@@ -58,8 +60,9 @@ data class SettingsFields(
 /**
  * Settings, grouped into Main page (glance toggle + the main-page app
  * picker entry point), Accounts & services (Todoist, Jellyfin, Home
- * Assistant, Duolingo), and Permissions (Health Connect, screen time).
- * Riley generates/enters all the accounts & services values himself — this
+ * Assistant, Duolingo), Permissions (Health Connect, screen time), and
+ * Updates (installed version + a manual update check). Riley
+ * generates/enters all the accounts & services values himself — this
  * app never asks for one on his behalf and never hardcodes one (other than
  * the default Home Assistant/Jellyfin server URLs).
  */
@@ -69,6 +72,9 @@ fun SettingsScreen(
     onSave: (SettingsFields) -> Unit,
     onBack: () -> Unit,
     onOpenMainPageFavorites: () -> Unit,
+    manualChecking: Boolean,
+    manualCheckResult: ManualUpdateCheckResult?,
+    onCheckForUpdates: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var todoistToken by rememberSaveable { mutableStateOf(initialFields.todoistToken) }
@@ -288,6 +294,52 @@ fun SettingsScreen(
                 label = "Grant usage access",
                 onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
             )
+        }
+
+        SettingsSection(
+            title = "Updates",
+            description = "The launcher checks for updates on launch. Check here any time — a manual check works even for a version dismissed with Later.",
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Version",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            AppTextRow(
+                label = if (manualChecking) "Checking…" else "Check for updates",
+                onClick = { if (!manualChecking) onCheckForUpdates() },
+            )
+            when (manualCheckResult) {
+                is ManualUpdateCheckResult.UpToDate -> {
+                    Text(
+                        text = "You're up to date",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    )
+                }
+                is ManualUpdateCheckResult.Unreachable -> {
+                    Text(
+                        text = "Couldn't reach GitHub — check your connection and try again",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    )
+                }
+                else -> {}
+            }
         }
 
         HairlineDivider()

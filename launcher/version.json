@@ -1,6 +1,6 @@
 {
-  "versionCode": 12,
-  "versionName": "0.12.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.12.0/app-release.apk",
-  "notes": "Theme sync actually works now: the app can finally reach the hub over plain HTTP on your LAN and tailnet. The TV joins in too, with the synced wallpaper as its home background and the synced theme accent."
+  "versionCode": 13,
+  "versionName": "0.13.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.13.0/app-release.apk",
+  "notes": "Settings now shows the installed version and has a Check for updates button that works even for a version dismissed with Later."
 }

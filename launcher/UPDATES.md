@@ -95,6 +95,19 @@ source" grant as the phone (see "Install permission flow" below); without
 it, tapping Update opens the system settings page for the grant instead of
 installing.
 
+## Manual check (Settings)
+
+Settings has an Updates section showing the installed version
+(`VERSION_NAME (VERSION_CODE)`) and a "Check for updates" row. It calls
+`UpdateRepository.checkForUpdateManual()`, which ignores any version
+dismissed with Later (an explicit tap means "check anyway") and
+distinguishes "up to date" from "couldn't reach GitHub". An available
+update shows the same `UpdatePromptDialog` the launch-time prompt uses,
+with the same download/install flow (`UpdateInstaller.downloadAndInstall`,
+shared so the two entry points can't drift). There is no Settings screen
+on the TV, so the manual check is phone/tablet-only; the TV only ever
+checks on launch.
+
 ## Install permission flow
 
 Android requires `REQUEST_INSTALL_PACKAGES` and, per-app, "Allow from this

@@ -40,9 +40,7 @@ fun UpdatePrompt(updateRepository: UpdateRepository) {
                 downloading = true
                 scope.launch {
                     try {
-                        val apkFile = UpdateInstaller.downloadApk(context, info.apkUrl)
-                        if (UpdateInstaller.canInstallPackages(context)) {
-                            context.startActivity(UpdateInstaller.installIntent(context, apkFile))
+                        if (UpdateInstaller.downloadAndInstall(context, info.apkUrl)) {
                             updateInfo = null
                         } else {
                             showUnknownSourcesPrompt = true
