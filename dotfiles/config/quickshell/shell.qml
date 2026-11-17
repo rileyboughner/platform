@@ -179,6 +179,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         calendarPopup.visible = false
         themePopup.visible = false
         sidePanel.visible = false
+        todoistPanel.visible = false
 
         target.visible = !wasVisible
     }
@@ -638,6 +639,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(sidePanel)
+        }
+    }
+
+    IpcHandler {
+        target: "todoist"
+
+        function toggle(): void {
+            root.togglePopup(todoistPanel)
         }
     }
 
@@ -2810,6 +2819,336 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                                 model: sidePanel.bedroomScenes
                                 delegate: sceneButtonComponent
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // Todoist Panel (today + overdue tasks)
+    // ─────────────────────────────────────────────
+
+    PanelWindow {
+        id: todoistPanel
+
+        property var tasksList: []
+        property bool tasksLoading: true
+        property string tasksError: ""
+
+        function fetchTasks() {
+            todoistTasksProcess.running = true
+        }
+
+        function completeTask(id) {
+            todoistCompleteProcess.command = ["todoist-tasks", "complete", id]
+            todoistCompleteProcess.running = true
+        }
+
+        // has_time tasks carry a full ISO datetime; date-only tasks are
+        // just "Today" / "Overdue" since there's no time to show.
+        function formatDue(task) {
+            if (task.has_time) {
+                const d = new Date(task.due)
+                const label = isNaN(d.getTime()) ? task.due : Qt.formatDateTime(d, "h:mm AP")
+                return task.overdue ? ("Overdue " + label) : label
+            }
+            return task.overdue ? "Overdue" : "Today"
+        }
+
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.namespace: "todoist-panel"
+
+        anchors.top: true
+        anchors.bottom: true
+        anchors.right: true
+
+        implicitWidth: 380
+        margins.top: root.visible ? root.implicitHeight : 0
+
+        color: root.colBg
+        visible: false
+
+        onVisibleChanged: {
+            if (visible) {
+                todoistPanel.tasksError = ""
+                todoistPanel.tasksLoading = true
+                todoistPanel.fetchTasks()
+            }
+        }
+
+        Process {
+            id: todoistTasksProcess
+
+            command: ["todoist-tasks", "tasks"]
+
+            stdout: StdioCollector {
+                id: todoistTasksStdout
+            }
+            stderr: StdioCollector {
+                id: todoistTasksStderr
+            }
+
+            onExited: (exitCode) => {
+                todoistPanel.tasksLoading = false
+                if (exitCode === 0) {
+                    try {
+                        todoistPanel.tasksList = JSON.parse(todoistTasksStdout.text)
+                        todoistPanel.tasksError = ""
+                    } catch (error) {
+                        todoistPanel.tasksError = "Failed to parse tasks"
+                    }
+                } else {
+                    const firstLine = todoistTasksStderr.text.trim().split("\n")[0]
+                    todoistPanel.tasksError = firstLine || "todoist-tasks failed"
+                }
+            }
+        }
+
+        Process {
+            id: todoistCompleteProcess
+
+            stderr: StdioCollector {
+                id: todoistCompleteStderr
+            }
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) {
+                    const firstLine = todoistCompleteStderr.text.trim().split("\n")[0]
+                    todoistPanel.tasksError = firstLine || "todoist-tasks complete failed"
+                }
+                todoistPanel.fetchTasks()
+            }
+        }
+
+        Component {
+            id: todoistTaskRowComponent
+
+            Rectangle {
+                id: taskRow
+
+                required property var modelData
+
+                width: parent.width
+                height: taskRowLayout.implicitHeight + 10
+
+                radius: 6
+                color: taskRowArea.containsMouse
+                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                    : "transparent"
+
+                MouseArea {
+                    id: taskRowArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    onClicked: todoistPanel.completeTask(taskRow.modelData.id)
+
+                    ColumnLayout {
+                        id: taskRowLayout
+
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+
+                        spacing: 2
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Text {
+                                text: "○"
+                                color: taskRow.modelData.overdue ? root.colRed : root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+
+                                text: taskRow.modelData.content
+                                elide: Text.ElideRight
+
+                                color: root.colFg
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 1
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Text {
+                                Layout.fillWidth: true
+
+                                text: taskRow.modelData.project
+                                elide: Text.ElideRight
+
+                                color: root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 2
+                                }
+                            }
+
+                            Text {
+                                text: todoistPanel.formatDue(taskRow.modelData)
+
+                                color: taskRow.modelData.overdue ? root.colRed : root.colAccent
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 2
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Chrome: thin left border matching the bar-popup borders ----
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: root.colMuted
+            opacity: 0.4
+        }
+
+        ColumnLayout {
+            id: todoistPanelLayout
+
+            anchors.fill: parent
+            anchors.margins: 8
+
+            spacing: 8
+
+            Flickable {
+                id: tasksFlick
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                contentWidth: width
+                contentHeight: tasksContent.implicitHeight
+                clip: true
+
+                Column {
+                    id: tasksContent
+
+                    width: tasksFlick.width
+                    spacing: 6
+
+                    RowLayout {
+                        width: tasksContent.width
+                        spacing: 8
+
+                        Text {
+                            text: "Tasks"
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                                bold: true
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+
+                            visible: todoistPanel.tasksError.length > 0
+                            elide: Text.ElideRight
+
+                            text: todoistPanel.tasksError
+                            color: root.colRed
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 2
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            visible: todoistPanel.tasksError.length === 0
+                        }
+
+                        MouseArea {
+                            id: refreshArea
+
+                            implicitWidth: refreshText.implicitWidth
+                            implicitHeight: refreshText.implicitHeight
+                            hoverEnabled: true
+
+                            onClicked: todoistPanel.fetchTasks()
+
+                            Text {
+                                id: refreshText
+
+                                text: "⟳"
+                                color: refreshArea.containsMouse ? root.colFg : root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize
+                                    bold: true
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: todoistPanel.tasksLoading
+                        text: "Loading…"
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Text {
+                        visible: !todoistPanel.tasksLoading
+                            && todoistPanel.tasksList.length === 0
+                            && todoistPanel.tasksError.length === 0
+
+                        text: "Nothing due today or overdue."
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                        }
+                    }
+
+                    Column {
+                        visible: !todoistPanel.tasksLoading
+
+                        width: tasksContent.width
+                        spacing: 4
+
+                        Repeater {
+                            model: todoistPanel.tasksList
+                            delegate: todoistTaskRowComponent
                         }
                     }
                 }

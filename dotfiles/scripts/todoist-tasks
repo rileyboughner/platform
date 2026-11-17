@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN_FILE="/run/agenix/todoist-token"
+API="https://api.todoist.com/api/v1"
+
+die() {
+    echo "todoist-tasks: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: todoist-tasks <command> [args]
+
+Commands:
+  tasks           Print JSON array of today's + overdue tasks
+  complete <id>   Mark a task complete
+EOF
+}
+
+load_token() {
+    [ -f "$TOKEN_FILE" ] || die "no token at $TOKEN_FILE"
+    TOKEN=$(<"$TOKEN_FILE")
+    [ -n "$TOKEN" ] || die "token file at $TOKEN_FILE is empty"
+}
+
+# Same approach as dotfiles/scripts/todo: the `filter` query param on
+# GET /tasks isn't honored by the API, so pull everything (limit=200 per
+# page) and filter/sort client-side.
+fetch_all_tasks() {
+    local cursor="" page next
+    while true; do
+        if [ -z "$cursor" ]; then
+            page=$(curl -fsS -G "$API/tasks" -H "Authorization: Bearer $TOKEN" \
+                --data-urlencode "limit=200")
+        else
+            page=$(curl -fsS -G "$API/tasks" -H "Authorization: Bearer $TOKEN" \
+                --data-urlencode "limit=200" --data-urlencode "cursor=$cursor")
+        fi
+        jq -c '.results[]' <<<"$page"
+        next=$(jq -r '.next_cursor' <<<"$page")
+        [ "$next" != "null" ] || break
+        cursor="$next"
+    done
+}
+
+fetch_all_projects() {
+    local cursor="" page next
+    while true; do
+        if [ -z "$cursor" ]; then
+            page=$(curl -fsS -G "$API/projects" -H "Authorization: Bearer $TOKEN" \
+                --data-urlencode "limit=200")
+        else
+            page=$(curl -fsS -G "$API/projects" -H "Authorization: Bearer $TOKEN" \
+                --data-urlencode "limit=200" --data-urlencode "cursor=$cursor")
+        fi
+        jq -c '.results[]' <<<"$page"
+        next=$(jq -r '.next_cursor' <<<"$page")
+        [ "$next" != "null" ] || break
+        cursor="$next"
+    done
+}
+
+# Prints a JSON array of tasks due today or overdue, sorted chronologically,
+# each with id/content/project/due/has_time/overdue -- display formatting of
+# `due` is left to the caller (same split as the todayEventsProcess pattern
+# in shell.qml).
+cmd_tasks() {
+    load_token
+    local today projects_json tasks_json
+    today=$(date +%F)
+    projects_json=$(fetch_all_projects | jq -s 'map({(.id): .name}) | add // {}')
+    tasks_json=$(fetch_all_tasks | jq -s .)
+
+    jq -n --arg today "$today" --argjson projects "$projects_json" --argjson tasks "$tasks_json" '
+        def key: (.due.date // ((.due.datetime // "")[0:10]));
+        $tasks
+        | map(select(.due != null and key != "" and (key <= $today)))
+        | sort_by(.due.datetime // .due.date // "")
+        | map({
+            id: .id,
+            content: .content,
+            project: ($projects[.project_id] // "Inbox"),
+            due: (.due.datetime // .due.date // ""),
+            has_time: ((.due.datetime // "") != ""),
+            overdue: (key < $today)
+          })
+    '
+}
+
+cmd_complete() {
+    local id="${1:-}"
+    [ -n "$id" ] || { usage; exit 1; }
+    load_token
+    curl -fsS -o /dev/null -X POST "$API/tasks/$id/close" \
+        -H "Authorization: Bearer $TOKEN" || die "complete failed for task $id"
+}
+
+case "${1:-}" in
+    tasks)
+        shift
+        cmd_tasks "$@"
+        ;;
+    complete)
+        shift
+        cmd_complete "$@"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac

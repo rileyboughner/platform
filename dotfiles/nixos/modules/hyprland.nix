@@ -68,6 +68,10 @@
       install -Dm755 ${../../scripts/ha-lights} $out/bin/ha-lights
     '')
 
+    (pkgs.runCommand "todoist-tasks" { } ''
+      install -Dm755 ${../../scripts/todoist-tasks} $out/bin/todoist-tasks
+    '')
+
     (pkgs.makeDesktopItem {
       name = "vm-cyber-defence";
       desktopName = "cyber-defence (VM)";

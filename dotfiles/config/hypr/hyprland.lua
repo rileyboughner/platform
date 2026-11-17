@@ -378,7 +378,7 @@ hl.bind(mainMod .. " + ALT + N", hl.dsp.exec_cmd("quickshell ipc call sidepanel 
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("pypr toggle zoho"))
 hl.bind(mainMod .. " + ALT + M", hl.dsp.exec_cmd("pypr toggle outlook"))
 
-hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("pypr toggle todo"))
+hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("quickshell ipc call todoist toggle"))
 hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("pypr toggle calendar"))
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("pypr toggle messages"))
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pypr toggle dashboard"))

@@ -53,14 +53,6 @@ animation = ""
 process_tracking = false
 lazy = true
 
-[scratchpads.todo]
-command = "kitty --class kitty-todo -e $HOME/.platform/dotfiles/scripts/todo tui"
-class = "kitty-todo"
-size = "92% 88%"
-position = "4% 40px"
-animation = ""
-lazy = false
-
 [scratchpads.calendar]
 command = "vivaldi --app=https://calendar.google.com"
 class = "vivaldi-calendar.google.com__-Default"
