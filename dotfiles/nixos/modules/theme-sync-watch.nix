@@ -29,7 +29,15 @@ in
     after = [ "network-online.target" ];
     wantedBy = [ "default.target" ];
     serviceConfig = {
-      ExecStart = "${watch}/bin/theme-sync-watch";
+      # systemd user services start with a minimal PATH that lacks even
+      # bash, so the watcher (#!/usr/bin/env bash) dies instantly with
+      # exit 127 -- and the theme-set/set-wallpaper scripts it shells
+      # out to assume the interactive login PATH (wal, hyprctl, jq,
+      # ...). Run it through a shell that sources the generated
+      # /etc/profile first: that reproduces exactly the PATH an
+      # interactive shell gets, with no user rc files involved, so the
+      # watcher keeps working as the theme scripts evolve.
+      ExecStart = "${pkgs.bash}/bin/bash -c 'source /etc/profile; exec ${watch}/bin/theme-sync-watch'";
       Restart = "always";
       RestartSec = 5;
     };
