@@ -57,19 +57,20 @@ import java.time.format.DateTimeFormatter
  * rather than full posters. "All apps" and Settings stay as plain text rows
  * beneath both tile rows, same as before the redesign.
  *
- * Weave and the movie wheel have no installed Android app, so they open as
- * an in-launcher [TvWebViewScreen] instead of a launch intent — see that
- * file for why a WebView is used here over handing off to a browser.
+ * Weave has no installed Android app, so it opens as an in-launcher
+ * [TvWebViewScreen] instead of a launch intent — see that file for why a
+ * WebView is used here over handing off to a browser. The movie wheel is a
+ * TV-native screen instead ([TvMovieWheelScreen]) — see that file for why a
+ * WebView wasn't reused there.
  *
- * The Dashboard, Home Assistant, Calendar, and Todo screens reuse the
- * phone's screens unmodified (see [TvSubScreen]) — only their framing (a
- * back row above, initial D-pad focus) is TV-specific. "All apps" is TV-only
- * code ([TvAllAppsScreen]).
+ * The Dashboard, Calendar, and Todo screens reuse the phone's screens
+ * unmodified (see [TvSubScreen]) — only their framing (a back row above,
+ * initial D-pad focus) is TV-specific. Home Assistant and "All apps" are
+ * TV-only code ([TvHomeAssistantScreen], [TvAllAppsScreen]).
  */
-private enum class TvDestination { HOME, ALL_APPS, DASHBOARD, HOME_ASSISTANT, CALENDAR, TODO, WEB_VIEW }
+private enum class TvDestination { HOME, ALL_APPS, DASHBOARD, HOME_ASSISTANT, CALENDAR, TODO, WEB_VIEW, MOVIE_WHEEL }
 
 private const val WEAVE_URL = "https://weave.rileyboughner.dev"
-private const val MOVIE_WHEEL_URL = "https://movies.rileyboughner.dev"
 
 @Composable
 fun TvHomeScreen(
@@ -102,6 +103,7 @@ fun TvHomeScreen(
                 webViewUrl = url
                 destination = TvDestination.WEB_VIEW
             },
+            onOpenMovieWheel = { destination = TvDestination.MOVIE_WHEEL },
             onOpenSettings = onOpenSettings,
             modifier = modifier,
         )
@@ -121,9 +123,11 @@ fun TvHomeScreen(
             )
         }
 
-        TvDestination.HOME_ASSISTANT -> TvSubScreen(onBack = { destination = TvDestination.HOME }, modifier = modifier) {
-            HomeAssistantScreen(homeAssistantRepository, modifier = Modifier.fillMaxSize())
-        }
+        TvDestination.HOME_ASSISTANT -> TvHomeAssistantScreen(
+            homeAssistantRepository = homeAssistantRepository,
+            onBack = { destination = TvDestination.HOME },
+            modifier = modifier,
+        )
 
         TvDestination.CALENDAR -> TvSubScreen(onBack = { destination = TvDestination.HOME }, modifier = modifier) {
             CalendarScreen(
@@ -145,6 +149,11 @@ fun TvHomeScreen(
             onBack = { destination = TvDestination.HOME },
             modifier = modifier,
         )
+
+        TvDestination.MOVIE_WHEEL -> TvMovieWheelScreen(
+            onBack = { destination = TvDestination.HOME },
+            modifier = modifier,
+        )
     }
 }
 
@@ -158,6 +167,7 @@ private fun TvHomeContent(
     onOpenCalendar: () -> Unit,
     onOpenTodo: () -> Unit,
     onOpenWebTarget: (title: String, url: String) -> Unit,
+    onOpenMovieWheel: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -207,7 +217,7 @@ private fun TvHomeContent(
                 }
                 TvTile(
                     label = "Movie wheel",
-                    onClick = { onOpenWebTarget("the movie wheel", MOVIE_WHEEL_URL) },
+                    onClick = onOpenMovieWheel,
                 ) {
                     TvTileResourceArtwork(painterResource(R.drawable.tv_tile_movie_wheel), contentDescription = "Movie wheel")
                 }

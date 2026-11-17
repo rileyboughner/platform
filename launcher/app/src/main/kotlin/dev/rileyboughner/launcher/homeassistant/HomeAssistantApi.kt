@@ -40,11 +40,13 @@ internal object HomeAssistantApi {
                 val state = byEntityId[entityId] ?: return@mapNotNull null
                 val attributes = state.optJSONObject("attributes") ?: JSONObject()
                 val rawBrightness = if (attributes.has("brightness")) attributes.optInt("brightness", -1) else -1
+                val rawState = state.optString("state")
                 HomeAssistantLight(
                     entityId = entityId,
                     friendlyName = attributes.optString("friendly_name", humanize(entityId)),
-                    isOn = state.optString("state") == "on",
+                    isOn = rawState == "on",
                     brightnessPercent = if (rawBrightness >= 0) ((rawBrightness * 100) / 255) else null,
+                    isAvailable = rawState != "unavailable" && rawState != "unknown",
                 )
             }
 
