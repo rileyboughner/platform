@@ -114,6 +114,24 @@
 	          command = "/run/current-system/sw/bin/shutdown *";
 	          options = [ "NOPASSWD" ];
 	        }
+	        {
+	          # `tailscale up` needs root (daemon socket access); without
+	          # this, joining the tailnet from a headless session needs an
+	          # interactive password. sudoers matches literally, so bare
+	          # `up` and `up` with flags need separate entries.
+	          command = "/run/current-system/sw/bin/tailscale up";
+	          options = [ "NOPASSWD" ];
+	        }
+	        {
+	          command = "/run/current-system/sw/bin/tailscale up *";
+	          options = [ "NOPASSWD" ];
+	        }
+	        {
+	          # Lets `tailscale set --operator=$USER` run once so later
+	          # tailscale commands do not need sudo at all.
+	          command = "/run/current-system/sw/bin/tailscale set --operator=*";
+	          options = [ "NOPASSWD" ];
+	        }
 	      ];
 	    }
 	  ];
