@@ -8,8 +8,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.settings.SettingsRepository
+import dev.rileyboughner.launcher.settings.TokenSyncApi
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
 import dev.rileyboughner.launcher.theme.ThemeSyncPoller
 import dev.rileyboughner.launcher.theme.ThemeSyncRepository
@@ -17,6 +19,7 @@ import dev.rileyboughner.launcher.theme.accentColorFor
 import dev.rileyboughner.launcher.ui.TvHomeScreen
 import dev.rileyboughner.launcher.update.UpdatePrompt
 import dev.rileyboughner.launcher.update.UpdateRepository
+import kotlinx.coroutines.launch
 
 /**
  * Google TV / Android TV entry point. Declares the LEANBACK_LAUNCHER
@@ -52,6 +55,17 @@ class TvMainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val settingsRepository = SettingsRepository(applicationContext)
         settingsRepository.migrateBakedHomeAssistantTokenIfNeeded()
+        // The TV has no Settings screen, so it pulls its Home Assistant
+        // token from the server on every launch instead of waiting for a
+        // manual sync: a missing/blank token leaves the stored one alone,
+        // so an unreachable server never wipes a working token, and a
+        // rotated server token propagates on its own.
+        lifecycleScope.launch {
+            TokenSyncApi.fetchTokens()
+                ?.homeAssistantToken
+                ?.takeIf { it.isNotBlank() }
+                ?.let { settingsRepository.setHomeAssistantToken(it) }
+        }
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         updateRepository = UpdateRepository(applicationContext)
         themeSyncRepository = ThemeSyncRepository(applicationContext, settingsRepository)

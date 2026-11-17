@@ -1,6 +1,6 @@
 {
-  "versionCode": 14,
-  "versionName": "0.14.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.14.0/app-release.apk",
-  "notes": "The page dots at the bottom no longer sit on a black bar — they float over the wallpaper. Settings also shows the installed version with a Check for updates button."
+  "versionCode": 15,
+  "versionName": "0.15.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.15.0/app-release.apk",
+  "notes": "Sync tokens from server in Settings (TV pulls its Home Assistant token on launch). TV home: Apps focus scrolls back to the clock, light tiles show bulb icons, tile labels stay visible, and the Jellyfin banner fills its tile."
 }

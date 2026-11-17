@@ -31,8 +31,8 @@ android {
         applicationId = "dev.rileyboughner.launcher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "0.14.0"
+        versionCode = 15
+        versionName = "0.15.0"
 
         // Compiled-in Settings defaults for Riley's own API keys, so he
         // doesn't have to type them into the Settings screen by hand. The
@@ -120,6 +120,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
 
     // Google TV / Android TV (Leanback) UI — Compose for TV
     implementation("androidx.tv:tv-foundation:1.0.0-alpha10")

@@ -97,6 +97,7 @@
         ./modules/youtube-secret.nix
         ./modules/server-remote-access.nix
         ./modules/theme-sync-hub.nix
+        ./modules/launcher-token-server.nix
       ];
     };
   };

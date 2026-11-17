@@ -105,6 +105,12 @@ fun TvHomeScreen(
     val steamTile = remember { resolveLeanbackTile(context, "com.valvesoftware.steamlink", "Steam Link") }
     val firstFocusRequester = remember { FocusRequester() }
     val wallpaperImage = remember(wallpaperBitmap) { wallpaperBitmap?.asImageBitmap() }
+    // Hoisted (not an inline rememberScrollState) so focusing any Apps-row
+    // tile can scroll the page all the way back to the top: the default
+    // bring-into-view only scrolls the minimum to reveal the tile, which
+    // left the clock scrolled off-screen (v15 TV feedback).
+    val verticalScrollState = rememberScrollState()
+    val scrollToTop: () -> Unit = { scope.launch { verticalScrollState.animateScrollTo(0) } }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color.Black)) {
         if (wallpaperImage != null) {
@@ -126,7 +132,7 @@ fun TvHomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(verticalScrollState)
                 .padding(horizontal = horizontalMargin, vertical = verticalMargin),
         ) {
             TvClockHeader()
@@ -142,6 +148,7 @@ fun TvHomeScreen(
                         label = jellyfinTile.label,
                         onClick = { context.startActivity(jellyfinTile.launchIntent) },
                         focusRequester = firstFocusRequester,
+                        onFocus = scrollToTop,
                     ) {
                         TvTileDrawableArtwork(jellyfinTile.artwork, contentDescription = jellyfinTile.label)
                     }
@@ -151,6 +158,7 @@ fun TvHomeScreen(
                         label = youtubeTile.label,
                         onClick = { context.startActivity(youtubeTile.launchIntent) },
                         focusRequester = if (jellyfinTile == null) firstFocusRequester else null,
+                        onFocus = scrollToTop,
                     ) {
                         TvTileDrawableArtwork(youtubeTile.artwork, contentDescription = youtubeTile.label)
                     }
@@ -160,6 +168,7 @@ fun TvHomeScreen(
                         label = steamTile.label,
                         onClick = { context.startActivity(steamTile.launchIntent) },
                         focusRequester = if (jellyfinTile == null && youtubeTile == null) firstFocusRequester else null,
+                        onFocus = scrollToTop,
                     ) {
                         TvTileDrawableArtwork(steamTile.artwork, contentDescription = steamTile.label)
                     }
@@ -170,6 +179,7 @@ fun TvHomeScreen(
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WHEEL_URL)))
                     },
                     focusRequester = if (jellyfinTile == null && youtubeTile == null && steamTile == null) firstFocusRequester else null,
+                    onFocus = scrollToTop,
                 ) {
                     TvTileResourceArtwork(painterResource(R.drawable.tv_tile_movie_wheel), contentDescription = "Movie wheel")
                 }

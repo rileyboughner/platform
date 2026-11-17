@@ -121,6 +121,7 @@ class SettingsActivity : ComponentActivity() {
                                 }
                             }
                         },
+                        fetchServerTokens = { TokenSyncApi.fetchTokens() },
                     )
                 }
 

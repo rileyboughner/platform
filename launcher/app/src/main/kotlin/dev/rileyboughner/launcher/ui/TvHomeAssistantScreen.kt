@@ -12,8 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -221,10 +226,13 @@ internal fun LightTile(
     modifier: Modifier = Modifier,
 ) {
     val canAdjustBrightness = light.isAvailable && light.isOn && light.brightnessPercent != null
-    val glyph = when {
-        !light.isAvailable -> "⊘"
-        light.isOn -> "●"
-        else -> "○"
+    // Bulb icon instead of the old ●/○/⊘ text glyphs (v15): filled when
+    // on, outlined when off, dimmed outline when unreachable.
+    val bulbIcon = if (light.isAvailable && light.isOn) Icons.Filled.Lightbulb else Icons.Outlined.Lightbulb
+    val bulbTint = when {
+        !light.isAvailable -> Color.White.copy(alpha = 0.4f)
+        light.isOn -> Color.White
+        else -> Color.White.copy(alpha = 0.6f)
     }
     val statusText = when {
         !light.isAvailable -> "Unavailable"
@@ -249,7 +257,12 @@ internal fun LightTile(
         },
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = glyph, style = MaterialTheme.typography.displaySmall, color = Color.White)
+            Icon(
+                imageVector = bulbIcon,
+                contentDescription = null,
+                tint = bulbTint,
+                modifier = Modifier.size(48.dp),
+            )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = statusText,

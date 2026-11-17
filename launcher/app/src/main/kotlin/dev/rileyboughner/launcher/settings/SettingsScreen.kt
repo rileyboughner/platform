@@ -75,6 +75,7 @@ fun SettingsScreen(
     manualChecking: Boolean,
     manualCheckResult: ManualUpdateCheckResult?,
     onCheckForUpdates: () -> Unit,
+    fetchServerTokens: suspend () -> TokenSyncApi.Tokens?,
     modifier: Modifier = Modifier,
 ) {
     var todoistToken by rememberSaveable { mutableStateOf(initialFields.todoistToken) }
@@ -87,6 +88,8 @@ fun SettingsScreen(
     var syncEnabled by rememberSaveable { mutableStateOf(initialFields.syncEnabled) }
     var syncTheme by rememberSaveable { mutableStateOf(initialFields.syncTheme) }
     var syncMode by rememberSaveable { mutableStateOf(initialFields.syncMode) }
+    var tokenSyncStatus by remember { mutableStateOf<String?>(null) }
+    var syncingTokens by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -236,6 +239,42 @@ fun SettingsScreen(
                 value = duolingoUsername,
                 onValueChange = { duolingoUsername = it },
             )
+
+            SubSectionLabel(text = "Tokens can also be pulled from the server (LAN or Tailscale) instead of pasted — fills the fields above, tap Save to keep them.")
+            AppTextRow(
+                label = if (syncingTokens) "Syncing…" else "Sync tokens from server",
+                onClick = {
+                    if (!syncingTokens) {
+                        syncingTokens = true
+                        tokenSyncStatus = null
+                        coroutineScope.launch {
+                            val result = runCatching { fetchServerTokens() }.getOrNull()
+                            syncingTokens = false
+                            if (result == null) {
+                                tokenSyncStatus = "Couldn't reach the server — check WiFi/Tailscale and try again"
+                                return@launch
+                            }
+                            var filled = 0
+                            result.homeAssistantToken?.let { homeAssistantToken = it; filled++ }
+                            result.todoistToken?.let { todoistToken = it; filled++ }
+                            result.jellyfinApiKey?.let { jellyfinApiKey = it; filled++ }
+                            tokenSyncStatus = when {
+                                filled == 3 -> "Synced all 3 tokens — tap Save to keep them"
+                                filled > 0 -> "Synced $filled of 3 tokens (the rest aren't on the server yet) — tap Save to keep them"
+                                else -> "No tokens on the server yet"
+                            }
+                        }
+                    }
+                },
+            )
+            tokenSyncStatus?.let { status ->
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+            }
         }
 
         SettingsSection(
