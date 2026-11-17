@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
+import dev.rileyboughner.launcher.BuildConfig
 import dev.rileyboughner.launcher.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,6 +61,14 @@ class ThemeSyncRepository(
      * unreachable, hub has no state yet, or the hub's state is no newer
      * than what's already applied) -- callers should keep whatever accent
      * they're already showing in that case.
+     *
+     * Two guards keep a failed wallpaper apply from sticking: the persisted
+     * state only advances when the wallpaper actually landed (a failed
+     * apply retries on the next cycle instead of being marked done), and
+     * the current wallpaper is re-asserted once after an app update, which
+     * un-sticks phones whose older version already marked a never-applied
+     * state as done (2026-11-17: the phone downloaded the flowers wallpaper
+     * twice but kept showing the old one).
      */
     suspend fun poll(): String? = withContext(Dispatchers.IO) {
         if (!settingsRepository.getSyncEnabled()) return@withContext null
@@ -67,13 +76,18 @@ class ThemeSyncRepository(
         val path = statePath(resolveMode(baseUrl))
         val doc = ThemeSyncApi.getState(baseUrl, path)?.let { ThemeSyncStateDoc.fromJsonOrNull(it) }
             ?: return@withContext null
-        if (doc.updatedAt <= settingsRepository.getSyncLastAppliedUpdatedAt()) return@withContext null
+        val forceApply = settingsRepository.getSyncLastAppliedVersionCode() != BuildConfig.VERSION_CODE
+        if (!forceApply && doc.updatedAt <= settingsRepository.getSyncLastAppliedUpdatedAt()) return@withContext null
 
-        applyWallpaperIfChanged(baseUrl, doc)
-        settingsRepository.setSyncLastAppliedUpdatedAt(doc.updatedAt)
-        settingsRepository.setSyncLastStateJson(doc.toJson().toString())
+        val applied = applyWallpaperIfChanged(baseUrl, doc, forceApply)
         val themeKey = if (doc.pinned) doc.theme else null
-        (themeKey ?: DEFAULT_SYNCED_THEME_KEY).also { settingsRepository.setSyncTheme(it) }
+        val key = (themeKey ?: DEFAULT_SYNCED_THEME_KEY).also { settingsRepository.setSyncTheme(it) }
+        if (applied) {
+            settingsRepository.setSyncLastAppliedUpdatedAt(doc.updatedAt)
+            settingsRepository.setSyncLastStateJson(doc.toJson().toString())
+            settingsRepository.setSyncLastAppliedVersionCode(BuildConfig.VERSION_CODE)
+        }
+        key
     }
 
     /**
@@ -173,12 +187,46 @@ class ThemeSyncRepository(
         settingsRepository.setSyncTheme(if (parsed.pinned) parsed.theme ?: DEFAULT_SYNCED_THEME_KEY else DEFAULT_SYNCED_THEME_KEY)
     }
 
-    /** Downloads and applies the hub's wallpaper blob only when its hash actually differs from what's already applied -- never re-downloads or re-applies a no-op. */
-    private fun applyWallpaperIfChanged(baseUrl: String, doc: ThemeSyncStateDoc) {
-        val bytes = downloadWallpaperBytes(baseUrl, doc) ?: return
-        val bitmap = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull() ?: return
-        runCatching { WallpaperManager.getInstance(context).setBitmap(bitmap) }
+    /**
+     * Downloads and applies the hub's wallpaper blob, downsampled to the
+     * size the system actually wants. Returns false when the wallpaper
+     * could not be applied (download, decode, or set failure) so the
+     * caller leaves the persisted state alone and the next poll cycle
+     * retries, instead of marking a state applied that never landed on
+     * screen. Returns true when there was nothing to do (blank or
+     * unchanged hash). [forceDownload] bypasses the unchanged-hash skip
+     * for the once-per-update re-apply, where the persisted hash already
+     * matches but the wallpaper may never have landed.
+     */
+    private fun applyWallpaperIfChanged(baseUrl: String, doc: ThemeSyncStateDoc, forceDownload: Boolean): Boolean {
+        val bytes = if (forceDownload && doc.wallpaperSha256.isNotBlank()) {
+            ThemeSyncApi.getBlob(baseUrl, doc.wallpaperSha256)
+        } else {
+            downloadWallpaperBytes(baseUrl, doc)
+        } ?: return true
+        val bitmap = decodeForWallpaper(bytes) ?: return false
+        return runCatching { WallpaperManager.getInstance(context).setBitmap(bitmap) }.isSuccess
     }
+
+    /**
+     * Decodes wallpaper bytes downsampled to at most the size the system
+     * wants for wallpapers ([WallpaperManager.getDesiredMinimumWidth] /
+     * Height), so a multi-megapixel photo isn't decoded at full size (a
+     * 5238x3492 image is a ~73MB bitmap) just to be scaled down by the
+     * system. Falls back to a 1920x1080 cap when the system reports no
+     * desired size. Null when the bytes don't decode.
+     */
+    private fun decodeForWallpaper(bytes: ByteArray): Bitmap? = runCatching {
+        val wallpaperManager = WallpaperManager.getInstance(context)
+        val maxWidth = wallpaperManager.desiredMinimumWidth.takeIf { it > 0 } ?: 1920
+        val maxHeight = wallpaperManager.desiredMinimumHeight.takeIf { it > 0 } ?: 1080
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > maxWidth || bounds.outHeight / sampleSize > maxHeight) sampleSize *= 2
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+    }.getOrNull()
 
     /** Downloads the hub's wallpaper blob only when its hash differs from the last state this device applied; null when blank, unchanged, or unreachable. Shared by [poll] (system wallpaper) and [pollTv] (drawn background). */
     private fun downloadWallpaperBytes(baseUrl: String, doc: ThemeSyncStateDoc): ByteArray? {

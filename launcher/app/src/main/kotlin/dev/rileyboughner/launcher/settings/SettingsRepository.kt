@@ -158,6 +158,18 @@ class SettingsRepository(context: Context) {
         prefs.edit().putLong(KEY_SYNC_LAST_APPLIED_AT, updatedAt).apply()
     }
 
+    // The app version that last successfully applied the hub's wallpaper.
+    // Lets poll() re-assert the current wallpaper once after an update, for
+    // the case where an older version marked a state applied even though
+    // the wallpaper never landed (silent decode/apply failure) — without
+    // this the phone stays stuck on the old wallpaper until the next hub
+    // change. 0 = never applied.
+    fun getSyncLastAppliedVersionCode(): Int = prefs.getInt(KEY_SYNC_LAST_APPLIED_VERSION, 0)
+
+    fun setSyncLastAppliedVersionCode(versionCode: Int) {
+        prefs.edit().putInt(KEY_SYNC_LAST_APPLIED_VERSION, versionCode).apply()
+    }
+
     // Per-favorite main-page visibility, keyed by the favorite's display
     // label (stable — see FavoritesRepository.FAVORITE_LABELS). Stored in
     // this same per-device EncryptedSharedPreferences file, so each device
@@ -239,6 +251,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_SYNC_MODE_CACHE_AT = "theme_sync_mode_cache_at"
         private const val KEY_SYNC_LAST_STATE_JSON = "theme_sync_last_state_json"
         private const val KEY_SYNC_LAST_APPLIED_AT = "theme_sync_last_applied_at"
+        private const val KEY_SYNC_LAST_APPLIED_VERSION = "theme_sync_last_applied_version"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
         const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"

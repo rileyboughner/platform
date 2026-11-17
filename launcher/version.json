@@ -1,6 +1,6 @@
 {
-  "versionCode": 16,
-  "versionName": "0.16.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.16.0/app-release.apk",
-  "notes": "TV theme sync: the TV now re-downloads the synced wallpaper when it turns on, instead of staying black until the next wallpaper change."
+  "versionCode": 17,
+  "versionName": "0.17.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.17.0/app-release.apk",
+  "notes": "Phone theme sync: wallpapers are downsampled before applying, a failed apply retries instead of getting stuck, and the current wallpaper is re-asserted once after updating."
 }
