@@ -108,6 +108,13 @@ Both entry points read colors from the Phase 1 Style Dictionary output in
 If the palette changes, it changes once in `theme/tokens.json`, rebuilds
 `theme/build/android/`, and both of the above pick it up automatically.
 
+## In-app updates
+
+`MainActivity` (phone/tablet only) checks `launcher/version.json` on
+launch and prompts Riley to update when a newer release exists — see
+[`UPDATES.md`](UPDATES.md) for the file schema, the versionCode scheme,
+and how to publish a release. `TvMainActivity` never runs this check.
+
 ## What's still a stub
 
 - **`JellyfinContinueWatchingRow`** — static placeholder text and a single

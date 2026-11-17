@@ -6,6 +6,14 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import dev.rileyboughner.launcher.calendar.CalendarRepository
@@ -18,6 +26,12 @@ import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
 import dev.rileyboughner.launcher.todoist.TodoistRepository
 import dev.rileyboughner.launcher.ui.LauncherPagerScreen
+import dev.rileyboughner.launcher.update.AllowUnknownSourcesDialog
+import dev.rileyboughner.launcher.update.UpdateInfo
+import dev.rileyboughner.launcher.update.UpdateInstaller
+import dev.rileyboughner.launcher.update.UpdatePromptDialog
+import dev.rileyboughner.launcher.update.UpdateRepository
+import kotlinx.coroutines.launch
 
 /**
  * Phone/tablet entry point. Declares the HOME + LAUNCHER intent filters in
@@ -37,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var homeAssistantRepository: HomeAssistantRepository
     private lateinit var dashboardRepository: DashboardRepository
     private lateinit var duolingoRepository: DuolingoRepository
+    private lateinit var updateRepository: UpdateRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +68,7 @@ class MainActivity : ComponentActivity() {
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         dashboardRepository = DashboardRepository()
         duolingoRepository = DuolingoRepository(applicationContext, settingsRepository)
+        updateRepository = UpdateRepository(applicationContext)
 
         setContent {
             MonoLauncherTheme {
@@ -66,6 +82,8 @@ class MainActivity : ComponentActivity() {
                     duolingoRepository = duolingoRepository,
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                 )
+
+                UpdatePrompt(updateRepository)
             }
         }
     }
@@ -93,5 +111,67 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) enableEdgeToEdge()
+    }
+}
+
+/**
+ * Checks for an update once per launch (silently, on a background
+ * dispatcher — see [UpdateRepository]) and renders the prompt/permission
+ * dialogs on top of the pager when one applies. Phone-only by construction:
+ * nothing in [dev.rileyboughner.launcher.TvMainActivity] calls this.
+ */
+@Composable
+private fun UpdatePrompt(updateRepository: UpdateRepository) {
+    val context = LocalContext.current
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var downloading by remember { mutableStateOf(false) }
+    var showUnknownSourcesPrompt by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        updateInfo = updateRepository.checkForUpdate(BuildConfig.VERSION_CODE)
+    }
+
+    updateInfo?.let { info ->
+        UpdatePromptDialog(
+            updateInfo = info,
+            downloading = downloading,
+            onUpdate = {
+                downloading = true
+                scope.launch {
+                    try {
+                        val apkFile = UpdateInstaller.downloadApk(context, info.apkUrl)
+                        if (UpdateInstaller.canInstallPackages(context)) {
+                            context.startActivity(UpdateInstaller.installIntent(context, apkFile))
+                            updateInfo = null
+                        } else {
+                            showUnknownSourcesPrompt = true
+                        }
+                    } catch (e: Exception) {
+                        // Download/install failed (offline mid-download, bad
+                        // asset, etc.) — drop the prompt silently rather than
+                        // nag or crash; it reappears next launch since this
+                        // version was never marked dismissed.
+                        updateInfo = null
+                    } finally {
+                        downloading = false
+                    }
+                }
+            },
+            onLater = {
+                updateRepository.dismiss(info.versionCode)
+                updateInfo = null
+            },
+        )
+    }
+
+    if (showUnknownSourcesPrompt) {
+        AllowUnknownSourcesDialog(
+            onOpenSettings = {
+                showUnknownSourcesPrompt = false
+                context.startActivity(UpdateInstaller.unknownSourcesSettingsIntent(context))
+            },
+            onDismiss = { showUnknownSourcesPrompt = false },
+        )
     }
 }

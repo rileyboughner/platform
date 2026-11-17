@@ -1,0 +1,75 @@
+# In-app updates
+
+Riley wants to be *prompted* for updates, not auto-updated and not using
+Obtainium. `MainActivity` (phone/tablet only — see below) fetches
+`launcher/version.json` from this public repo's `main` branch over HTTPS on
+every launch and compares `versionCode` against `BuildConfig.VERSION_CODE`.
+If the remote `versionCode` is higher, it shows an "Update available"
+prompt with two buttons: **Update** (downloads the APK and opens the system
+installer) and **Later** (dismisses; that exact `versionCode` won't prompt
+again, but a newer one will).
+
+There is no server-side component. The version file and the APK both live
+on GitHub (the version file in this repo, the APK as a GitHub Release
+asset).
+
+## `version.json`
+
+Path: `launcher/version.json` (this directory, next to this file).
+Fetched at: `https://raw.githubusercontent.com/rileyboughner/platform/main/launcher/version.json`.
+
+Fields:
+
+| field         | type   | meaning                                                             |
+|---------------|--------|----------------------------------------------------------------------|
+| `versionCode` | int    | Must match the `versionCode` baked into the release APK's manifest.  |
+| `versionName` | string | Human-readable version shown in the update prompt.                   |
+| `apkUrl`      | string | Direct URL to the GitHub Release asset for that build.               |
+| `notes`       | string | Short release notes shown in the update prompt. Optional, may be "". |
+
+The committed file currently matches the app's actual shipped version
+(`versionCode` 1, `versionName` "0.1.0-skeleton"), so installs never prompt
+until a real newer release is published. `apkUrl` in the committed file is
+a placeholder (no release has been cut yet) — it is never fetched while
+`versionCode` stays at 1.
+
+## versionCode scheme
+
+Plain incrementing integer, starting at 1 (the current skeleton build).
+Bump by exactly 1 for every release that should be installable as an
+update, in `launcher/app/build.gradle.kts` (`defaultConfig.versionCode`).
+Never reuse or decrease a versionCode, even if a release is later deleted
+or superseded — the comparison in `UpdateRepository` is a strict `>`.
+
+`versionName` stays human-readable (e.g. `0.2.0`) and does not need to be
+strictly semver, but should read sensibly in the update prompt.
+
+## Publishing a new release
+
+1. Bump `versionCode` and `versionName` in `launcher/app/build.gradle.kts`.
+2. Build the APK to ship (`./gradlew assembleRelease` or `assembleDebug`,
+   whichever this project is distributing).
+3. Create a GitHub Release on `rileyboughner/platform` (tag matching the
+   new `versionName`, e.g. `v0.2.0`) and upload the APK as a release asset.
+4. Copy that asset's download URL into `launcher/version.json`'s `apkUrl`,
+   and update `versionCode`, `versionName`, and `notes` to match.
+5. Commit and push `launcher/version.json` to `main`. Existing installs
+   pick it up on their next launch (allow a few minutes for
+   `raw.githubusercontent.com`'s CDN cache to refresh).
+
+## Where this runs
+
+The check, the prompt, and the download/install flow live entirely in
+`MainActivity` (phone/tablet). `TvMainActivity` never fetches
+`version.json`, never shows the prompt, and never downloads anything — see
+its kdoc. This is intentional: the TV build is handled separately.
+
+## Install permission flow
+
+Android requires `REQUEST_INSTALL_PACKAGES` and, per-app, "Allow from this
+source" before an `ACTION_VIEW` install intent will work. If that's not
+yet granted, the app sends Riley to
+`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES` for this app with a short
+explanation instead of silently failing. One install tap is still required
+after that — there's no way around that on a non-rooted, non-device-owner
+phone, and this app doesn't try to work around it.

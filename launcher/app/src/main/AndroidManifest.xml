@@ -9,6 +9,11 @@
     <!-- Todo page: Todoist REST API calls. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Phone main page: in-app update check + install (see launcher/UPDATES.md).
+         Still requires the per-app "Allow from this source" grant at runtime
+         (PackageManager.canRequestPackageInstalls), prompted for in-app. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Calendar page: read-only device calendar, requested at runtime. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
@@ -100,6 +105,19 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Hands the downloaded update APK (in app cache) to the system
+             installer as a content:// URI — see UpdateInstaller. Only ever
+             used from MainActivity's update flow. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

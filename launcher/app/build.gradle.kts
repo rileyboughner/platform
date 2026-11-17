@@ -133,4 +133,12 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // Update-check logic (UpdateApi JSON parsing + the versionCode
+    // comparison in UpdateRepository) — plain JVM unit tests, no
+    // Robolectric. org.json:json provides a real implementation of the
+    // org.json.* classes for the test classpath, since the android.jar
+    // Gradle substitutes for local unit tests only stubs those methods.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 }
