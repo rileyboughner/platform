@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "0.11.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.11.0/app-release.apk",
-  "notes": "TV home now prompts for updates like the phone does, and saves its Home Assistant token on first launch so self-updates keep working."
+  "versionCode": 12,
+  "versionName": "0.12.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.12.0/app-release.apk",
+  "notes": "Theme sync actually works now: the app can finally reach the hub over plain HTTP on your LAN and tailnet. The TV joins in too, with the synced wallpaper as its home background and the synced theme accent."
 }

@@ -1,11 +1,19 @@
 package dev.rileyboughner.launcher
 
+import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
+import dev.rileyboughner.launcher.theme.ThemeSyncPoller
+import dev.rileyboughner.launcher.theme.ThemeSyncRepository
+import dev.rileyboughner.launcher.theme.accentColorFor
 import dev.rileyboughner.launcher.ui.TvHomeScreen
 import dev.rileyboughner.launcher.update.UpdatePrompt
 import dev.rileyboughner.launcher.update.UpdateRepository
@@ -24,6 +32,11 @@ import dev.rileyboughner.launcher.update.UpdateRepository
  * the phone UI's Settings screen, but has no TV-side settings screen of its
  * own.
  *
+ * Theme sync runs here too ([ThemeSyncRepository.pollTv], always on — the
+ * TV has no settings toggle): the synced theme's accent tints
+ * [MonoLauncherTheme], and the synced wallpaper bitmap is drawn as the home
+ * screen's background behind the tiles.
+ *
  * It also hosts the shared update prompt ([UpdatePrompt]) so the TV
  * updates itself without ADB, and runs the one-time baked-token migration
  * ([SettingsRepository.migrateBakedHomeAssistantTokenIfNeeded]) so
@@ -33,6 +46,7 @@ class TvMainActivity : ComponentActivity() {
 
     private lateinit var homeAssistantRepository: HomeAssistantRepository
     private lateinit var updateRepository: UpdateRepository
+    private lateinit var themeSyncRepository: ThemeSyncRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,10 +54,24 @@ class TvMainActivity : ComponentActivity() {
         settingsRepository.migrateBakedHomeAssistantTokenIfNeeded()
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         updateRepository = UpdateRepository(applicationContext)
+        themeSyncRepository = ThemeSyncRepository(applicationContext, settingsRepository)
 
         setContent {
-            MonoLauncherTheme {
-                TvHomeScreen(homeAssistantRepository = homeAssistantRepository)
+            var accentColor by remember { mutableStateOf(accentColorFor(settingsRepository.getSyncTheme())) }
+            var wallpaperBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+            ThemeSyncPoller {
+                themeSyncRepository.pollTv()?.let { result ->
+                    accentColor = accentColorFor(result.themeKey)
+                    result.wallpaperBitmap?.let { wallpaperBitmap = it }
+                }
+            }
+
+            MonoLauncherTheme(accentColor = accentColor) {
+                TvHomeScreen(
+                    homeAssistantRepository = homeAssistantRepository,
+                    wallpaperBitmap = wallpaperBitmap,
+                )
                 UpdatePrompt(updateRepository)
             }
         }

@@ -158,8 +158,8 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Theme & wallpaper sync",
-            description = "Syncs the pinned theme (and, on desktop/laptop, the wallpaper) with the server hub. " +
-                "Off by default on every device.",
+            description = "Syncs the pinned theme and wallpaper with the server hub. " +
+                "Off by default.",
         ) {
             Row(
                 modifier = Modifier

@@ -12,9 +12,8 @@ import androidx.compose.ui.graphics.Color
  * fixed (pure black, pure white, one dark-gray hairline), not sourced from
  * [platform.theme.PlatformTheme]. The Google TV / Leanback UI
  * ([dev.rileyboughner.launcher.ui.TvHomeScreen]) uses this same theme, for
- * the same minimal black-and-white look on both form factors (and always
- * the default [accentColor] — TV never calls theme sync, see
- * [dev.rileyboughner.launcher.theme.ThemeSyncRepository]).
+ * the same minimal black-and-white look on both form factors, with the
+ * synced accent applied there too (via the TV's own theme-sync poll).
  *
  * [accentColor] threads a synced theme's accent (`colors.color4` in
  * `dotfiles/config/themes/<key>.json`, see [accentColorFor]) into

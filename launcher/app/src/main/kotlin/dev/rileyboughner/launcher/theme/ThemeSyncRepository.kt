@@ -2,6 +2,7 @@ package dev.rileyboughner.launcher.theme
 
 import android.app.WallpaperManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import dev.rileyboughner.launcher.settings.SettingsRepository
@@ -12,8 +13,11 @@ import org.json.JSONObject
 private const val GROUP_MOBILE = "mobile"
 private const val MODE_CACHE_TTL_MS = 60_000L
 
+/** Result of one [ThemeSyncRepository.pollTv] cycle: the theme key to show as the launcher's accent, plus a freshly downloaded wallpaper bitmap when the hub's wallpaper actually changed (null when unchanged -- callers keep showing whatever bitmap they already have). */
+data class TvSyncResult(val themeKey: String, val wallpaperBitmap: Bitmap?)
+
 /**
- * Phone/tablet client for the theme-sync hub -- mirrors
+ * Phone/tablet/TV client for the theme-sync hub -- mirrors
  * `dotfiles/scripts/theme-sync-watch` (the desktop/laptop watcher) closely
  * enough that the two sides of the protocol can't drift, but is pull-mostly:
  * it polls the hub and applies wallpaper + theme, and only ever pushes when
@@ -21,6 +25,11 @@ private const val MODE_CACHE_TTL_MS = 60_000L
  * never the wallpaper half -- phones don't set their own wallpaper from
  * this app). Phones/tablets use the "mobile" group in split mode, same as
  * the watcher uses "workstation" for desktop/laptop.
+ *
+ * The TV uses [pollTv] instead of [poll]: same hub read, but always on
+ * (the TV has no settings screen, so no toggle) and the wallpaper comes
+ * back as a bitmap for the TV home screen to draw itself, since the
+ * system wallpaper is invisible behind the TV UI's opaque theme.
  *
  * Every public function is a no-op (and returns null/false, never throws)
  * when sync is disabled or the hub is unreachable -- see [poll] and [push].
@@ -54,6 +63,32 @@ class ThemeSyncRepository(
         settingsRepository.setSyncLastStateJson(doc.toJson().toString())
         val themeKey = if (doc.pinned) doc.theme else null
         (themeKey ?: DEFAULT_SYNCED_THEME_KEY).also { settingsRepository.setSyncTheme(it) }
+    }
+
+    /**
+     * TV variant of [poll]: same hub read and apply bookkeeping, but it
+     * does NOT check the Settings sync toggle (the TV has no settings
+     * screen, so TV sync is always on) and instead of setting the system
+     * wallpaper -- invisible behind the TV UI's opaque theme -- it hands
+     * the downloaded bitmap back for the TV home screen to draw as its
+     * background. Returns null when nothing changed (hub unreachable, hub
+     * has no state yet, or the hub's state is no newer than what's already
+     * applied) -- callers keep whatever accent/bitmap they're already
+     * showing in that case.
+     */
+    suspend fun pollTv(): TvSyncResult? = withContext(Dispatchers.IO) {
+        val baseUrl = ThemeSyncApi.findHubBaseUrl() ?: return@withContext null
+        val path = statePath(resolveMode(baseUrl))
+        val doc = ThemeSyncApi.getState(baseUrl, path)?.let { ThemeSyncStateDoc.fromJsonOrNull(it) }
+            ?: return@withContext null
+        if (doc.updatedAt <= settingsRepository.getSyncLastAppliedUpdatedAt()) return@withContext null
+
+        val bitmap = downloadWallpaperBytes(baseUrl, doc)?.let { decodeDownsampled(it) }
+        settingsRepository.setSyncLastAppliedUpdatedAt(doc.updatedAt)
+        settingsRepository.setSyncLastStateJson(doc.toJson().toString())
+        val themeKey = if (doc.pinned) doc.theme else null
+        val key = (themeKey ?: DEFAULT_SYNCED_THEME_KEY).also { settingsRepository.setSyncTheme(it) }
+        TvSyncResult(key, bitmap)
     }
 
     /**
@@ -115,16 +150,29 @@ class ThemeSyncRepository(
 
     /** Downloads and applies the hub's wallpaper blob only when its hash actually differs from what's already applied -- never re-downloads or re-applies a no-op. */
     private fun applyWallpaperIfChanged(baseUrl: String, doc: ThemeSyncStateDoc) {
-        if (doc.wallpaperSha256.isBlank()) return
-        val lastSha = settingsRepository.getSyncLastStateJson()
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?.optString("wallpaper_sha256", "")
-        if (lastSha == doc.wallpaperSha256) return
-
-        val bytes = ThemeSyncApi.getBlob(baseUrl, doc.wallpaperSha256) ?: return
+        val bytes = downloadWallpaperBytes(baseUrl, doc) ?: return
         val bitmap = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull() ?: return
         runCatching { WallpaperManager.getInstance(context).setBitmap(bitmap) }
     }
+
+    /** Downloads the hub's wallpaper blob only when its hash differs from the last state this device applied; null when blank, unchanged, or unreachable. Shared by [poll] (system wallpaper) and [pollTv] (drawn background). */
+    private fun downloadWallpaperBytes(baseUrl: String, doc: ThemeSyncStateDoc): ByteArray? {
+        if (doc.wallpaperSha256.isBlank()) return null
+        val lastSha = settingsRepository.getSyncLastStateJson()
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+            ?.optString("wallpaper_sha256", "")
+        if (lastSha == doc.wallpaperSha256) return null
+        return ThemeSyncApi.getBlob(baseUrl, doc.wallpaperSha256)
+    }
+
+    /** Decodes wallpaper bytes downsampled to at most 1920x1080 (the TV panel's fixed resolution), so a multi-megapixel photo doesn't sit in memory at full size just to be drawn behind the tiles. */
+    private fun decodeDownsampled(bytes: ByteArray): Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sampleSize = 1
+        while (bounds.outWidth / sampleSize > 1920 || bounds.outHeight / sampleSize > 1080) sampleSize *= 2
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+    }.getOrNull()
 
     /** Mode, cached for [MODE_CACHE_TTL_MS] -- same short-TTL-with-stale-fallback shape as `theme_sync_get_mode` in lib/theme-sync-common.sh, so a flaky hub round-trip doesn't flip this device's state path back and forth. */
     private fun resolveMode(baseUrl: String): String {

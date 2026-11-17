@@ -1,10 +1,13 @@
 package dev.rileyboughner.launcher.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -64,10 +69,16 @@ private const val OVERSCAN_SAFE_FRACTION = 0.05f
  * [BoxWithConstraints]'s measured width/height as margin, since this
  * firmware renders at a fixed 1080p and overscans — a flat dp padding
  * wouldn't scale with the actual panel size the way a measured fraction does.
+ *
+ * [wallpaperBitmap] is the synced wallpaper from the theme-sync hub
+ * ([TvMainActivity] polls it): drawn full-bleed behind the tiles under a
+ * dark scrim so white text stays legible. Null (hub unreachable, or no
+ * wallpaper synced yet) keeps the plain black background.
  */
 @Composable
 fun TvHomeScreen(
     homeAssistantRepository: HomeAssistantRepository,
+    wallpaperBitmap: Bitmap? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -93,8 +104,21 @@ fun TvHomeScreen(
     val youtubeTile = remember { resolveLeanbackTile(context, "com.google.android.youtube.tv", "YouTube") }
     val steamTile = remember { resolveLeanbackTile(context, "com.valvesoftware.steamlink", "Steam Link") }
     val firstFocusRequester = remember { FocusRequester() }
+    val wallpaperImage = remember(wallpaperBitmap) { wallpaperBitmap?.asImageBitmap() }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        if (wallpaperImage != null) {
+            Image(
+                bitmap = wallpaperImage,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            // Dark scrim over the photo so white text and tiles stay
+            // legible no matter how bright the wallpaper is.
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
+        }
+
         val horizontalMargin = maxWidth * OVERSCAN_SAFE_FRACTION
         val verticalMargin = maxHeight * OVERSCAN_SAFE_FRACTION
 
