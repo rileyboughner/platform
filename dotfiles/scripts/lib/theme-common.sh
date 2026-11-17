@@ -10,6 +10,39 @@ THEME_WAL_JSON="$HOME/.cache/wal/colors.json"
 THEME_HYPRTOOLKIT_CONFIG="$HOME/.config/hypr/hyprtoolkit.conf"
 THEME_QT6CT_DIR="$HOME/.config/qt6ct"
 
+# Makes sure HYPRLAND_INSTANCE_SIGNATURE points at a LIVE Hyprland
+# session, repairing it when the current value is stale. Shells that
+# predate a compositor restart (tmux, SSH, a terminal kept open across
+# a re-login) carry the old session's signature, and every hyprctl call
+# then fails silently while the file-based halves of a theme/wallpaper
+# change (symlink, wal colors) still succeed -- the "theme follows but
+# the wallpaper doesn't" failure, and the reason a machine's own screen
+# can go stale while the other machine follows fine (both seen
+# 2026-11-17). A session dir only counts as live when it holds
+# hyprland.lock (held by a running Hyprland) and .socket.sock
+# (Hyprland's own IPC socket, absent from the stale dirs a restarted
+# compositor leaves behind). A correct value is never touched; returns
+# 1 when no live session exists at all. Callers under `set -e` must
+# use `|| true`.
+theme_ensure_hypr_session() {
+    _hypr_sig="${HYPRLAND_INSTANCE_SIGNATURE:-}"
+    if [ -n "$_hypr_sig" ]; then
+        _hypr_dir="/run/user/$(id -u)/hypr/$_hypr_sig"
+        if [ -f "$_hypr_dir/hyprland.lock" ] && [ -S "$_hypr_dir/.socket.sock" ]; then
+            return 0
+        fi
+    fi
+    for _hypr_sock in /run/user/"$(id -u)"/hypr/*/.hyprpaper.sock; do
+        [ -S "$_hypr_sock" ] || continue
+        _hypr_dir=$(dirname "$_hypr_sock")
+        [ -f "$_hypr_dir/hyprland.lock" ] || continue
+        [ -S "$_hypr_dir/.socket.sock" ] || continue
+        export HYPRLAND_INSTANCE_SIGNATURE=$(basename "$_hypr_dir")
+        return 0
+    done
+    return 1
+}
+
 # Prints the path to <name>.json. Checks the repo checkout first (so a
 # plain `git pull` picks up new/updated themes with no stow/rebuild
 # step), then falls back to ~/.config/themes/ for machine-local themes
@@ -147,6 +180,8 @@ EOF
 # dialog) picks up the new colors. This is what set-wallpaper always
 # did by hand; theme-set/theme-auto/restore-theme now share it too.
 theme_reload_all() {
+    theme_ensure_hypr_session || true
+
     hyprctl reload
 
     makoctl reload
