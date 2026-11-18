@@ -80,7 +80,10 @@ Usage: kdeconnect-sms-dbus <command> [args]
 
 Commands:
   status                              Print JSON {state, deviceId, deviceName}
-  conversations <deviceId>            Print JSON array of latest-message-per-thread
+  conversations <deviceId> [cached]   Print JSON array of latest-message-per-thread
+                                       ("cached" skips the requestAllConversationThreads
+                                       kick; the watch stream already delivers live
+                                       updates, so refreshes must not re-burst)
   thread <deviceId> <threadId> <n> [start]
                                        Request <n> messages of a thread starting at index
                                        <start> (default 0, newest-first; async, arrives via watch)
@@ -177,13 +180,17 @@ MESSAGE_FILTER='. as $m | {
 }'
 
 cmd_conversations() {
-    local id="${1:-}"
+    local id="${1:-}" mode="${2:-}"
     [ -n "$id" ] || { usage; exit 1; }
 
     # Kick the remote for anything newer than what's cached; the reply (if
     # any) arrives as conversationCreated/conversationUpdated on `watch`,
-    # not here -- this call itself returns void.
-    bcall "$(devpath "$id")" "$CONV_IFACE" requestAllConversationThreads >/dev/null 2>&1 || true
+    # not here -- this call itself returns void. Skipped in "cached" mode:
+    # refreshes read the local cache only, since the watch stream already
+    # delivers live updates and a re-kick would re-burst every thread.
+    if [ "$mode" != "cached" ]; then
+        bcall "$(devpath "$id")" "$CONV_IFACE" requestAllConversationThreads >/dev/null 2>&1 || true
+    fi
 
     bcall "$(devpath "$id")" "$CONV_IFACE" activeConversations \
         | jq -c '.data[0][] | .data' \
@@ -256,20 +263,28 @@ cmd_contacts() {
     local vdir="$data_home/kpeoplevcard/kdeconnect-$id"
     [ -d "$vdir" ] || { echo "[]"; return 0; }
 
-    local out="[]"
-    local f name number digits
-    for f in "$vdir"/*.vcf "$vdir"/*.vcard; do
-        [ -f "$f" ] || continue
-        name=$(grep -m1 '^FN[;:]' "$f" | cut -d: -f2- | tr -d '\r') || true
-        [ -n "$name" ] || continue
-        while IFS= read -r number; do
-            digits=$(echo "$number" | tr -dc '0-9')
-            [ -n "$digits" ] || continue
-            digits=${digits: -10}
-            out=$(jq -c --arg n "$digits" --arg name "$name" '. + [{number:$n,name:$name}]' <<<"$out")
-        done < <(grep -o '^TEL[^:]*:.*' "$f" | cut -d: -f2- | tr -d '\r')
-    done
-    echo "$out"
+    # One awk pass over every vcard (FN + TELs per file), one jq pass to
+    # build the array. The old loop spawned a jq per phone number (~3.5s
+    # for 333 cards on the laptop); this is one scan plus one JSON encode.
+    # Fields are separated by \x1f (unit separator), which cannot appear
+    # in a vCard FN line; jq splits on the same character (\u001f).
+    { awk '
+        function flush() {
+            if (name == "") return
+            for (i = 1; i <= ntel; i++) print tels[i] "\x1f" name
+        }
+        FNR == 1 { flush(); name = ""; ntel = 0; delete tels }
+        /^FN[;:]/ && name == "" {
+            sub(/^FN[^:]*:/, ""); gsub(/\r/, ""); name = $0
+        }
+        /^TEL[^:]*:/ {
+            line = $0; sub(/^TEL[^:]*:/, "", line); gsub(/\r/, "", line)
+            gsub(/[^0-9]/, "", line)
+            if (length(line) > 0) tels[++ntel] = substr(line, length(line) - 9)
+        }
+        END { flush() }
+    ' "$vdir"/*.vcf "$vdir"/*.vcard 2>/dev/null || true; } \
+        | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\u001f") | {number: .[0], name: .[1]})'
 }
 
 case "${1:-}" in

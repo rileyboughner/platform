@@ -3517,6 +3517,12 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         // so reopening shows cached messages instantly while paging tops it up
         property var threadMessageCache: ({})
 
+        // Thread summaries staged by watch events, waiting for the
+        // coalescing flush -- applying them one at a time rebuilds the
+        // conversation list once per signal, which is a storm during the
+        // cold-start burst. See flushThreadSummaries().
+        property var pendingThreadSummaries: ({})
+
         // threadId currently being paged through history, or "" if no
         // paging is in flight; guards stray timer/signal callbacks after
         // the user switches threads or closes the view mid-page
@@ -3527,6 +3533,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property int threadFetchPrevCount: 0
         readonly property int threadFetchPageSize: 50
         readonly property int threadFetchMaxPages: 6
+
+        // True while the open thread's view sits at (or near) the newest
+        // messages; cleared when the user scrolls up, so paging growth
+        // stops yanking the view back to the bottom mid-read.
+        property bool smsThreadNearBottom: true
 
         function normalizeNumber(addr) {
             const digits = (addr || "").replace(/[^0-9]/g, "")
@@ -3546,19 +3557,54 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             smsPanel.threadIdList = ids
         }
 
-        // Shared by the initial activeConversations() fetch and every
-        // conversationCreated/conversationUpdated event off the watch
-        // stream -- only overwrites a thread's list-row summary when the
-        // incoming message is at least as new, so a late-arriving older
-        // backfill message can't clobber the current snippet.
+        // Shared by every conversationCreated/conversationUpdated event
+        // off the watch stream. Events are STAGED, not applied: the flush
+        // timer below applies a whole burst in one copy + one sort, so
+        // the conversation list rebuilds a few times instead of once per
+        // signal. The date guard lives here and in the flush, so a
+        // late-arriving older backfill message can't clobber the current
+        // snippet at either stage.
         function mergeThreadSummary(msg) {
             if (!msg || msg.threadId === undefined || msg.threadId === null
                 || msg.uid === undefined || msg.uid === null) return
             const key = String(msg.threadId)
-            const existing = smsPanel.threads[key]
-            if (existing && msg.date < existing.date) return
-            const next = Object.assign({}, smsPanel.threads)
+            const newest = smsPanel.pendingThreadSummaries[key] || smsPanel.threads[key]
+            if (newest && msg.date < newest.date) return
+            const next = Object.assign({}, smsPanel.pendingThreadSummaries)
             next[key] = msg
+            smsPanel.pendingThreadSummaries = next
+            threadListFlushTimer.restart()
+        }
+
+        function flushThreadSummaries() {
+            threadListFlushTimer.stop()
+            const pending = smsPanel.pendingThreadSummaries
+            const keys = Object.keys(pending)
+            if (keys.length === 0) return
+            smsPanel.pendingThreadSummaries = {}
+            const next = Object.assign({}, smsPanel.threads)
+            for (const key of keys) {
+                const existing = next[key]
+                if (existing && pending[key].date < existing.date) continue
+                next[key] = pending[key]
+            }
+            smsPanel.threads = next
+            smsPanel.refreshThreadIdList()
+        }
+
+        // Whole-list merge for the initial activeConversations() fetch:
+        // one copy + one sort for the entire list instead of one per
+        // thread.
+        function mergeThreadSummaries(list) {
+            const next = Object.assign({}, smsPanel.threads)
+            for (const msg of list) {
+                if (!msg || msg.threadId === undefined || msg.threadId === null
+                    || msg.uid === undefined || msg.uid === null) continue
+                const key = String(msg.threadId)
+                const existing = next[key]
+                if (existing && msg.date < existing.date) continue
+                next[key] = msg
+            }
             smsPanel.threads = next
             smsPanel.refreshThreadIdList()
         }
@@ -3566,6 +3612,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         function removeThread(threadId) {
             if (threadId === undefined || threadId === null) return
             const key = String(threadId)
+            if (key in smsPanel.pendingThreadSummaries) {
+                const pending = Object.assign({}, smsPanel.pendingThreadSummaries)
+                delete pending[key]
+                smsPanel.pendingThreadSummaries = pending
+            }
             if (!(key in smsPanel.threads)) return
             const next = Object.assign({}, smsPanel.threads)
             delete next[key]
@@ -3592,7 +3643,21 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             smsPanel.threadMessageCache = nextCache
 
             if (threadKey !== smsPanel.openThreadId) return
-            smsPanel.openThreadMessages = threadCache
+            if (smsPanel.threadPagingThreadId !== "") {
+                // Paging in flight: a burst of backfill signals is coming.
+                // Coalesce so the message list rebuilds a few times, not
+                // once per message; live messages (no paging) still render
+                // immediately via the else branch.
+                openThreadFlushTimer.restart()
+            } else {
+                smsPanel.openThreadMessages = threadCache
+            }
+        }
+
+        function flushOpenThreadMessages() {
+            openThreadFlushTimer.stop()
+            if (smsPanel.openThreadId === "") return
+            smsPanel.openThreadMessages = smsPanel.threadMessageCache[smsPanel.openThreadId] || {}
         }
 
         function sortedOpenMessages() {
@@ -3609,6 +3674,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             smsPanel.sendError = ""
             smsPanel.startThreadPaging(key)
             Qt.callLater(() => composeInput.forceActiveFocus())
+            // The thread Flickable is shared across threads and keeps its
+            // old scroll position; jump to the newest messages on open.
+            // Later growth is handled by the near-bottom guard on the
+            // Flickable itself (see smsThreadFlick below).
+            Qt.callLater(() => {
+                smsPanel.smsThreadNearBottom = true
+                smsThreadFlick.contentY = Math.max(0, smsThreadFlick.contentHeight - smsThreadFlick.height)
+            })
         }
 
         function closeThreadView() {
@@ -3629,8 +3702,9 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function stopThreadPaging() {
             smsPanel.threadPagingThreadId = ""
-            threadPageTimeoutTimer.stop()
-            threadPageSettleTimer.stop()
+            threadPageQuietTimer.stop()
+            threadPageCapTimer.stop()
+            smsPanel.flushOpenThreadMessages()
         }
 
         function requestThreadPage() {
@@ -3645,24 +3719,27 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             threadFetchProcess.command = ["kdeconnect-sms-dbus", "thread", smsPanel.deviceId,
                 threadId, String(smsPanel.threadFetchPageSize), String(start)]
             threadFetchProcess.running = true
-            threadPageSettleTimer.stop()
-            threadPageTimeoutTimer.restart()
+            // The page is done when its signals go quiet (300ms) or the
+            // 2s cap hits, whichever comes first -- see the timers below.
+            threadPageQuietTimer.restart()
+            threadPageCapTimer.restart()
         }
 
         // conversationLoaded only fires when the daemon actually pulled a
-        // fresh batch from the phone (see header notes); a page fully
-        // served from kdeconnectd's own cache never emits it, so this is
-        // just an early signal to shorten the wait -- the timeout timer
-        // below is what actually guarantees a page's result is evaluated.
+        // fresh batch from the phone; a page fully served from
+        // kdeconnectd's own cache never emits it, so it only restarts the
+        // quiet timer like any other signal for this thread. The quiet
+        // timer (no signals for 300ms) and the 2s cap below are what
+        // guarantee a page is evaluated either way.
         function onThreadPageLoadedSignal(threadId) {
             if (smsPanel.threadPagingThreadId === "" || String(threadId) !== smsPanel.threadPagingThreadId) return
-            threadPageTimeoutTimer.stop()
-            threadPageSettleTimer.restart()
+            threadPageQuietTimer.restart()
         }
 
         function evaluateThreadPage() {
-            threadPageTimeoutTimer.stop()
-            threadPageSettleTimer.stop()
+            threadPageQuietTimer.stop()
+            threadPageCapTimer.stop()
+            smsPanel.flushOpenThreadMessages()
             const threadId = smsPanel.threadPagingThreadId
             if (threadId === "" || threadId !== smsPanel.openThreadId) return
             const newCount = Object.keys(smsPanel.openThreadMessages).length
@@ -3703,8 +3780,13 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         function manualRefresh() {
             smsPanel.refreshStatus()
             if (smsPanel.deviceState === "ok" && smsPanel.deviceId !== "") {
-                conversationsProcess.command = ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId]
+                // "cached": read the daemon's local cache only. The watch
+                // stream already delivers live updates, so a full refresh
+                // here would just re-burst every thread on each open.
+                conversationsProcess.command = ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId, "cached"]
                 conversationsProcess.running = true
+                contactsProcess.command = ["kdeconnect-sms-dbus", "contacts", smsPanel.deviceId]
+                contactsProcess.running = true
             }
         }
 
@@ -3763,22 +3845,41 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         }
 
         // Paged-history fetch timers (see startThreadPaging/requestThreadPage
-        // above): threadPageSettleTimer gives trailing conversationUpdated
-        // signals a moment to land after conversationLoaded fires;
-        // threadPageTimeoutTimer guarantees a page is evaluated even if
-        // conversationLoaded never comes (cache-served page, or a wedged phone).
+        // above): threadPageQuietTimer fires 300ms after the last signal
+        // for the thread being paged, so a page is evaluated as soon as
+        // its burst lands instead of waiting out a fixed timeout;
+        // threadPageCapTimer guarantees evaluation within 2s even if
+        // signals keep flowing or the phone never answers. The old design
+        // waited a fixed 5s per page whenever conversationLoaded never
+        // fired (every cache-served page), so 6 pages took up to 30s.
         Timer {
-            id: threadPageSettleTimer
-            interval: 400
+            id: threadPageQuietTimer
+            interval: 300
             repeat: false
             onTriggered: smsPanel.evaluateThreadPage()
         }
 
         Timer {
-            id: threadPageTimeoutTimer
-            interval: 5000
+            id: threadPageCapTimer
+            interval: 2000
             repeat: false
             onTriggered: smsPanel.evaluateThreadPage()
+        }
+
+        // Coalescing timers: watch-event bursts rebuild the conversation
+        // list / message list once per flush instead of once per signal.
+        Timer {
+            id: threadListFlushTimer
+            interval: 100
+            repeat: false
+            onTriggered: smsPanel.flushThreadSummaries()
+        }
+
+        Timer {
+            id: openThreadFlushTimer
+            interval: 120
+            repeat: false
+            onTriggered: smsPanel.flushOpenThreadMessages()
         }
 
         Process {
@@ -3844,7 +3945,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 try {
                     const list = JSON.parse(conversationsStdout.text)
                     smsPanel.conversationsError = ""
-                    for (const msg of list) smsPanel.mergeThreadSummary(msg)
+                    smsPanel.mergeThreadSummaries(list)
                 } catch (error) {
                     smsPanel.conversationsError = "Failed to parse conversations"
                 }
@@ -3919,6 +4020,12 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                                 || evt.uid === undefined || evt.uid === null) return
                             smsPanel.mergeThreadSummary(evt)
                             smsPanel.mergeOpenMessage(evt)
+                            // Signals for the thread being paged push the
+                            // page's quiet timer out; other threads' signals
+                            // must not delay this page's evaluation.
+                            if (smsPanel.threadPagingThreadId !== ""
+                                && String(evt.threadId) === smsPanel.threadPagingThreadId)
+                                threadPageQuietTimer.restart()
                         } else if (evt.signal === "conversationLoaded") {
                             if (evt.threadId === undefined || evt.threadId === null) return
                             smsPanel.onThreadPageLoadedSignal(evt.threadId)
@@ -4257,7 +4364,15 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 contentHeight: smsThreadContent.implicitHeight
                 clip: true
 
-                onContentHeightChanged: smsThreadFlick.contentY = Math.max(0, smsThreadFlick.contentHeight - smsThreadFlick.height)
+                // Snap to the newest messages only while the view is
+                // already near the bottom; once the user scrolls up to
+                // read history, paging growth leaves the view alone.
+                onContentYChanged: smsPanel.smsThreadNearBottom =
+                    smsThreadFlick.contentY >= smsThreadFlick.contentHeight - smsThreadFlick.height - 120
+                onContentHeightChanged: {
+                    if (smsPanel.smsThreadNearBottom)
+                        smsThreadFlick.contentY = Math.max(0, smsThreadFlick.contentHeight - smsThreadFlick.height)
+                }
 
                 Column {
                     id: smsThreadContent
