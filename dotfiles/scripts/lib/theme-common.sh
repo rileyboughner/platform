@@ -181,6 +181,16 @@ EOF
 # did by hand; theme-set/theme-auto/restore-theme now share it too.
 theme_reload_all() {
     theme_ensure_hypr_session || true
+    # SSH/systemd invocations lack WAYLAND_DISPLAY, which the quickshell
+    # restart below needs -- derive it from the live session socket so a
+    # remote theme reload cannot kill the shell (seen 2026-11-17).
+    if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        for _wl in /run/user/"$(id -u)"/wayland-*; do
+            [ -S "$_wl" ] || continue
+            export WAYLAND_DISPLAY=$(basename "$_wl")
+            break
+        done
+    fi
 
     hyprctl reload
 
