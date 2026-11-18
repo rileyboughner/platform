@@ -2387,7 +2387,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.right: true
 
         implicitWidth: 380
-        margins.top: root.visible ? root.implicitHeight : 0
+        margins.top: 0
 
         color: root.colBg
         visible: false
@@ -2884,7 +2884,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.right: true
 
         implicitWidth: 380
-        margins.top: root.visible ? root.implicitHeight : 0
+        margins.top: 0
 
         color: root.colBg
         visible: false
@@ -3216,7 +3216,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.right: true
 
         implicitWidth: 380
-        margins.top: root.visible ? root.implicitHeight : 0
+        margins.top: 0
 
         color: root.colBg
         visible: false
@@ -3631,7 +3631,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.right: true
 
         implicitWidth: 380
-        margins.top: root.visible ? root.implicitHeight : 0
+        margins.top: 0
 
         color: root.colBg
         visible: false
