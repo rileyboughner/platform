@@ -249,7 +249,7 @@ cmd_contacts() {
     local f name number digits
     for f in "$vdir"/*.vcf "$vdir"/*.vcard; do
         [ -f "$f" ] || continue
-        name=$(grep -m1 '^FN:' "$f" | cut -d: -f2- | tr -d '\r')
+        name=$(grep -m1 '^FN[;:]' "$f" | cut -d: -f2- | tr -d '\r') || true
         [ -n "$name" ] || continue
         while IFS= read -r number; do
             digits=$(echo "$number" | tr -dc '0-9')
