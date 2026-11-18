@@ -3644,6 +3644,10 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             } else {
                 smsStatusTimer.running = false
                 watchProcess.running = false
+                // Reset so the next show re-runs the full init: otherwise
+                // wasOk stays true and the watcher is never restarted.
+                smsPanel.deviceState = ""
+                smsPanel.deviceId = ""
                 smsPanel.closeThreadView()
             }
         }
@@ -3698,6 +3702,9 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     } else if (!nowOk && wasOk) {
                         watchProcess.running = false
                         smsPanel.closeThreadView()
+                    } else if (nowOk && !watchProcess.running) {
+                        watchProcess.command = ["kdeconnect-sms-dbus", "watch", smsPanel.deviceId]
+                        watchProcess.running = true
                     }
                 } catch (error) {
                     smsPanel.deviceState = "no-daemon"
