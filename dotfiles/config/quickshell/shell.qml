@@ -3523,6 +3523,28 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         // cold-start burst. See flushThreadSummaries().
         property var pendingThreadSummaries: ({})
 
+        // Conversation-list search text (see threadMatchesFilter).
+        property string threadFilter: ""
+
+        // New-message flow state (see the new-message view below).
+        property bool smsNewMessage: false
+        property var newMessageContact: null // {number, name} once picked
+        property string newMessageSearch: ""
+        property string newMessageText: ""
+        property bool sendPendingNew: false
+
+        // Contacts as a sorted list (the number -> name map lives in
+        // contactNames; this is the picker model for new messages).
+        property var contactList: []
+
+        // Attachment downloads: uniqueId -> local file path once the
+        // daemon's attachmentReceived signal reports it ready, plus the
+        // set already requested (so a bubble re-created by a list rebuild
+        // doesn't re-request) and the serial request queue.
+        property var attachmentFiles: ({})
+        property var attachmentRequested: ({})
+        property var attachmentQueue: []
+
         // threadId currently being paged through history, or "" if no
         // paging is in flight; guards stray timer/signal callbacks after
         // the user switches threads or closes the view mid-page
@@ -3660,6 +3682,102 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             smsPanel.openThreadMessages = smsPanel.threadMessageCache[smsPanel.openThreadId] || {}
         }
 
+        // --- Conversation search: name, number, or snippet text ---
+        function threadMatchesFilter(threadId) {
+            const f = smsPanel.threadFilter.trim().toLowerCase()
+            if (f === "") return true
+            const msg = smsPanel.threads[threadId]
+            if (!msg) return false
+            if (smsPanel.displayNameFor(msg.addresses).toLowerCase().includes(f)) return true
+            const fdigits = f.replace(/\D/g, "")
+            if (fdigits !== "") {
+                for (const addr of (msg.addresses || [])) {
+                    if (String(addr).replace(/\D/g, "").includes(fdigits)) return true
+                }
+            }
+            return (msg.body || "").toLowerCase().includes(f)
+        }
+
+        function visibleThreadIds() {
+            return smsPanel.threadIdList.filter(id => smsPanel.threadMatchesFilter(id))
+        }
+
+        // --- New messages ---
+        function filteredContacts() {
+            const f = smsPanel.newMessageSearch.trim().toLowerCase()
+            const fdigits = smsPanel.newMessageSearch.replace(/\D/g, "")
+            return smsPanel.contactList.filter(entry => {
+                if (f === "") return true
+                if (entry.name.toLowerCase().includes(f)) return true
+                return fdigits !== "" && entry.number.includes(fdigits)
+            })
+        }
+
+        // A typed number with no matching contact, offered as a direct
+        // "Text <digits>" row in the picker; "" when not applicable.
+        function newMessageRawNumber() {
+            const d = smsPanel.newMessageSearch.replace(/\D/g, "")
+            if (d.length < 7) return ""
+            for (const entry of smsPanel.contactList) if (entry.number === d) return ""
+            return d
+        }
+
+        function openNewMessage() {
+            smsPanel.closeThreadView()
+            smsPanel.smsNewMessage = true
+            smsPanel.newMessageContact = null
+            smsPanel.newMessageSearch = ""
+            smsPanel.newMessageText = ""
+            smsPanel.sendError = ""
+            newMessageSearchInput.text = ""
+            newMessageInput.text = ""
+        }
+
+        function closeNewMessage() {
+            smsPanel.smsNewMessage = false
+            smsPanel.newMessageContact = null
+            smsPanel.sendPendingNew = false
+        }
+
+        function goBack() {
+            if (smsPanel.smsNewMessage) {
+                if (smsPanel.newMessageContact) smsPanel.newMessageContact = null
+                else smsPanel.closeNewMessage()
+            } else {
+                smsPanel.closeThreadView()
+            }
+        }
+
+        function sendNewMessage() {
+            const contact = smsPanel.newMessageContact
+            const text = smsPanel.newMessageText.trim()
+            if (!contact || text === "" || smsPanel.deviceState !== "ok" || smsPanel.deviceId === "") return
+            smsPanel.sendPendingNew = true
+            smsPanel.sendError = ""
+            sendProcess.command = ["kdeconnect-sms-dbus", "newsms", smsPanel.deviceId, contact.number, text]
+            sendProcess.running = true
+        }
+
+        // --- Attachments: one request at a time; the file itself arrives
+        // via the attachmentReceived signal on the watch stream ---
+        function requestAttachment(partId, uniqueId) {
+            if (!uniqueId || smsPanel.attachmentFiles[uniqueId] || smsPanel.attachmentRequested[uniqueId]) return
+            const req = Object.assign({}, smsPanel.attachmentRequested)
+            req[uniqueId] = true
+            smsPanel.attachmentRequested = req
+            smsPanel.attachmentQueue = smsPanel.attachmentQueue.concat([{partId: partId, uniqueId: uniqueId}])
+            smsPanel.pumpAttachmentQueue()
+        }
+
+        function pumpAttachmentQueue() {
+            if (attachmentProcess.running || smsPanel.attachmentQueue.length === 0) return
+            if (smsPanel.deviceState !== "ok" || smsPanel.deviceId === "") return
+            const next = smsPanel.attachmentQueue[0]
+            smsPanel.attachmentQueue = smsPanel.attachmentQueue.slice(1)
+            attachmentProcess.command = ["kdeconnect-sms-dbus", "attachment", smsPanel.deviceId, String(next.partId), next.uniqueId]
+            attachmentProcess.running = true
+        }
+
         function sortedOpenMessages() {
             const vals = Object.values(smsPanel.openThreadMessages)
             vals.sort((a, b) => a.date - b.date)
@@ -3777,13 +3895,17 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             statusProcess.running = true
         }
 
-        function manualRefresh() {
+        function manualRefresh(fullKick) {
             smsPanel.refreshStatus()
             if (smsPanel.deviceState === "ok" && smsPanel.deviceId !== "") {
-                // "cached": read the daemon's local cache only. The watch
-                // stream already delivers live updates, so a full refresh
-                // here would just re-burst every thread on each open.
-                conversationsProcess.command = ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId, "cached"]
+                // Cached by default: read the daemon's local cache only.
+                // The watch stream already delivers live updates, so a
+                // full refresh on every open would just re-burst every
+                // thread. The refresh button passes fullKick=true to
+                // force a re-sync from the phone instead.
+                conversationsProcess.command = fullKick
+                    ? ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId]
+                    : ["kdeconnect-sms-dbus", "conversations", smsPanel.deviceId, "cached"]
                 conversationsProcess.running = true
                 contactsProcess.command = ["kdeconnect-sms-dbus", "contacts", smsPanel.deviceId]
                 contactsProcess.running = true
@@ -3964,6 +4086,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     const map = {}
                     for (const entry of list) map[entry.number] = entry.name
                     smsPanel.contactNames = map
+                    smsPanel.contactList = Object.keys(map).map(number => ({number: number, name: map[number]}))
+                        .sort((a, b) => a.name.localeCompare(b.name))
                 } catch (error) {
                     // Best-effort only -- rows just fall back to raw numbers.
                 }
@@ -3994,8 +4118,22 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 smsPanel.sendPending = false
                 if (exitCode !== 0) {
                     smsPanel.sendError = sendStderr.text.trim().split("\n")[0] || "Send failed"
+                    smsPanel.sendPendingNew = false
+                } else if (smsPanel.sendPendingNew) {
+                    // New thread: the phone confirms it via the live push
+                    // stream; head back to the list and let it arrive.
+                    smsPanel.closeNewMessage()
+                    smsPanel.manualRefresh(false)
                 }
             }
+        }
+
+        // Serial attachment downloader: one request at a time; the file
+        // itself arrives via the attachmentReceived signal on watchProcess.
+        Process {
+            id: attachmentProcess
+
+            onExited: smsPanel.pumpAttachmentQueue()
         }
 
         // Long-lived for the whole shell session (started once at preload,
@@ -4012,7 +4150,12 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     if (!line || line.trim().length === 0) return
                     try {
                         const evt = JSON.parse(line)
-                        if (evt.signal === "conversationCreated" || evt.signal === "conversationUpdated") {
+                        if (evt.signal === "attachmentReceived") {
+                            if (!evt.fileName) return
+                            const next = Object.assign({}, smsPanel.attachmentFiles)
+                            next[evt.fileName] = evt.filePath
+                            smsPanel.attachmentFiles = next
+                        } else if (evt.signal === "conversationCreated" || evt.signal === "conversationUpdated") {
                             // A malformed/empty signal missing either id must
                             // not create a phantom message; a real MMS with
                             // an empty body but a valid uid still renders.
@@ -4109,7 +4252,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         Text {
                             Layout.fillWidth: true
 
-                            text: threadRow.msg ? threadRow.msg.body : ""
+                            text: threadRow.msg
+                                ? (threadRow.msg.body !== ""
+                                    ? threadRow.msg.body
+                                    : ((threadRow.msg.attachments || []).length > 0 ? "Image" : ""))
+                                : ""
                             elide: Text.ElideRight
 
                             color: root.colMuted
@@ -4135,6 +4282,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 // Types.MessageTypeSent/Draft/Outbox/Failed/Queued, per
                 // ConversationMessage::isOutgoing() -- models/conversationmessage.cpp
                 readonly property bool outgoing: [2, 3, 4, 5, 6].includes(bubbleItem.modelData.type)
+                readonly property bool hasAttachments: (bubbleItem.modelData.attachments || []).length > 0
                 readonly property string statusNote: bubbleItem.modelData.type === 5
                     ? "Failed"
                     : (bubbleItem.modelData.type === 4 || bubbleItem.modelData.type === 6)
@@ -4148,10 +4296,70 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
                     anchors.right: bubbleItem.outgoing ? parent.right : undefined
                     anchors.left: bubbleItem.outgoing ? undefined : parent.left
-                    width: Math.min(parent.width * 0.78, bubbleInner.implicitWidth + 20)
+                    width: Math.max(Math.min(parent.width * 0.78, bubbleInner.implicitWidth + 20),
+                        bubbleItem.hasAttachments ? Math.min(260, parent.width * 0.7) : 0)
                     spacing: 2
 
+                    Repeater {
+                        model: bubbleItem.modelData.attachments || []
+
+                        delegate: Item {
+                            id: attItem
+
+                            required property var modelData // {partId, mime, uniqueId}
+
+                            readonly property string localPath: smsPanel.attachmentFiles[attItem.modelData.uniqueId] || ""
+                            readonly property bool isImage: attItem.modelData.mime.indexOf("image/") === 0
+
+                            width: bubbleColumn.width
+                            height: attItem.localPath !== "" && attItem.isImage ? 200 : 40
+
+                            Component.onCompleted: smsPanel.requestAttachment(attItem.modelData.partId, attItem.modelData.uniqueId)
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 10
+                                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: attItem.localPath === "" || !attItem.isImage || attImage.status === Image.Error
+                                    text: attItem.localPath === ""
+                                        ? "Loading attachment…"
+                                        : attImage.status === Image.Error
+                                            ? "Couldn't preview this image"
+                                            : attItem.modelData.mime
+                                    color: root.colMuted
+
+                                    font {
+                                        family: root.fontFamily
+                                        pixelSize: root.fontSize - 2
+                                    }
+                                }
+                            }
+
+                            Image {
+                                id: attImage
+
+                                anchors.fill: parent
+                                visible: attItem.localPath !== "" && attItem.isImage && attImage.status !== Image.Error
+                                source: attItem.localPath !== "" ? "file://" + attItem.localPath : ""
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                cache: false
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: attItem.localPath !== ""
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Qt.openUrlExternally("file://" + attItem.localPath)
+                            }
+                        }
+                    }
+
                     Rectangle {
+                        visible: bubbleItem.modelData.body !== ""
                         width: parent.width
                         height: bubbleInner.implicitHeight + 16
                         radius: 10
@@ -4196,6 +4404,67 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             }
         }
 
+        Component {
+            id: contactRowComponent
+
+            Rectangle {
+                id: contactRow
+
+                required property var modelData // {number, name}
+
+                width: parent.width
+                height: 38
+
+                radius: 6
+                color: contactRowArea.containsMouse
+                    ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                    : "transparent"
+
+                MouseArea {
+                    id: contactRowArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    onClicked: smsPanel.newMessageContact = contactRow.modelData
+
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+
+                        spacing: 1
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: contactRow.modelData.name
+                            elide: Text.ElideRight
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: contactRow.modelData.number
+                            elide: Text.ElideRight
+                            color: root.colMuted
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 2
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ---- Chrome: thin left border matching the bar-popup borders ----
 
         Rectangle {
@@ -4222,12 +4491,12 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 MouseArea {
                     id: smsBackArea
 
-                    visible: smsPanel.openThreadId !== ""
+                    visible: smsPanel.openThreadId !== "" || smsPanel.smsNewMessage
                     implicitWidth: smsBackText.implicitWidth
                     implicitHeight: smsBackText.implicitHeight
                     hoverEnabled: true
 
-                    onClicked: smsPanel.closeThreadView()
+                    onClicked: smsPanel.goBack()
 
                     Text {
                         id: smsBackText
@@ -4245,11 +4514,13 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 Text {
                     Layout.fillWidth: true
 
-                    text: smsPanel.openThreadId === ""
-                        ? "Messages"
-                        : smsPanel.displayNameFor(
-                            smsPanel.threads[smsPanel.openThreadId]
-                                ? smsPanel.threads[smsPanel.openThreadId].addresses : [])
+                    text: smsPanel.smsNewMessage
+                        ? "New message"
+                        : smsPanel.openThreadId === ""
+                            ? "Messages"
+                            : smsPanel.displayNameFor(
+                                smsPanel.threads[smsPanel.openThreadId]
+                                    ? smsPanel.threads[smsPanel.openThreadId].addresses : [])
                     elide: Text.ElideRight
 
                     color: root.colFg
@@ -4279,18 +4550,42 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 MouseArea {
                     id: smsRefreshArea
 
-                    visible: smsPanel.openThreadId === ""
+                    visible: smsPanel.openThreadId === "" && !smsPanel.smsNewMessage
                     implicitWidth: smsRefreshText.implicitWidth
                     implicitHeight: smsRefreshText.implicitHeight
                     hoverEnabled: true
 
-                    onClicked: smsPanel.manualRefresh()
+                    onClicked: smsPanel.manualRefresh(true)
 
                     Text {
                         id: smsRefreshText
 
                         text: "⟳"
                         color: smsRefreshArea.containsMouse ? root.colFg : root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: smsNewArea
+
+                    visible: smsPanel.openThreadId === "" && !smsPanel.smsNewMessage
+                    implicitWidth: smsNewText.implicitWidth
+                    implicitHeight: smsNewText.implicitHeight
+                    hoverEnabled: true
+
+                    onClicked: smsPanel.openNewMessage()
+
+                    Text {
+                        id: smsNewText
+
+                        text: "+"
+                        color: smsNewArea.containsMouse ? root.colFg : root.colMuted
 
                         font {
                             family: root.fontFamily
@@ -4316,10 +4611,56 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 }
             }
 
+            Rectangle {
+                Layout.fillWidth: true
+                height: 30
+
+                visible: smsPanel.deviceState === "ok" && smsPanel.openThreadId === "" && !smsPanel.smsNewMessage
+
+                radius: 6
+                color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                border.color: root.colMuted
+                border.width: 1
+
+                Text {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    verticalAlignment: Text.AlignVCenter
+
+                    visible: threadSearchInput.text === ""
+                    text: "Search conversations"
+                    color: root.colMuted
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 1
+                    }
+                }
+
+                TextInput {
+                    id: threadSearchInput
+
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: TextInput.AlignVCenter
+
+                    color: root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 1
+                    }
+
+                    onTextChanged: smsPanel.threadFilter = text
+                    Keys.onEscapePressed: { text = ""; smsPanel.threadFilter = "" }
+                }
+            }
+
             Flickable {
                 id: smsListFlick
 
-                visible: smsPanel.deviceState === "ok" && smsPanel.openThreadId === ""
+                visible: smsPanel.deviceState === "ok" && smsPanel.openThreadId === "" && !smsPanel.smsNewMessage
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -4335,8 +4676,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     spacing: 4
 
                     Text {
-                        visible: smsPanel.threadIdList.length === 0
-                        text: "No conversations yet."
+                        visible: smsPanel.visibleThreadIds().length === 0
+                        text: smsPanel.threadFilter !== "" ? "No matching conversations." : "No conversations yet."
                         color: root.colMuted
 
                         font {
@@ -4346,7 +4687,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     }
 
                     Repeater {
-                        model: smsPanel.threadIdList
+                        model: smsPanel.visibleThreadIds()
                         delegate: threadRowComponent
                     }
                 }
@@ -4384,6 +4725,212 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         model: smsPanel.sortedOpenMessages()
                         delegate: messageBubbleComponent
                     }
+                }
+            }
+
+            ColumnLayout {
+                visible: smsPanel.smsNewMessage && !smsPanel.newMessageContact
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 8
+
+                onVisibleChanged: if (visible) newMessageSearchInput.forceActiveFocus()
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 30
+
+                    radius: 6
+                    color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                    border.color: root.colMuted
+                    border.width: 1
+
+                    Text {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        verticalAlignment: Text.AlignVCenter
+
+                        visible: newMessageSearchInput.text === ""
+                        text: "Search contacts or type a number"
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                        }
+                    }
+
+                    TextInput {
+                        id: newMessageSearchInput
+
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                        }
+
+                        onTextChanged: smsPanel.newMessageSearch = text
+                        Keys.onEscapePressed: smsPanel.goBack()
+                    }
+                }
+
+                Flickable {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    contentWidth: width
+                    contentHeight: newContactContent.implicitHeight
+                    clip: true
+
+                    Column {
+                        id: newContactContent
+
+                        width: parent.width
+                        spacing: 4
+
+                        Rectangle {
+                            width: parent.width
+                            height: 34
+
+                            visible: smsPanel.newMessageRawNumber() !== ""
+
+                            radius: 6
+                            color: rawNumberArea.containsMouse
+                                ? Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.15)
+                                : "transparent"
+
+                            MouseArea {
+                                id: rawNumberArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+
+                                onClicked: smsPanel.newMessageContact = {number: smsPanel.newMessageRawNumber(), name: smsPanel.newMessageRawNumber()}
+
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: 6
+
+                                    text: "Text " + smsPanel.newMessageRawNumber()
+                                    color: root.colFg
+
+                                    font {
+                                        family: root.fontFamily
+                                        pixelSize: root.fontSize - 1
+                                    }
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: smsPanel.filteredContacts()
+                            delegate: contactRowComponent
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                visible: smsPanel.smsNewMessage && smsPanel.newMessageContact !== null
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 8
+
+                onVisibleChanged: if (visible) newMessageInput.forceActiveFocus()
+
+                Text {
+                    Layout.fillWidth: true
+
+                    elide: Text.ElideRight
+                    text: smsPanel.newMessageContact ? "To: " + smsPanel.newMessageContact.name : ""
+                    color: root.colMuted
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 1
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 30
+
+                        radius: 6
+                        color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+                        border.color: root.colMuted
+                        border.width: 1
+
+                        TextInput {
+                            id: newMessageInput
+
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            verticalAlignment: TextInput.AlignVCenter
+
+                            enabled: !smsPanel.sendPendingNew
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                            }
+
+                            onTextChanged: smsPanel.newMessageText = text
+                            onAccepted: smsPanel.sendNewMessage()
+                            Keys.onEscapePressed: smsPanel.goBack()
+                        }
+                    }
+
+                    MouseArea {
+                        id: smsNewSendArea
+
+                        enabled: !smsPanel.sendPendingNew && smsPanel.newMessageText.trim() !== ""
+                        implicitWidth: smsNewSendText.implicitWidth + 12
+                        implicitHeight: 30
+                        hoverEnabled: true
+
+                        onClicked: smsPanel.sendNewMessage()
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: smsNewSendArea.containsMouse
+                                ? root.colAccent
+                                : Qt.rgba(root.colAccent.r, root.colAccent.g, root.colAccent.b, 0.7)
+                        }
+
+                        Text {
+                            id: smsNewSendText
+                            anchors.centerIn: parent
+                            text: "Send"
+                            color: root.colBg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                                bold: true
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                 }
             }
 

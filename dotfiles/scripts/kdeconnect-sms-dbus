@@ -88,6 +88,12 @@ Commands:
                                        Request <n> messages of a thread starting at index
                                        <start> (default 0, newest-first; async, arrives via watch)
   send <deviceId> <threadId> <text>   Send a reply in an existing thread (async)
+  newsms <deviceId> <address> <text> Send a message starting a new thread (async)
+  attachment <deviceId> <partId> <uniqueId>
+                                      Request an attachment download; the daemon
+                                      emits attachmentReceived(filePath, fileName)
+                                      on `watch` when the file is ready (at once
+                                      from its disk cache if already downloaded)
   watch <deviceId>                    Stream JSON-per-line conversation events until killed
   contacts <deviceId>                 Print JSON array of {number, name} from the synced vcard cache
 EOF
@@ -168,6 +174,9 @@ cmd_status() {
 
 # Shared jq filter: turns one raw ConversationMessage struct array ($m, per
 # the wire layout documented at the top of this file) into our flat schema.
+# Attachments forward partId/mime/uniqueId only -- index [2] is a base64
+# blob (tens of KB per attachment) that the panel never needs; the file
+# itself arrives via `attachment` + the attachmentReceived signal.
 MESSAGE_FILTER='. as $m | {
     threadId: $m[6],
     uid: $m[7],
@@ -176,7 +185,8 @@ MESSAGE_FILTER='. as $m | {
     type: $m[4],
     read: $m[5],
     subId: $m[8],
-    addresses: ($m[2] | map(.[0]))
+    addresses: ($m[2] | map(.[0])),
+    attachments: (($m[9] // []) | map({partId: .[0], mime: .[1], uniqueId: .[3]}))
 }'
 
 cmd_conversations() {
@@ -213,6 +223,27 @@ cmd_send() {
     bcall "$(devpath "$id")" "$CONV_IFACE" replyToConversation xsav "$threadId" "$text" 0 >/dev/null
 }
 
+cmd_newsms() {
+    local id="${1:-}" address="${2:-}"
+    [ -n "$id" ] && [ -n "$address" ] || { usage; exit 1; }
+    shift 2
+    local text="$*"
+    [ -n "$text" ] || die "empty message"
+    # sendWithoutConversation takes an array of variants, each holding a
+    # one-string ConversationAddress struct: busctl shape `avsav 1 "(s)"
+    # "<address>" "<text>" 0`. Verified live 2026-11-18 (empty-address and
+    # undeliverable-address probes both accepted with no D-Bus error).
+    bcall "$(devpath "$id")" "$CONV_IFACE" sendWithoutConversation avsav 1 "(s)" "$address" "$text" 0 >/dev/null
+}
+
+cmd_attachment() {
+    local id="${1:-}" part="${2:-}" uniq="${3:-}"
+    [ -n "$id" ] && [ -n "$part" ] && [ -n "$uniq" ] || { usage; exit 1; }
+    # Fire-and-forget: the daemon serves the file from its disk cache or
+    # downloads it from the phone, then emits attachmentReceived on `watch`.
+    bcall "$(devpath "$id")" "$CONV_IFACE" requestAttachmentFile xs "$part" "$uniq" >/dev/null
+}
+
 cmd_watch() {
     local id="${1:-}"
     [ -n "$id" ] || { usage; exit 1; }
@@ -233,9 +264,12 @@ cmd_watch() {
                         signal: .member,
                         threadId: $m[6], uid: $m[7], body: $m[1], date: $m[3],
                         type: $m[4], read: $m[5], subId: $m[8],
-                        addresses: ($m[2] | map(.[0]))
+                        addresses: ($m[2] | map(.[0])),
+                        attachments: (($m[9] // []) | map({partId: .[0], mime: .[1], uniqueId: .[3]}))
                     }
                 end
+            elif .member == "attachmentReceived" then
+                {signal: "attachmentReceived", filePath: .payload.data[0], fileName: .payload.data[1]}
             elif .member == "conversationLoaded" then
                 if (.payload.data[0] == null) then
                     empty
@@ -292,6 +326,8 @@ case "${1:-}" in
     conversations) shift; cmd_conversations "$@" ;;
     thread) shift; cmd_thread "$@" ;;
     send) shift; cmd_send "$@" ;;
+    newsms) shift; cmd_newsms "$@" ;;
+    attachment) shift; cmd_attachment "$@" ;;
     watch) shift; cmd_watch "$@" ;;
     contacts) shift; cmd_contacts "$@" ;;
     *) usage; exit 1 ;;
