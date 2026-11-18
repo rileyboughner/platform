@@ -81,7 +81,9 @@ Usage: kdeconnect-sms-dbus <command> [args]
 Commands:
   status                              Print JSON {state, deviceId, deviceName}
   conversations <deviceId>            Print JSON array of latest-message-per-thread
-  thread <deviceId> <threadId> <n>    Request last <n> messages of a thread (async; arrives via watch)
+  thread <deviceId> <threadId> <n> [start]
+                                       Request <n> messages of a thread starting at index
+                                       <start> (default 0, newest-first; async, arrives via watch)
   send <deviceId> <threadId> <text>   Send a reply in an existing thread (async)
   watch <deviceId>                    Stream JSON-per-line conversation events until killed
   contacts <deviceId>                 Print JSON array of {number, name} from the synced vcard cache
@@ -190,9 +192,9 @@ cmd_conversations() {
 }
 
 cmd_thread() {
-    local id="${1:-}" threadId="${2:-}" count="${3:-50}"
+    local id="${1:-}" threadId="${2:-}" count="${3:-50}" start="${4:-0}"
     [ -n "$id" ] && [ -n "$threadId" ] || { usage; exit 1; }
-    bcall "$(devpath "$id")" "$CONV_IFACE" requestConversation xii "$threadId" 0 "$count" >/dev/null
+    bcall "$(devpath "$id")" "$CONV_IFACE" requestConversation xii "$threadId" "$start" "$((start + count))" >/dev/null
 }
 
 cmd_send() {
@@ -216,14 +218,23 @@ cmd_watch() {
         | jq -c --unbuffered --arg path "$path" --arg iface "$CONV_IFACE" '
             select(.type == "signal" and .path == $path and .interface == $iface) |
             if .member == "conversationCreated" or .member == "conversationUpdated" then
-                (.payload.data[0].data) as $m | {
-                    signal: .member,
-                    threadId: $m[6], uid: $m[7], body: $m[1], date: $m[3],
-                    type: $m[4], read: $m[5], subId: $m[8],
-                    addresses: ($m[2] | map(.[0]))
-                }
+                (.payload.data[0].data) as $m |
+                if ($m[6] == null) or ($m[7] == null) then
+                    empty
+                else
+                    {
+                        signal: .member,
+                        threadId: $m[6], uid: $m[7], body: $m[1], date: $m[3],
+                        type: $m[4], read: $m[5], subId: $m[8],
+                        addresses: ($m[2] | map(.[0]))
+                    }
+                end
             elif .member == "conversationLoaded" then
-                {signal: "conversationLoaded", threadId: .payload.data[0], count: .payload.data[1]}
+                if (.payload.data[0] == null) then
+                    empty
+                else
+                    {signal: "conversationLoaded", threadId: .payload.data[0], count: .payload.data[1]}
+                end
             elif .member == "conversationRemoved" then
                 {signal: "conversationRemoved", threadId: .payload.data[0]}
             else

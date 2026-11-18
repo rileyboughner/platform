@@ -3512,6 +3512,21 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property string openThreadId: ""
         // uid(string) -> message object, only populated for the open thread
         property var openThreadMessages: ({})
+        // threadId(string) -> {uid(string): message}, for EVERY thread the
+        // watcher has seen messages for -- survives closing the thread view
+        // so reopening shows cached messages instantly while paging tops it up
+        property var threadMessageCache: ({})
+
+        // threadId currently being paged through history, or "" if no
+        // paging is in flight; guards stray timer/signal callbacks after
+        // the user switches threads or closes the view mid-page
+        property string threadPagingThreadId: ""
+        property int threadFetchPageIndex: 0
+        // openThreadMessages count captured right before the in-flight
+        // page's request, to detect whether that page added anything
+        property int threadFetchPrevCount: 0
+        readonly property int threadFetchPageSize: 50
+        readonly property int threadFetchMaxPages: 6
 
         function normalizeNumber(addr) {
             const digits = (addr || "").replace(/[^0-9]/g, "")
@@ -3537,6 +3552,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         // incoming message is at least as new, so a late-arriving older
         // backfill message can't clobber the current snippet.
         function mergeThreadSummary(msg) {
+            if (!msg || msg.threadId === undefined || msg.threadId === null
+                || msg.uid === undefined || msg.uid === null) return
             const key = String(msg.threadId)
             const existing = smsPanel.threads[key]
             if (existing && msg.date < existing.date) return
@@ -3547,6 +3564,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         }
 
         function removeThread(threadId) {
+            if (threadId === undefined || threadId === null) return
             const key = String(threadId)
             if (!(key in smsPanel.threads)) return
             const next = Object.assign({}, smsPanel.threads)
@@ -3556,12 +3574,25 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             if (smsPanel.openThreadId === key) smsPanel.closeThreadView()
         }
 
+        // Keyed by uid so a malformed signal missing either id is dropped
+        // before it can create a phantom message; an empty body with a
+        // valid uid is a real MMS and still renders normally.
         function mergeOpenMessage(msg) {
-            if (String(msg.threadId) !== smsPanel.openThreadId) return
-            const key = String(msg.uid)
-            const next = Object.assign({}, smsPanel.openThreadMessages)
-            next[key] = msg
-            smsPanel.openThreadMessages = next
+            if (!msg || msg.threadId === undefined || msg.threadId === null
+                || msg.uid === undefined || msg.uid === null) return
+            const threadKey = String(msg.threadId)
+            const uidKey = String(msg.uid)
+
+            // Every thread keeps a cache, not just the one currently open,
+            // so switching threads later shows cached messages instantly.
+            const threadCache = Object.assign({}, smsPanel.threadMessageCache[threadKey] || {})
+            threadCache[uidKey] = msg
+            const nextCache = Object.assign({}, smsPanel.threadMessageCache)
+            nextCache[threadKey] = threadCache
+            smsPanel.threadMessageCache = nextCache
+
+            if (threadKey !== smsPanel.openThreadId) return
+            smsPanel.openThreadMessages = threadCache
         }
 
         function sortedOpenMessages() {
@@ -3571,17 +3602,84 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         }
 
         function openThreadView(threadId) {
-            smsPanel.openThreadId = String(threadId)
-            smsPanel.openThreadMessages = {}
+            const key = String(threadId)
+            smsPanel.openThreadId = key
+            // Show whatever's cached immediately; paging below tops it up.
+            smsPanel.openThreadMessages = smsPanel.threadMessageCache[key] || {}
             smsPanel.sendError = ""
-            threadFetchProcess.command = ["kdeconnect-sms-dbus", "thread", smsPanel.deviceId, smsPanel.openThreadId, "50"]
-            threadFetchProcess.running = true
+            smsPanel.startThreadPaging(key)
             Qt.callLater(() => composeInput.forceActiveFocus())
         }
 
         function closeThreadView() {
+            smsPanel.stopThreadPaging()
             smsPanel.openThreadId = ""
             smsPanel.openThreadMessages = {}
+        }
+
+        // Pages backwards through a thread's history 50 messages at a time
+        // (cap 6 pages / 300 messages) until a page adds no new uids.
+        // requestConversation only backfills from the phone ONCE per call
+        // and never loops server-side, so the paging has to happen here.
+        function startThreadPaging(threadId) {
+            smsPanel.threadPagingThreadId = threadId
+            smsPanel.threadFetchPageIndex = 0
+            smsPanel.requestThreadPage()
+        }
+
+        function stopThreadPaging() {
+            smsPanel.threadPagingThreadId = ""
+            threadPageTimeoutTimer.stop()
+            threadPageSettleTimer.stop()
+        }
+
+        function requestThreadPage() {
+            const threadId = smsPanel.threadPagingThreadId
+            if (threadId === "" || threadId !== smsPanel.openThreadId) return
+            if (smsPanel.threadFetchPageIndex >= smsPanel.threadFetchMaxPages) {
+                smsPanel.stopThreadPaging()
+                return
+            }
+            smsPanel.threadFetchPrevCount = Object.keys(smsPanel.openThreadMessages).length
+            const start = smsPanel.threadFetchPageIndex * smsPanel.threadFetchPageSize
+            threadFetchProcess.command = ["kdeconnect-sms-dbus", "thread", smsPanel.deviceId,
+                threadId, String(smsPanel.threadFetchPageSize), String(start)]
+            threadFetchProcess.running = true
+            threadPageSettleTimer.stop()
+            threadPageTimeoutTimer.restart()
+        }
+
+        // conversationLoaded only fires when the daemon actually pulled a
+        // fresh batch from the phone (see header notes); a page fully
+        // served from kdeconnectd's own cache never emits it, so this is
+        // just an early signal to shorten the wait -- the timeout timer
+        // below is what actually guarantees a page's result is evaluated.
+        function onThreadPageLoadedSignal(threadId) {
+            if (smsPanel.threadPagingThreadId === "" || String(threadId) !== smsPanel.threadPagingThreadId) return
+            threadPageTimeoutTimer.stop()
+            threadPageSettleTimer.restart()
+        }
+
+        function evaluateThreadPage() {
+            threadPageTimeoutTimer.stop()
+            threadPageSettleTimer.stop()
+            const threadId = smsPanel.threadPagingThreadId
+            if (threadId === "" || threadId !== smsPanel.openThreadId) return
+            const newCount = Object.keys(smsPanel.openThreadMessages).length
+            if (newCount <= smsPanel.threadFetchPrevCount) {
+                // No new uids landed (wedged phone, or history exhausted).
+                // Whatever already arrived stays on screen either way.
+                smsPanel.stopThreadPaging()
+                return
+            }
+            smsPanel.threadFetchPageIndex += 1
+            smsPanel.requestThreadPage()
+        }
+
+        function startWatcherIfNeeded() {
+            if (watchProcess.running) return
+            watchProcess.command = ["kdeconnect-sms-dbus", "watch", smsPanel.deviceId]
+            watchProcess.running = true
         }
 
         function sendCurrentMessage() {
@@ -3636,21 +3734,22 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         color: root.colBg
         visible: false
 
+        // SMS state (status/conversations/contacts/watcher) is preloaded
+        // once in Component.onCompleted below and kept alive for the life
+        // of the shell -- visibility only toggles the slow status-poll
+        // timer and kicks a non-destructive background refresh so opening
+        // the panel is instant instead of re-running the full init.
         onVisibleChanged: {
             if (visible) {
                 smsPanel.statusError = ""
-                smsPanel.refreshStatus()
+                smsPanel.manualRefresh()
                 smsStatusTimer.running = true
             } else {
                 smsStatusTimer.running = false
-                watchProcess.running = false
-                // Reset so the next show re-runs the full init: otherwise
-                // wasOk stays true and the watcher is never restarted.
-                smsPanel.deviceState = ""
-                smsPanel.deviceId = ""
-                smsPanel.closeThreadView()
             }
         }
+
+        Component.onCompleted: smsPanel.refreshStatus()
 
         Timer {
             id: smsStatusTimer
@@ -3661,6 +3760,25 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             repeat: true
             running: false
             onTriggered: smsPanel.refreshStatus()
+        }
+
+        // Paged-history fetch timers (see startThreadPaging/requestThreadPage
+        // above): threadPageSettleTimer gives trailing conversationUpdated
+        // signals a moment to land after conversationLoaded fires;
+        // threadPageTimeoutTimer guarantees a page is evaluated even if
+        // conversationLoaded never comes (cache-served page, or a wedged phone).
+        Timer {
+            id: threadPageSettleTimer
+            interval: 400
+            repeat: false
+            onTriggered: smsPanel.evaluateThreadPage()
+        }
+
+        Timer {
+            id: threadPageTimeoutTimer
+            interval: 5000
+            repeat: false
+            onTriggered: smsPanel.evaluateThreadPage()
         }
 
         Process {
@@ -3697,14 +3815,12 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         conversationsProcess.running = true
                         contactsProcess.command = ["kdeconnect-sms-dbus", "contacts", smsPanel.deviceId]
                         contactsProcess.running = true
-                        watchProcess.command = ["kdeconnect-sms-dbus", "watch", smsPanel.deviceId]
-                        watchProcess.running = true
+                        smsPanel.startWatcherIfNeeded()
                     } else if (!nowOk && wasOk) {
                         watchProcess.running = false
                         smsPanel.closeThreadView()
-                    } else if (nowOk && !watchProcess.running) {
-                        watchProcess.command = ["kdeconnect-sms-dbus", "watch", smsPanel.deviceId]
-                        watchProcess.running = true
+                    } else if (nowOk) {
+                        smsPanel.startWatcherIfNeeded()
                     }
                 } catch (error) {
                     smsPanel.deviceState = "no-daemon"
@@ -3781,7 +3897,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             }
         }
 
-        // Long-lived while the panel is visible: one JSON object per line,
+        // Long-lived for the whole shell session (started once at preload,
+        // see Component.onCompleted above): one JSON object per line,
         // decoded straight from kdeconnectd's D-Bus signals by
         // kdeconnect-sms-dbus (no polling -- see its `watch` subcommand).
         Process {
@@ -3795,8 +3912,16 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     try {
                         const evt = JSON.parse(line)
                         if (evt.signal === "conversationCreated" || evt.signal === "conversationUpdated") {
+                            // A malformed/empty signal missing either id must
+                            // not create a phantom message; a real MMS with
+                            // an empty body but a valid uid still renders.
+                            if (evt.threadId === undefined || evt.threadId === null
+                                || evt.uid === undefined || evt.uid === null) return
                             smsPanel.mergeThreadSummary(evt)
                             smsPanel.mergeOpenMessage(evt)
+                        } else if (evt.signal === "conversationLoaded") {
+                            if (evt.threadId === undefined || evt.threadId === null) return
+                            smsPanel.onThreadPageLoadedSignal(evt.threadId)
                         } else if (evt.signal === "conversationRemoved") {
                             smsPanel.removeThread(evt.threadId)
                         }
