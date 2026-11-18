@@ -99,13 +99,13 @@ bcall() {
 device_property() {
     local id="$1" prop="$2"
     busctl --user --json=short get-property "$SERVICE" "$(devpath "$id")" "$DEVICE_IFACE" "$prop" 2>/dev/null \
-        | jq -r '.data[0]'
+        | jq -r '.data'
 }
 
 device_supported_plugins() {
     local id="$1"
     busctl --user --json=short get-property "$SERVICE" "$(devpath "$id")" "$DEVICE_IFACE" supportedPlugins 2>/dev/null \
-        | jq -r '.data[0][]' 2>/dev/null || true
+        | jq -r '.data[]' 2>/dev/null || true
 }
 
 cmd_status() {
