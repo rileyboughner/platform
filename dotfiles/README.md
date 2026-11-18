@@ -55,7 +55,7 @@ Credentials (git PATs per GitHub org, Todoist/gcalcli tokens, inter-host SSH key
 | Script | Purpose |
 | --- | --- |
 | `scripts/boner` | `install` stows configs and clones the wallpaper repo; `rebuild` runs `nixos-rebuild switch` for the local flake. |
-| `scripts/set-wallpaper <path>` | Applies a specific wallpaper: sets it via swww, regenerates pywal colors, persists the choice to `~/.wallpaper`, and reloads every themed app (Hyprland, mako, swayosd, Quickshell, Neovim, Hyprlauncher). |
+| `scripts/set-wallpaper <path>` | Applies a specific wallpaper: sets it via awww, regenerates pywal colors, persists the choice to `~/.wallpaper`, and reloads every themed app (Hyprland, mako, swayosd, Quickshell, Neovim, Hyprlauncher). |
 | `scripts/random-wallpaper` | Picks a random image from `~/.wallpapers/nature` and hands it to `set-wallpaper`. |
 | `scripts/restore-wallpaper` | Reapplies the last wallpaper from `~/.wallpaper` on login, falling back to `random-wallpaper` if none is set yet. Doesn't redo the pywal/reload work, since that already happened when the wallpaper was originally chosen. |
 | `scripts/theme-set <name>` | Pins a named theme from `config/themes/*.json` (or `~/.config/themes/`): applies it through `wal --theme`, regenerates the derived HyprToolkit/qt6ct files, persists the choice to `~/.cache/theme/current`, and reloads every themed app. `boner theme set <name>` is a thin wrapper around this. |

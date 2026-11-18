@@ -174,7 +174,7 @@ theme_sync_wallpaper_matches() {
 }
 
 # True if a Hyprland session is actually running on this machine right
-# now -- set-wallpaper waits on the swww daemon,
+# now -- set-wallpaper waits on the awww daemon,
 # so wallpaper pulls must only be attempted when a session exists.
 #
 # Also exports HYPRLAND_INSTANCE_SIGNATURE for the found session: this

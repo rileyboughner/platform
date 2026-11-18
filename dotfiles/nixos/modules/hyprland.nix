@@ -92,7 +92,7 @@
 
     hyprpwcenter
     hyprlauncher
-    swww
+    awww
     hyprshot
     hyprpolkitagent
 
