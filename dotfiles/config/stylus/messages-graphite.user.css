@@ -1,0 +1,30 @@
+/* ==UserStyle==
+@name         Google Messages - Graphite
+@namespace    rileyboughner
+@version      1.0.0
+@description Monochrome dark theme for Google Messages for web, matching the Graphite dotfiles theme (bg #0b0b0c, fg #e6e6e6). Built on a full-page inversion so it keeps working when Google renames its classes.
+@author       Shart
+==/UserStyle== */
+
+@-moz-document domain("messages.google.com") {
+  :root {
+    color-scheme: dark;
+  }
+
+  /* Invert the whole page, restore hues, then strip all color.
+     Light UI -> dark UI, and every accent lands as gray, which is
+     exactly the Graphite palette. Robust against DOM changes because
+     it doesn't depend on Google's class names. */
+  html {
+    filter: invert(1) hue-rotate(180deg) grayscale(1);
+  }
+
+  /* Photos and videos: invert them back so they look normal, then
+     grayscale them so they match the monochrome theme. UI icons are
+     left alone on purpose, they are already correct after the page
+     inversion. */
+  img,
+  video {
+    filter: invert(1) hue-rotate(180deg) grayscale(1);
+  }
+}
