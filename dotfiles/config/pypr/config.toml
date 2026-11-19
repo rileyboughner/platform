@@ -54,8 +54,8 @@ process_tracking = false
 lazy = true
 
 [scratchpads.messages]
-command = "kdeconnect-sms"
-class = "org.kde.kdeconnect.sms"
+command = "vivaldi --app=https://messages.google.com/web/conversations"
+class = "vivaldi-messages.google.com__web_conversations-Default"
 size = "92% 92%"
 position = "4% 40px"
 animation = ""
