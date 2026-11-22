@@ -19,7 +19,7 @@ services:
       - OPENVPN_PASSWORD=${VPN_PASSWORD}
       - SERVER_COUNTRY=United States
     ports:
-      - 8080:8080
+      - 8082:8080
       - 9091:9091
       - 6881:6881
       - 6881:6881/udp
