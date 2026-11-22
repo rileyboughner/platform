@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Launcher</string>
+    <string name="app_name">Boner</string>
     <string name="ha_popup_accessibility_label">Living Room Popup</string>
     <string name="ha_popup_accessibility_description">Press Menu anywhere on the TV to show/hide a quick popup for the living-room Home Assistant lights and scenes. Requires \"Appear on top\" to also be granted for this app in Settings &#8594; Apps.</string>
 </resources>
