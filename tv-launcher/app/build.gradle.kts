@@ -12,8 +12,8 @@ android {
         applicationId = "dev.rileyboughner.tvlauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
         // No BuildConfig token fields here, ever: this app is a separate
         // public release and must never bake in a credential. The Home
         // Assistant token is fetched from the launcher token server on

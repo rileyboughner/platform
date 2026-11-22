@@ -85,8 +85,8 @@ private const val BRIGHTNESS_STEP_PERCENT = 10
 
 /**
  * The TV launcher's only screen — a single page, top to bottom: a large
- * clock + date, one row of three poster apps (Jellyfin, YouTube, Weave
- * Music), then the living-room Home Assistant lights and scenes rows.
+ * clock + date, one row of four poster apps (Jellyfin, YouTube, Weave
+ * Music, Moonlight), then the living-room Home Assistant lights and scenes rows.
  *
  * Apple TV-like: full-bleed synced wallpaper under a dark gradient scrim,
  * large rounded poster tiles, focused tile scales up with a bright ring
@@ -131,6 +131,7 @@ fun TvHomeScreen(
 
     val jellyfinTile = remember { resolveLeanbackTile(context, "org.jellyfin.androidtv", "Jellyfin") }
     val youtubeTile = remember { resolveLeanbackTile(context, "com.google.android.youtube.tv", "YouTube") }
+    val moonlightTile = remember { resolveLeanbackTile(context, "com.limelight", "Moonlight") }
     val firstFocusRequester = remember { FocusRequester() }
     val wallpaperImage = remember(wallpaperBitmap) { wallpaperBitmap?.asImageBitmap() }
     // Hoisted (not an inline rememberScrollState) so focusing any Apps-row
@@ -224,6 +225,18 @@ fun TvHomeScreen(
                         painterResource(R.drawable.tile_weave),
                         contentDescription = "Weave Music",
                     )
+                }
+                AppTile(
+                    label = "Moonlight",
+                    enabled = moonlightTile != null,
+                    onClick = moonlightTile?.let { tile -> { context.startActivity(tile.launchIntent) } },
+                    onFocus = scrollToTop,
+                ) {
+                    if (moonlightTile != null) {
+                        TileBannerArtwork(moonlightTile.artwork, contentDescription = moonlightTile.label)
+                    } else {
+                        TileTextArtwork("Moonlight")
+                    }
                 }
                 Spacer(modifier = Modifier.width(20.dp))
             }

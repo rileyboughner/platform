@@ -1,1 +1,1 @@
-{"apkUrl":"https://github.com/rileyboughner/platform/releases/download/tv-0.1.0/app-release.apk","notes":"First release of the standalone TV launcher: Jellyfin, YouTube and Weave Music, living-room lights and scenes, synced wallpaper.","versionCode":1,"versionName":"0.1.0"}
+{"apkUrl": "https://github.com/rileyboughner/platform/releases/download/tv-0.1.1/app-release.apk", "notes": "Adds a Moonlight tile to the home screen for game streaming from the desktop (Sunshine).", "versionCode": 2, "versionName": "0.1.1"}
