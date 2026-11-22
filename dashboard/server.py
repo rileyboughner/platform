@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import socket
+import subprocess
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,6 +32,9 @@ DISK_PATH = os.environ.get("DISK_PATH", "/mnt/tank/services/jellyseer/settings.j
 CLOUDFLARED_CONFIG_PATH = os.environ.get(
     "CLOUDFLARED_CONFIG_PATH", "/mnt/tank/services/cloudflared/config.yml"
 )
+
+KUBECONFIG = os.environ.get("KUBECONFIG", "/kube/k3s.yaml")
+K8S_API_SERVER = os.environ.get("K8S_API_SERVER", "https://192.168.1.2:6443")
 
 
 # ---------------------------------------------------------------- helpers --
@@ -271,6 +275,47 @@ def get_server():
     return result
 
 
+# ------------------------------------------------------------- Kubernetes
+
+def get_kubernetes():
+    """Pods across all namespaces via kubectl (kubeconfig mounted read-only)."""
+    try:
+        out = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig", KUBECONFIG,
+                "--server", K8S_API_SERVER,
+                "get", "pods", "-A", "-o", "json",
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+    except Exception:
+        return {"error": "kubectl is not available in the dashboard container."}
+    if out.returncode != 0:
+        return {"error": "Kubernetes API is not reachable."}
+    try:
+        data = json.loads(out.stdout)
+    except Exception:
+        return {"error": "Could not parse kubectl output."}
+    pods = []
+    for item in data.get("items", []):
+        meta = item.get("metadata", {})
+        status = item.get("status", {})
+        container_statuses = status.get("containerStatuses", [])
+        total = len(container_statuses)
+        ready = sum(1 for c in container_statuses if c.get("ready"))
+        restarts = sum(c.get("restartCount", 0) for c in container_statuses)
+        pods.append({
+            "namespace": meta.get("namespace", "?"),
+            "name": meta.get("name", "?"),
+            "ready": f"{ready}/{total}" if total else "—",
+            "status": status.get("phase", "?"),
+            "restarts": restarts,
+        })
+    pods.sort(key=lambda p: (p["namespace"], p["name"]))
+    return {"pods": pods}
+
+
 # ------------------------------------------------------------------- Links
 
 def get_links():
@@ -348,6 +393,7 @@ class Handler(BaseHTTPRequestHandler):
                 "seerr": get_seerr(),
                 "homeassistant": get_homeassistant(),
                 "server": get_server(),
+                "kubernetes": get_kubernetes(),
                 "links": get_links(),
             })
             return

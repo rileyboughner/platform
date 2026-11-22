@@ -144,23 +144,75 @@ function renderServer(data) {
     return;
   }
 
+  function containerTable(containers) {
+    const table = el("table", { class: "container-table" });
+    table.appendChild(
+      el("tr", {}, [
+        el("th", { text: "Container" }),
+        el("th", { text: "State" }),
+        el("th", { text: "CPU" }),
+        el("th", { text: "RAM" }),
+      ])
+    );
+    for (const c of containers) {
+      const dotClass = c.state === "running" ? "running" : c.state === "exited" || c.state === "dead" ? "exited" : "other";
+      table.appendChild(
+        el("tr", {}, [
+          el("td", {}, [el("span", { class: `dot ${dotClass}` }), el("span", { text: c.name })]),
+          el("td", { text: c.state || "—" }),
+          el("td", { text: c.cpu_percent != null ? `${c.cpu_percent}%` : "—" }),
+          el("td", { text: c.memory_bytes != null ? formatBytes(c.memory_bytes) : "—" }),
+        ])
+      );
+    }
+    return table;
+  }
+
+  // Not-running containers first so a stopped service is impossible to miss.
+  const down = data.containers.filter((c) => c.state !== "running");
+  const up = data.containers.filter((c) => c.state === "running");
+  if (down.length > 0) {
+    body.appendChild(el("div", { class: "subsection-title", text: `Not running (${down.length})` }));
+    body.appendChild(containerTable(down));
+  }
+  body.appendChild(el("div", { class: "subsection-title", text: `Running (${up.length})` }));
+  body.appendChild(containerTable(up));
+}
+
+function renderKubernetes(data) {
+  const body = document.querySelector("#card-kubernetes .card-body");
+  body.innerHTML = "";
+  if (data.error) {
+    body.appendChild(errorState(data.error));
+    return;
+  }
+  if (!data.pods || data.pods.length === 0) {
+    body.appendChild(emptyState("No pods found."));
+    return;
+  }
   const table = el("table", { class: "container-table" });
   table.appendChild(
     el("tr", {}, [
-      el("th", { text: "Container" }),
-      el("th", { text: "State" }),
-      el("th", { text: "CPU" }),
-      el("th", { text: "RAM" }),
+      el("th", { text: "Pod" }),
+      el("th", { text: "Namespace" }),
+      el("th", { text: "Ready" }),
+      el("th", { text: "Status" }),
+      el("th", { text: "Restarts" }),
     ])
   );
-  for (const c of data.containers) {
-    const dotClass = c.state === "running" ? "running" : c.state === "exited" || c.state === "dead" ? "exited" : "other";
+  for (const p of data.pods) {
+    const dotClass =
+      p.status === "Running" ? "running"
+      : p.status === "Succeeded" ? "completed"
+      : p.status === "Failed" ? "exited"
+      : "other";
     table.appendChild(
       el("tr", {}, [
-        el("td", {}, [el("span", { class: `dot ${dotClass}` }), el("span", { text: c.name })]),
-        el("td", { text: c.state || "—" }),
-        el("td", { text: c.cpu_percent != null ? `${c.cpu_percent}%` : "—" }),
-        el("td", { text: c.memory_bytes != null ? formatBytes(c.memory_bytes) : "—" }),
+        el("td", {}, [el("span", { class: `dot ${dotClass}` }), el("span", { text: p.name })]),
+        el("td", { text: p.namespace }),
+        el("td", { text: p.ready }),
+        el("td", { text: p.status }),
+        el("td", { text: String(p.restarts) }),
       ])
     );
   }
@@ -280,6 +332,7 @@ async function refresh() {
     renderSeerr(data.seerr || {});
     renderHomeAssistant(data.homeassistant || {});
     renderServer(data.server || {});
+    renderKubernetes(data.kubernetes || {});
     renderLinks(data.links || {});
     document.getElementById("last-updated").textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (e) {

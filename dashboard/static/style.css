@@ -180,6 +180,26 @@ body {
 .dot.running { background: var(--color-semantic-success); }
 .dot.exited, .dot.dead { background: var(--color-semantic-error); }
 .dot.other { background: var(--color-semantic-warning); }
+.dot.completed { background: var(--color-semantic-text-subtle); }
+
+.subsection-title {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-semantic-text-subtle);
+  margin: var(--spacing-16) 0 var(--spacing-8) 0;
+}
+
+.subsection-title:first-of-type {
+  margin-top: 0;
+}
+
+/* The phone (launcher) already has app tiles; website links only earn
+   their space on a wider screen. */
+@media (max-width: 700px) {
+  #card-links {
+    display: none;
+  }
+}
 
 .links-filter {
   display: block;

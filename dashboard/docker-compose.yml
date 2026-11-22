@@ -12,6 +12,8 @@ services:
       - HA_URL=${HA_URL:-http://homeassistant:8123}
       - SEERR_URL=${SEERR_URL:-http://seerr:5055}
       - CADVISOR_URL=${CADVISOR_URL:-}
+      - KUBECONFIG=/kube/k3s.yaml
+      - K8S_API_SERVER=https://192.168.1.2:6443
     volumes:
       # Seerr's API key.
       - /mnt/tank/services/jellyseer/settings.json:/mnt/tank/services/jellyseer/settings.json:ro
@@ -20,6 +22,8 @@ services:
       # Read-only Docker API access for per-container state (cAdvisor covers the stats).
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/uptime:/host/proc-uptime:ro
+      # Read-only k3s kubeconfig for the Kubernetes section (server overridden to the LAN IP).
+      - /etc/rancher/k3s/k3s.yaml:/kube/k3s.yaml:ro
     networks:
       - proxy_net
       - arr_net
