@@ -21,6 +21,21 @@ if [ "${#missing[@]}" -gt 0 ]; then
     exec nix-shell -p "${missing[@]}" --run "$_relaunch"
 fi
 
+# qBittorrent (manual torrents) + TV cast.
+# Credentials live in the agenix secret decrypted to $QBIT_SECRET_FILE
+# (two lines: username, password). BONER_QBIT_SECRET overrides the path,
+# which is only meant for testing — never point it at a committed file.
+QBIT_SECRET_FILE="${BONER_QBIT_SECRET:-/run/agenix/qbittorrent}"
+QBIT_HOSTS=("http://192.168.1.2:8082" "http://100.124.77.118:8082")
+QBIT_CATEGORY="boner"
+QBIT_MANUAL_SAVEPATH="/torrents/manual"
+QBIT_CONTAINER_TORRENTS="/torrents"
+QBIT_HOST_TORRENTS="/mnt/tank/media/torrents"
+TV_ADB_HOST="192.168.1.171:5555"
+TV_MOONLIGHT_PKG="com.limelight"
+TV_MOONLIGHT_ACTIVITY="com.limelight/.PcView"
+TV_ADB_SERVER_BIN="/home/admin/.android-sdk/result/libexec/android-sdk/platform-tools/adb"
+
 bold="" head="" reset="" dim=""
 if [ -t 2 ]; then
     bold=$'\033[1m'
@@ -71,6 +86,17 @@ _rows_sync() {
     _row "sync status" "Show sync state, mode, group, last push/pull times, and hub reachability"
 }
 
+_rows_torrent() {
+    _row "torrent add <magnet>" "Add a torrent to qBittorrent (manual, category boner)"
+    _row "torrent list"         "List manually added torrents with status"
+    _row "torrent download"     "Copy a completed torrent to the current directory"
+}
+
+_rows_tv() {
+    _row "cast" "Wake the TV and launch Moonlight"
+}
+
+
 # Per-subcommand usage, shown whenever that subcommand is called with a
 # missing/unrecognized argument instead of a bare bash error.
 _usage_wallpaper() {
@@ -97,6 +123,12 @@ _usage_sync() {
     printf 'Usage: boner sync %s<on|off|mode|status>%s\n\n' "$dim" "$reset" >&2
     _rows_sync
 }
+
+_usage_torrent() {
+    printf 'Usage: boner torrent %s<subcommand>%s [args]\n\n' "$dim" "$reset" >&2
+    _rows_torrent
+}
+
 
 cmd_rebuild() {
     sudo nixos-rebuild switch --flake "$HOME/.platform/dotfiles/nixos#" --impure
@@ -434,6 +466,225 @@ cmd_install() {
     echo "Done."
 }
 
+# --- qBittorrent (manual torrents) ---
+
+_qbit_read_secret() {
+    # Sets QBIT_USER / QBIT_PASS from the agenix secret (two lines:
+    # username on line 1, password on line 2).
+    if [ ! -f "$QBIT_SECRET_FILE" ]; then
+        echo "Error: qBittorrent credentials not found at $QBIT_SECRET_FILE." >&2
+        echo "Run 'boner rebuild' so agenix decrypts the qbittorrent secret, then try again." >&2
+        exit 1
+    fi
+    QBIT_USER=$(sed -n '1p' "$QBIT_SECRET_FILE")
+    QBIT_PASS=$(sed -n '2p' "$QBIT_SECRET_FILE")
+    if [ -z "$QBIT_USER" ] || [ -z "$QBIT_PASS" ]; then
+        echo "Error: $QBIT_SECRET_FILE is empty or malformed (expected username on line 1, password on line 2)." >&2
+        exit 1
+    fi
+}
+
+_qbit_login() {
+    # Logs in to the qBittorrent API. Tries the LAN address first, then
+    # Tailscale, so it works on and off the home network. Sets QBIT_BASE
+    # (working API root) and QBIT_COOKIE (session cookie file). The cookie
+    # file is removed on exit.
+    _qbit_read_secret
+    QBIT_COOKIE=$(mktemp)
+    trap 'rm -f "$QBIT_COOKIE"' EXIT
+    local base code login_code
+    for base in "${QBIT_HOSTS[@]}"; do
+        # Any HTTP status (even 401) means the host answers; 000 means
+        # unreachable.
+        code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$base/api/v2/app/version" 2>/dev/null || echo "000")
+        if [ "$code" = "000" ]; then
+            continue
+        fi
+        login_code=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -c "$QBIT_COOKIE" \
+            --data-urlencode "username=$QBIT_USER" --data-urlencode "password=$QBIT_PASS" \
+            "$base/api/v2/auth/login" 2>/dev/null || echo "000")
+        if [ "$login_code" = "000" ]; then
+            continue
+        fi
+        if [ "$login_code" = "200" ] || [ "$login_code" = "204" ]; then
+            QBIT_BASE="$base"
+            return 0
+        fi
+        echo "Error: qBittorrent login failed at $base (HTTP $login_code). Check the credentials in $QBIT_SECRET_FILE." >&2
+        exit 1
+    done
+    echo "Error: could not reach qBittorrent at any of: ${QBIT_HOSTS[*]}." >&2
+    exit 1
+}
+
+_magnet_hash() {
+    # Extracts the btih info-hash from a magnet link (hex or base32).
+    printf '%s' "$1" | sed -n 's/.*xt=urn:btih:\([A-Za-z0-9]*\).*/\1/p'
+}
+
+cmd_torrent() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        add)      cmd_torrent_add "${2:-}" ;;
+        list)     cmd_torrent_list ;;
+        download) cmd_torrent_download "${2:-}" ;;
+        *)
+            _usage_torrent
+            exit 1
+            ;;
+    esac
+}
+
+cmd_torrent_add() {
+    local magnet="${1:-}"
+    if [ -z "$magnet" ]; then
+        _usage_torrent
+        exit 1
+    fi
+    _qbit_login
+    local http_code
+    http_code=$(curl -s --max-time 30 -b "$QBIT_COOKIE" -o /dev/null -w '%{http_code}' \
+        --data-urlencode "urls=$magnet" \
+        --data-urlencode "category=$QBIT_CATEGORY" \
+        --data-urlencode "savepath=$QBIT_MANUAL_SAVEPATH" \
+        "$QBIT_BASE/api/v2/torrents/add" 2>/dev/null || echo "000")
+    if [ "$http_code" != "200" ]; then
+        echo "Error: qBittorrent rejected the torrent (HTTP $http_code)." >&2
+        exit 1
+    fi
+    local hash name i
+    hash=$(_magnet_hash "$magnet")
+    # The torrent may take a moment to appear; retry briefly for its name.
+    name=""
+    for i in 1 2 3 4 5; do
+        name=$(curl -s --max-time 10 -b "$QBIT_COOKIE" "$QBIT_BASE/api/v2/torrents/info?hashes=$hash" 2>/dev/null | jq -r '.[0].name // empty')
+        if [ -n "$name" ]; then
+            break
+        fi
+        sleep 1
+    done
+    if [ -n "$name" ]; then
+        echo "Added: $name"
+    else
+        echo "Added torrent $hash (name not visible yet)."
+    fi
+}
+
+cmd_torrent_list() {
+    _qbit_login
+    local json count
+    json=$(curl -s --max-time 15 -b "$QBIT_COOKIE" "$QBIT_BASE/api/v2/torrents/info?category=$QBIT_CATEGORY")
+    count=$(printf '%s' "$json" | jq 'length')
+    if [ "$count" = "0" ]; then
+        echo "No manually added torrents (category '$QBIT_CATEGORY')."
+        return 0
+    fi
+    printf '%s' "$json" | jq -r '
+        def human: if . >= 1073741824 then ((./1073741824*10|floor)/10|tostring)+" GiB" elif . >= 1048576 then ((./1048576*10|floor)/10|tostring)+" MiB" elif . >= 1024 then ((./1024*10|floor)/10|tostring)+" KiB" else (tostring+" B") end;
+        def rate: (human + "/s");
+        (["NAME","SIZE","PROGRESS","STATE","DL","UP"] | @tsv),
+        (.[] | [(.name | .[0:55]), (.size | human), ((.progress*100|floor|tostring)+"%"), .state, (.dlspeed | rate), (.upspeed | rate)] | @tsv)
+    ' | column -t -s "$(printf '\t')"
+}
+
+cmd_torrent_download() {
+    local query="${1:-}"
+    if [ -z "$query" ]; then
+        _usage_torrent
+        exit 1
+    fi
+    _qbit_login
+    local json match
+    json=$(curl -s --max-time 15 -b "$QBIT_COOKIE" "$QBIT_BASE/api/v2/torrents/info?category=$QBIT_CATEGORY")
+    match=$(printf '%s' "$json" | jq -r --arg q "$query" '
+        map(select((.name | ascii_downcase | contains($q | ascii_downcase)) or (.hash | startswith($q))))
+        | .[0] // empty')
+    if [ -z "$match" ]; then
+        echo "Error: no manual torrent matching '$query'." >&2
+        exit 1
+    fi
+    local hash name progress complete pct content_path save_path
+    hash=$(printf '%s' "$match" | jq -r '.hash')
+    name=$(printf '%s' "$match" | jq -r '.name')
+    progress=$(printf '%s' "$match" | jq -r '.progress')
+    complete=$(printf '%s' "$match" | jq -r '.progress >= 1')
+    content_path=$(printf '%s' "$match" | jq -r '.content_path // empty')
+    save_path=$(printf '%s' "$match" | jq -r '.save_path')
+    if [ "$complete" != "true" ]; then
+        pct=$(printf '%s' "$match" | jq -r '(.progress*100|floor)')
+        echo "Error: '$name' is not complete yet ($pct%). Wait for it to finish." >&2
+        exit 1
+    fi
+    # Resolve the content path (container path) and translate it to the
+    # host path. content_path is the file for single-file torrents and the
+    # directory for multi-file ones.
+    local container_path host_path
+    if [ -n "$content_path" ]; then
+        container_path="$content_path"
+    else
+        container_path="$save_path/$name"
+    fi
+    host_path="$QBIT_HOST_TORRENTS/${container_path#$QBIT_CONTAINER_TORRENTS/}"
+    echo "Copying '$name' from the server to $PWD/ ..."
+    rsync -a --protect-args "admin@server:$host_path" "./"
+    echo "Done. The server copy stays in place (still seeding)."
+}
+
+# --- TV cast ---
+
+_adb() {
+    # Runs adb: a local binary first, the server's copy if we are on the
+    # server, otherwise adb on the server over SSH.
+    if command -v adb >/dev/null 2>&1; then
+        adb "$@"
+    elif [ -x "$TV_ADB_SERVER_BIN" ]; then
+        "$TV_ADB_SERVER_BIN" "$@"
+    else
+        ssh admin@server "$TV_ADB_SERVER_BIN" "$@"
+    fi
+}
+
+_tv_moonlight_foreground() {
+    # True when Moonlight is the focused app on the TV (not merely running).
+    _adb -s "$TV_ADB_HOST" shell dumpsys window 2>/dev/null | grep -qi "mCurrentFocus=.*$TV_MOONLIGHT_PKG"
+}
+
+cmd_cast() {
+    local attempt connected=0
+    echo "Connecting to the TV at $TV_ADB_HOST ..."
+    for attempt in 1 2 3 4 5; do
+        if _adb connect "$TV_ADB_HOST" 2>&1 | grep -qi 'connected\|already connected'; then
+            connected=1
+            break
+        fi
+        sleep 3
+    done
+    if [ "$connected" != "1" ]; then
+        echo "Error: could not connect to the TV at $TV_ADB_HOST after 5 tries. Is it on and on the network?" >&2
+        exit 1
+    fi
+    _adb -s "$TV_ADB_HOST" shell input keyevent KEYCODE_WAKEUP
+    sleep 2
+    # Primary: explicit activity launch. Note: am start launches Moonlight
+    # but does not always bring it to the foreground, so verify focus.
+    _adb -s "$TV_ADB_HOST" shell am start -n "$TV_MOONLIGHT_ACTIVITY" >/dev/null 2>&1
+    sleep 3
+    if _tv_moonlight_foreground; then
+        echo "Moonlight is launching on the TV."
+        return 0
+    fi
+    # Fallback: launcher intent, which reliably brings it to the foreground.
+    _adb -s "$TV_ADB_HOST" shell monkey -p "$TV_MOONLIGHT_PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+    sleep 3
+    if _tv_moonlight_foreground; then
+        echo "Moonlight is launching on the TV (via launcher intent)."
+        return 0
+    fi
+    echo "Error: Moonlight did not come to the foreground on the TV." >&2
+    exit 1
+}
+
+
 print_usage() {
     printf '%sboner%s - dotfiles management\n\n' "$bold" "$reset" >&2
     printf 'Usage: boner %s<command>%s [args]\n\n' "$dim" "$reset" >&2
@@ -460,6 +711,14 @@ print_usage() {
 
     _section "Sync"
     _rows_sync
+    echo >&2
+
+    _section "Torrents"
+    _rows_torrent
+    echo >&2
+
+    _section "TV"
+    _rows_tv
 }
 
 case "${1:-}" in
@@ -473,6 +732,8 @@ case "${1:-}" in
     wallpaper) cmd_wallpaper "${@:2}" ;;
     theme) cmd_theme "${@:2}" ;;
     sync) cmd_sync "${@:2}" ;;
+    torrent) cmd_torrent "${@:2}" ;;
+    cast) cmd_cast ;;
     help|-h|--help) print_usage ;;
     *)
         print_usage

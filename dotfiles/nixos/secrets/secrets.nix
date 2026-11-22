@@ -18,6 +18,7 @@ in
 {
   # Shared across every workstation.
   "todoist-token.age".publicKeys = workstations;
+  "qbittorrent.age".publicKeys = workstations;
   "gcalcli-client-secret.age".publicKeys = workstations;
 
   # Google OAuth client registered as "TVs and Limited Input devices" --

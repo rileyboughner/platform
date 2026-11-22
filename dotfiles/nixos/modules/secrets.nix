@@ -7,6 +7,11 @@
     owner = username;
   };
 
+  age.secrets.qbittorrent = {
+    file = ../secrets/qbittorrent.age;
+    owner = username;
+  };
+
   age.secrets.gcalcli-client-secret = {
     file = ../secrets/gcalcli-client-secret.age;
     owner = username;
