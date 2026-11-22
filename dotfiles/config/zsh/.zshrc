@@ -77,24 +77,31 @@ _boner() {
       _describe 'command' cmds
       ;;
     3)
+      local -a sub
       case ${words[2]} in
         secrets)
-          _describe 'command' 'update:edit a secret' 'list:list secrets'
+          sub=('update:edit a secret' 'list:list secrets')
+          _describe 'command' sub
           ;;
         theme)
-          _describe 'command' 'list:list themes' 'current:show current theme' 'set:set a theme' 'auto:auto theme'
+          sub=('list:list themes' 'current:show current theme' 'set:set a theme' 'auto:auto theme')
+          _describe 'command' sub
           ;;
         vm)
-          _describe 'vm' 'cyber-defence:Cyber Defence VM' 'windows-11:Windows 11 VM'
+          sub=('cyber-defence:Cyber Defence VM' 'windows-11:Windows 11 VM')
+          _describe 'vm' sub
           ;;
         wallpaper)
-          _describe 'command' 'set:set a wallpaper' 'random:random wallpaper' 'restore:restore wallpaper' 'warm:pre-cache wallpaper colors' 'recolor:recolor a wallpaper'
+          sub=('set:set a wallpaper' 'random:random wallpaper' 'restore:restore wallpaper' 'warm:pre-cache wallpaper colors' 'recolor:recolor a wallpaper')
+          _describe 'command' sub
           ;;
         sync)
-          _describe 'command' 'on:enable sync' 'off:disable sync' 'mode:set sync mode' 'status:show sync status'
+          sub=('on:enable sync' 'off:disable sync' 'mode:set sync mode' 'status:show sync status')
+          _describe 'command' sub
           ;;
         torrent)
-          _describe 'command' 'add:add a torrent by magnet link' 'list:list manual torrents' 'download:download a completed torrent'
+          sub=('add:add a torrent by magnet link' 'list:list manual torrents' 'download:download a completed torrent')
+          _describe 'command' sub
           ;;
       esac
       ;;
@@ -125,7 +132,9 @@ _boner() {
           ;;
         sync)
           if [[ ${words[3]} == mode ]]; then
-            _describe 'mode' 'unified:one theme across machines' 'split:separate themes per machine'
+            local -a modes
+            modes=('unified:one theme across machines' 'split:separate themes per machine')
+            _describe 'mode' modes
           fi
           ;;
         torrent)
