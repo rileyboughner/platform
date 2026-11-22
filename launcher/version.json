@@ -1,6 +1,6 @@
 {
-  "versionCode": 18,
-  "versionName": "0.18.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.18.0/app-release.apk",
-  "notes": "Push sync: the launcher holds the hub's live event stream and applies theme/wallpaper changes within about a second, with a slow 60s poll as a fallback."
+  "versionCode": 19,
+  "versionName": "0.19.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.19.0/app-release.apk",
+  "notes": "New minimal black-and-white icon and a new name, Boner."
 }
