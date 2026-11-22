@@ -528,6 +528,7 @@ cmd_torrent() {
         add)      cmd_torrent_add "${2:-}" ;;
         list)     cmd_torrent_list ;;
         download) cmd_torrent_download "${2:-}" ;;
+        _complete) cmd_torrent_complete ;;
         *)
             _usage_torrent
             exit 1
@@ -585,6 +586,16 @@ cmd_torrent_list() {
         (["NAME","SIZE","PROGRESS","STATE","DL","UP"] | @tsv),
         (.[] | [(.name | .[0:55]), (.size | human), ((.progress*100|floor|tostring)+"%"), .state, (.dlspeed | rate), (.upspeed | rate)] | @tsv)
     ' | column -t -s "$(printf '\t')"
+}
+
+# Hidden helper for shell completion: prints the names of completed
+# manual torrents, one per line, for `boner torrent download` tab
+# completion. Not shown in usage.
+cmd_torrent_complete() {
+    _qbit_login
+    local json
+    json=$(curl -s --max-time 15 -b "$QBIT_COOKIE" "$QBIT_BASE/api/v2/torrents/info?category=$QBIT_CATEGORY")
+    printf '%s' "$json" | jq -r '.[] | select(.progress >= 1) | .name'
 }
 
 cmd_torrent_download() {

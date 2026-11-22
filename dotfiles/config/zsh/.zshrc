@@ -54,3 +54,59 @@ _todo() {
   esac
 }
 compdef _todo todo
+
+_boner() {
+  case $CURRENT in
+    2)
+      local -a cmds
+      cmds=(
+        'install:stow config files'
+        'rebuild:rebuild the NixOS config'
+        'update:update flake inputs'
+        'push:push dotfiles to git'
+        'pull:pull dotfiles from git'
+        'secrets:manage agenix secrets'
+        'vm:connect to a VM via SPICE'
+        'wallpaper:manage wallpapers'
+        'theme:manage themes'
+        'sync:manage sync'
+        'torrent:manage manual torrents'
+        'cast:wake the TV and launch Moonlight'
+        'help:show usage'
+      )
+      _describe 'command' cmds
+      ;;
+    3)
+      case ${words[2]} in
+        secrets)
+          _describe 'command' 'update:edit a secret' 'list:list secrets'
+          ;;
+        theme)
+          _describe 'command' 'list:list themes' 'current:show current theme' 'set:set a theme' 'auto:auto theme'
+          ;;
+        vm)
+          _describe 'vm' 'cyber-defence:Cyber Defence VM' 'windows-11:Windows 11 VM'
+          ;;
+        wallpaper)
+          _describe 'command' 'set:set a wallpaper' 'random:random wallpaper' 'restore:restore wallpaper' 'warm:pre-cache wallpaper colors' 'recolor:recolor a wallpaper'
+          ;;
+        sync)
+          _describe 'command' 'on:enable sync' 'off:disable sync' 'mode:set sync mode' 'status:show sync status'
+          ;;
+        torrent)
+          _describe 'command' 'add:add a torrent by magnet link' 'list:list manual torrents' 'download:download a completed torrent'
+          ;;
+      esac
+      ;;
+    4)
+      if [[ ${words[2]} == torrent && ${words[3]} == download ]]; then
+        local -a names
+        names=("${(@f)$(boner torrent _complete 2>/dev/null)}")
+        if (( ${#names[@]} > 0 )); then
+          compadd -a names
+        fi
+      fi
+      ;;
+  esac
+}
+compdef _boner boner
