@@ -65,27 +65,6 @@ function renderSeerr(data) {
   body.appendChild(list);
 }
 
-function renderHomeAssistant(data) {
-  const body = document.querySelector("#card-homeassistant .card-body");
-  body.innerHTML = "";
-  if (data.error) {
-    body.appendChild(errorState(data.error));
-    return;
-  }
-  body.appendChild(el("div", { class: "presence", text: data.presence || "unknown" }));
-  if (!data.states || data.states.length === 0) {
-    body.appendChild(emptyState("No key states available."));
-    return;
-  }
-  for (const s of data.states) {
-    body.appendChild(
-      el("div", { class: "kv-row" }, [
-        el("span", { text: s.entity_id }),
-        el("span", { text: s.state }),
-      ])
-    );
-  }
-}
 
 function renderServer(data) {
   const body = document.querySelector("#card-server .card-body");
@@ -330,7 +309,6 @@ async function refresh() {
     const resp = await fetch("/api/all");
     const data = await resp.json();
     renderSeerr(data.seerr || {});
-    renderHomeAssistant(data.homeassistant || {});
     renderServer(data.server || {});
     renderKubernetes(data.kubernetes || {});
     renderLinks(data.links || {});

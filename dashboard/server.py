@@ -21,8 +21,6 @@ SEERR_SETTINGS_PATH = os.environ.get(
     "SEERR_SETTINGS_PATH", "/mnt/tank/services/jellyseer/settings.json"
 )
 
-HA_URL = os.environ.get("HA_URL", "http://homeassistant:8123")
-HA_TOKEN = os.environ.get("HA_TOKEN", "").strip()
 
 CADVISOR_URL_OVERRIDE = os.environ.get("CADVISOR_URL", "").strip()
 DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
@@ -147,41 +145,6 @@ def get_seerr():
         if len(items) >= 8:
             break
     return {"items": items}
-
-
-# ----------------------------------------------------------- Home Assistant
-
-def get_homeassistant():
-    if not HA_TOKEN:
-        return {
-            "error": (
-                "No HA_TOKEN set. Create a long-lived access token in Home "
-                "Assistant (Profile > Security), put it in dashboard/.env, "
-                "then restart the dashboard container."
-            )
-        }
-
-    headers = {"Authorization": f"Bearer {HA_TOKEN}"}
-    try:
-        states = _http_json(f"{HA_URL}/api/states", headers=headers)
-    except Exception:
-        return {"error": f"Home Assistant at {HA_URL} is not reachable."}
-
-    by_id = {s["entity_id"]: s for s in states}
-    presence = by_id.get("person.rileyboughner")
-
-    key_domains = ("climate", "lock", "alarm_control_panel", "weather", "binary_sensor")
-    key_states = []
-    for s in states:
-        if s["entity_id"].split(".")[0] in key_domains:
-            key_states.append({"entity_id": s["entity_id"], "state": s["state"]})
-        if len(key_states) >= 6:
-            break
-
-    return {
-        "presence": presence["state"] if presence else "unknown",
-        "states": key_states,
-    }
 
 
 # ------------------------------------------------------------ Server status
@@ -391,7 +354,6 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/all":
             self._send_json({
                 "seerr": get_seerr(),
-                "homeassistant": get_homeassistant(),
                 "server": get_server(),
                 "kubernetes": get_kubernetes(),
                 "links": get_links(),
