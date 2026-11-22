@@ -10,3 +10,9 @@ __pycache__/
 build/
 !theme/build/
 !theme/build/**
+
+# Secrets — never commit. Live service .env files live alongside the
+# compose files on disk only; they are never tracked.
+.env
+.env.*
+!.env.example
