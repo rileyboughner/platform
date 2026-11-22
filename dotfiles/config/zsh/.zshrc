@@ -99,13 +99,45 @@ _boner() {
       esac
       ;;
     4)
-      if [[ ${words[2]} == torrent && ${words[3]} == download ]]; then
-        local -a names
-        names=("${(@f)$(boner torrent _complete 2>/dev/null)}")
-        if (( ${#names[@]} > 0 )); then
-          compadd -a names
-        fi
-      fi
+      case ${words[2]} in
+        theme)
+          if [[ ${words[3]} == set ]]; then
+            local -a themes
+            themes=("${(@f)$(boner theme list 2>/dev/null)}")
+            if (( ${#themes[@]} > 0 )); then
+              compadd -a themes
+            fi
+          fi
+          ;;
+        secrets)
+          if [[ ${words[3]} == update ]]; then
+            local -a secrets
+            secrets=("${(@f)$(boner secrets list 2>/dev/null)}")
+            if (( ${#secrets[@]} > 0 )); then
+              compadd -a secrets
+            fi
+          fi
+          ;;
+        wallpaper)
+          if [[ ${words[3]} == set || ${words[3]} == recolor ]]; then
+            _files -W "$HOME/.wallpapers" -g '*.(jpg|jpeg|png|webp)'
+          fi
+          ;;
+        sync)
+          if [[ ${words[3]} == mode ]]; then
+            _describe 'mode' 'unified:one theme across machines' 'split:separate themes per machine'
+          fi
+          ;;
+        torrent)
+          if [[ ${words[3]} == download ]]; then
+            local -a names
+            names=("${(@f)$(boner torrent _complete 2>/dev/null)}")
+            if (( ${#names[@]} > 0 )); then
+              compadd -a names
+            fi
+          fi
+          ;;
+      esac
       ;;
   esac
 }
