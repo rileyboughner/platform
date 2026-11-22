@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Weave Music tile artwork. Weave has no installed Android app / Leanback
+  banner to load from PackageManager (it is a web app), so the tile draws
+  its own mark: Weave's green soundwave bars on a dark rounded tile.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#141414" android:pathData="M0,38 A38,38 0 0 1 38,0 H154 A38,38 0 0 1 192,38 V154 A38,38 0 0 1 154,192 H38 A38,38 0 0 1 0,154 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M46,80 H60 V112 H46 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M68,66 H82 V126 H68 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M90,40 H104 V152 H90 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M112,66 H126 V126 H112 Z" />
+    <path android:fillColor="#22C55E" android:pathData="M134,80 H148 V112 H134 Z" />
+</vector>

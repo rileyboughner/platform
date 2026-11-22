@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimal Android TV banner (320x180dp, the Leanback-recommended size),
+  shown for this app in the system Android TV launcher's apps row. Solid
+  black, one white rounded tile with a play triangle, two plain white bars
+  standing in for text rows — the same minimal black-and-white language as
+  the home screen itself.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#FF000000" android:pathData="M0,0H320V180H0Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M28,58 A10,10 0 0 1 38,48 H82 A10,10 0 0 1 92,58 V102 A10,10 0 0 1 82,112 H38 A10,10 0 0 1 28,102 Z" />
+    <path android:fillColor="#FF000000" android:pathData="M52,70 L52,90 L74,80 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M116,68H260V80H116Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M116,94H210V106H116Z" />
+</vector>

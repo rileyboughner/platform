@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Theme-sync hub and token server speak plain HTTP on two private
+     addresses only: the server's LAN address and its Tailscale MagicDNS
+     name. Android blocks cleartext traffic by default (targetSdk 34),
+     which would silently break every hub/token request (all failures are
+     swallowed by the repositories). Permit cleartext to exactly those two
+     hosts; everything else keeps the platform default (cleartext denied). -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.2</domain>
+        <domain includeSubdomains="false">server.taila93a39.ts.net</domain>
+    </domain-config>
+</network-security-config>

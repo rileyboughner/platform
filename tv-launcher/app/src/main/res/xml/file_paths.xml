@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes app/cache (where UpdateInstaller.downloadApk writes update.apk)
+     to the system installer via a content:// URI — see UpdateInstaller. -->
+<paths>
+    <cache-path name="updates" path="." />
+</paths>
