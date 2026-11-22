@@ -1,6 +1,6 @@
 {
-  "versionCode": 20,
-  "versionName": "0.20.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.20.0/app-release.apk",
-  "notes": "Calendar colors and up-next in the glance. Events show a color dot for their Nextcloud calendar, and the main page shows the next upcoming event."
+  "versionCode": 21,
+  "versionName": "0.21.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.21.0/app-release.apk",
+  "notes": "Tapping a calendar event opens it in the Nextcloud web calendar. Todos now come from Nextcloud Tasks instead of Todoist (add your Nextcloud username and app password in Settings to see them)."
 }
