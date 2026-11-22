@@ -198,112 +198,6 @@ function renderKubernetes(data) {
   body.appendChild(table);
 }
 
-const LINKS_ORDER_KEY = "dashboard-links-order";
-
-function loadLinksOrder() {
-  try {
-    return JSON.parse(localStorage.getItem(LINKS_ORDER_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLinksOrder(urls) {
-  localStorage.setItem(LINKS_ORDER_KEY, JSON.stringify(urls));
-}
-
-// Applies the user's saved drag order; links not yet seen (new ones) are
-// appended at the end in their original order.
-function applyLinksOrder(items) {
-  const order = loadLinksOrder();
-  const byUrl = new Map(items.map((item) => [item.url, item]));
-  const ordered = [];
-  for (const url of order) {
-    if (byUrl.has(url)) {
-      ordered.push(byUrl.get(url));
-      byUrl.delete(url);
-    }
-  }
-  ordered.push(...byUrl.values());
-  return ordered;
-}
-
-let linksFilterValue = "";
-
-function renderLinks(data) {
-  const body = document.querySelector("#card-links .card-body");
-  const existingFilter = body.querySelector(".links-filter");
-  if (existingFilter) linksFilterValue = existingFilter.value;
-  body.innerHTML = "";
-  if (data.error) {
-    body.appendChild(errorState(data.error));
-    return;
-  }
-  if (!data.items || data.items.length === 0) {
-    body.appendChild(emptyState("No links configured."));
-    return;
-  }
-
-  const items = applyLinksOrder(data.items);
-
-  const filterInput = el("input", {
-    class: "links-filter",
-    type: "text",
-    placeholder: "Filter services…",
-  });
-  filterInput.value = linksFilterValue;
-  body.appendChild(filterInput);
-
-  const grid = el("div", { class: "links-grid" });
-  body.appendChild(grid);
-
-  let draggedUrl = null;
-
-  function renderGrid() {
-    grid.innerHTML = "";
-    const query = filterInput.value.trim().toLowerCase();
-    const visible = query
-      ? items.filter((link) => link.label.toLowerCase().includes(query))
-      : items;
-
-    for (const link of visible) {
-      const tile = el("a", {
-        class: "link-tile",
-        href: link.url,
-        target: "_blank",
-        rel: "noopener",
-        text: link.label,
-        draggable: "true",
-      });
-      tile.addEventListener("dragstart", () => {
-        draggedUrl = link.url;
-        tile.classList.add("dragging");
-      });
-      tile.addEventListener("dragend", () => tile.classList.remove("dragging"));
-      tile.addEventListener("dragover", (e) => e.preventDefault());
-      tile.addEventListener("drop", (e) => {
-        e.preventDefault();
-        if (!draggedUrl || draggedUrl === link.url) return;
-        const fromIdx = items.findIndex((i) => i.url === draggedUrl);
-        const toIdx = items.findIndex((i) => i.url === link.url);
-        if (fromIdx === -1 || toIdx === -1) return;
-        const [moved] = items.splice(fromIdx, 1);
-        items.splice(toIdx, 0, moved);
-        saveLinksOrder(items.map((i) => i.url));
-        renderGrid();
-      });
-      grid.appendChild(tile);
-    }
-
-    if (visible.length === 0) {
-      grid.appendChild(emptyState("No matching services."));
-    }
-  }
-
-  filterInput.addEventListener("input", renderGrid);
-  renderGrid();
-}
-
 async function refresh() {
   try {
     const resp = await fetch("/api/all");
@@ -311,7 +205,6 @@ async function refresh() {
     renderSeerr(data.seerr || {});
     renderServer(data.server || {});
     renderKubernetes(data.kubernetes || {});
-    renderLinks(data.links || {});
     document.getElementById("last-updated").textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     document.getElementById("last-updated").textContent = "update failed";

@@ -27,10 +27,6 @@ DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 HOST_UPTIME_PATH = os.environ.get("HOST_UPTIME_PATH", "/host/proc-uptime")
 DISK_PATH = os.environ.get("DISK_PATH", "/mnt/tank/services/jellyseer/settings.json")
 
-CLOUDFLARED_CONFIG_PATH = os.environ.get(
-    "CLOUDFLARED_CONFIG_PATH", "/mnt/tank/services/cloudflared/config.yml"
-)
-
 KUBECONFIG = os.environ.get("KUBECONFIG", "/kube/k3s.yaml")
 K8S_API_SERVER = os.environ.get("K8S_API_SERVER", "https://192.168.1.2:6443")
 
@@ -279,32 +275,6 @@ def get_kubernetes():
     return {"pods": pods}
 
 
-# ------------------------------------------------------------------- Links
-
-def get_links():
-    try:
-        with open(CLOUDFLARED_CONFIG_PATH) as f:
-            lines = f.readlines()
-    except Exception:
-        return {"error": "Could not read the cloudflared config."}
-
-    items = []
-    hostname = None
-    for raw_line in lines:
-        line = raw_line.strip()
-        if line.startswith("- hostname:"):
-            hostname = line.split(":", 1)[1].strip()
-        elif line.startswith("service:") and hostname:
-            service = line.split(":", 1)[1].strip()
-            if service.startswith("http://") or service.startswith("https://"):
-                items.append({
-                    "label": hostname.split(".")[0].replace("-", " ").capitalize(),
-                    "url": f"https://{hostname}",
-                })
-            hostname = None
-    return {"items": items}
-
-
 # -------------------------------------------------------------- HTTP server
 
 CONTENT_TYPES = {
@@ -356,7 +326,6 @@ class Handler(BaseHTTPRequestHandler):
                 "seerr": get_seerr(),
                 "server": get_server(),
                 "kubernetes": get_kubernetes(),
-                "links": get_links(),
             })
             return
 
