@@ -25,8 +25,8 @@ import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.theme.MonoLauncherTheme
 import dev.rileyboughner.launcher.theme.ThemeSyncPoller
 import dev.rileyboughner.launcher.theme.ThemeSyncRepository
+import dev.rileyboughner.launcher.nextcloud.NextcloudTasksRepository
 import dev.rileyboughner.launcher.theme.accentColorFor
-import dev.rileyboughner.launcher.todoist.TodoistRepository
 import dev.rileyboughner.launcher.ui.LauncherPagerScreen
 import dev.rileyboughner.launcher.update.UpdatePrompt
 import dev.rileyboughner.launcher.update.UpdateRepository
@@ -44,7 +44,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var appListRepository: AppListRepository
     private lateinit var calendarRepository: CalendarRepository
-    private lateinit var todoistRepository: TodoistRepository
+    // The Todo page reads from Nextcloud Tasks now; the Todoist repository
+    // (todoist/ package) is retained as a fallback and is no longer wired
+    // into the pager.
+    private lateinit var nextcloudTasksRepository: NextcloudTasksRepository
     private lateinit var jellyfinRepository: JellyfinRepository
     private lateinit var homeAssistantRepository: HomeAssistantRepository
     private lateinit var dashboardRepository: DashboardRepository
@@ -62,7 +65,7 @@ class MainActivity : ComponentActivity() {
         val settingsRepository = SettingsRepository(applicationContext)
         appListRepository = AppListRepository(applicationContext)
         calendarRepository = CalendarRepository(applicationContext)
-        todoistRepository = TodoistRepository(settingsRepository)
+        nextcloudTasksRepository = NextcloudTasksRepository(settingsRepository)
         jellyfinRepository = JellyfinRepository(settingsRepository)
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         dashboardRepository = DashboardRepository()
@@ -93,7 +96,7 @@ class MainActivity : ComponentActivity() {
                 LauncherPagerScreen(
                     appListRepository = appListRepository,
                     calendarRepository = calendarRepository,
-                    todoistRepository = todoistRepository,
+                    nextcloudTasksRepository = nextcloudTasksRepository,
                     jellyfinRepository = jellyfinRepository,
                     homeAssistantRepository = homeAssistantRepository,
                     dashboardRepository = dashboardRepository,

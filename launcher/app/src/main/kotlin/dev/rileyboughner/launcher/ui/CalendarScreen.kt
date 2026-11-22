@@ -57,15 +57,18 @@ import dev.rileyboughner.launcher.calendar.eventDay
 import dev.rileyboughner.launcher.calendar.formatDayLabel
 import dev.rileyboughner.launcher.calendar.formatEventTime
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /**
  * The Calendar page (right of Apps in the pager). Requests `READ_CALENDAR`
  * the first time this page is shown; shows a plain explanation if denied.
  * Read-only — no event creation or editing anywhere here; tapping an event
- * hands off to the system calendar app instead, and swiping down from the
- * top of the list opens the calendar app's main view. The "Today only" /
- * "All events" filter is owned entirely by the tappable header chip now —
- * see the pull-gesture comment below for why it no longer shares the pull.
+ * opens it in the Nextcloud Calendar web app at that day (falling back to
+ * the system calendar app if the browser can't handle it), and swiping
+ * down from the top of the list opens the calendar app's main view. The
+ * "Today only" / "All events" filter is owned entirely by the tappable
+ * header chip now — see the pull-gesture comment below for why it no
+ * longer shares the pull.
  */
 @Composable
 fun CalendarScreen(calendarRepository: CalendarRepository, modifier: Modifier = Modifier) {
@@ -260,17 +263,36 @@ private fun EmptyCalendarState(message: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Nextcloud Calendar web app, day view for a given date (YYYY-MM-DD). */
+private const val NEXTCLOUD_CALENDAR_DAY_URL = "https://cloud.rileyboughner.dev/apps/calendar/timeGridDay"
+
 /**
- * Opens the event in the system calendar app via `ACTION_VIEW` on the
- * event's content URI. Attempts `startActivity` directly and catches
- * [ActivityNotFoundException] rather than gating on `resolveActivity` first
- * — on Riley's phone the `resolveActivity` check was silently coming back
- * null (package-visibility query filtering, even with the calendar app
- * installed), which meant the tap looked like it did nothing at all. Falls
- * back to the calendar app's main view at the event's start time if even
- * that fails, instead of silently doing nothing.
+ * Opens the event in the Nextcloud Calendar web app at the event's day
+ * (day view, `.../apps/calendar/timeGridDay/YYYY-MM-DD`) — there is no
+ * stable per-event deep link, so the day view is the target. Attempts
+ * `startActivity` directly and catches [ActivityNotFoundException] rather
+ * than gating on `resolveActivity` first — on Riley's phone the
+ * `resolveActivity` check was silently coming back null
+ * (package-visibility query filtering, even with the calendar app
+ * installed), which meant the tap looked like it did nothing at all.
+ * Falls back to the system calendar app (the old behavior) if the
+ * browser intent can't be handled, instead of silently doing nothing.
  */
 private fun openCalendarEvent(context: Context, event: CalendarEvent) {
+    val day = eventDay(event).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("$NEXTCLOUD_CALENDAR_DAY_URL/$day"))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(webIntent)
+        return
+    } catch (e: ActivityNotFoundException) {
+        // Fall through to the system calendar app below.
+    }
+    openCalendarEventInSystemApp(context, event)
+}
+
+/** The old tap target: the event in the system calendar app. */
+private fun openCalendarEventInSystemApp(context: Context, event: CalendarEvent) {
     val eventUri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, event.id)
     val eventIntent = Intent(Intent.ACTION_VIEW, eventUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     try {

@@ -31,8 +31,8 @@ import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
+import dev.rileyboughner.launcher.nextcloud.NextcloudTasksRepository
 import dev.rileyboughner.launcher.settings.SettingsRepository
-import dev.rileyboughner.launcher.todoist.TodoistRepository
 import kotlinx.coroutines.launch
 
 /**
@@ -55,7 +55,7 @@ private const val PAGE_COUNT = 5
 fun LauncherPagerScreen(
     appListRepository: AppListRepository,
     calendarRepository: CalendarRepository,
-    todoistRepository: TodoistRepository,
+    nextcloudTasksRepository: NextcloudTasksRepository,
     jellyfinRepository: JellyfinRepository,
     homeAssistantRepository: HomeAssistantRepository,
     dashboardRepository: DashboardRepository,
@@ -92,7 +92,7 @@ fun LauncherPagerScreen(
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 )
                 PAGE_TODO -> TodoScreen(
-                    todoistRepository,
+                    nextcloudTasksRepository,
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 )
             }

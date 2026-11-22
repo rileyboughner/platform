@@ -17,6 +17,11 @@ sealed interface TodoistResult<out T> {
  * runs network I/O off the main thread, and turns every failure into a
  * [TodoistResult.Error] — this must never let an exception reach the UI
  * and crash the launcher.
+ *
+ * Retained as a fallback only: the Todo page now reads from Nextcloud
+ * Tasks (see nextcloud/NextcloudTasksRepository) and this repository is
+ * no longer wired into the pager. Kept — with its API client and Settings
+ * token field — so switching back is a wiring change, not a rewrite.
  */
 class TodoistRepository(private val settingsRepository: SettingsRepository) {
 

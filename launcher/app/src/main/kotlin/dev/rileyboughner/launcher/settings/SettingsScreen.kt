@@ -46,6 +46,8 @@ import kotlinx.coroutines.launch
 
 data class SettingsFields(
     val todoistToken: String,
+    val nextcloudUsername: String,
+    val nextcloudAppPassword: String,
     val jellyfinServerUrl: String,
     val jellyfinApiKey: String,
     val homeAssistantServerUrl: String,
@@ -79,6 +81,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var todoistToken by rememberSaveable { mutableStateOf(initialFields.todoistToken) }
+    var nextcloudUsername by rememberSaveable { mutableStateOf(initialFields.nextcloudUsername) }
+    var nextcloudAppPassword by rememberSaveable { mutableStateOf(initialFields.nextcloudAppPassword) }
     var jellyfinServerUrl by rememberSaveable { mutableStateOf(initialFields.jellyfinServerUrl) }
     var jellyfinApiKey by rememberSaveable { mutableStateOf(initialFields.jellyfinApiKey) }
     var homeAssistantServerUrl by rememberSaveable { mutableStateOf(initialFields.homeAssistantServerUrl) }
@@ -212,6 +216,18 @@ fun SettingsScreen(
         ) {
             SubSectionLabel(text = "Todoist (Settings → Integrations → Developer)")
             LabeledField(label = "Todoist API token", value = todoistToken, onValueChange = { todoistToken = it })
+
+            SubSectionLabel(text = "Nextcloud Tasks — the Todo page reads from here (Nextcloud → Settings → Security → App passwords to generate one)")
+            LabeledField(
+                label = "Nextcloud username",
+                value = nextcloudUsername,
+                onValueChange = { nextcloudUsername = it },
+            )
+            LabeledField(
+                label = "Nextcloud app password",
+                value = nextcloudAppPassword,
+                onValueChange = { nextcloudAppPassword = it },
+            )
 
             SubSectionLabel(text = "Jellyfin (dashboard → API Keys)")
             LabeledField(
@@ -388,6 +404,8 @@ fun SettingsScreen(
                 onSave(
                     SettingsFields(
                         todoistToken = todoistToken,
+                        nextcloudUsername = nextcloudUsername,
+                        nextcloudAppPassword = nextcloudAppPassword,
                         jellyfinServerUrl = jellyfinServerUrl,
                         jellyfinApiKey = jellyfinApiKey,
                         homeAssistantServerUrl = homeAssistantServerUrl,

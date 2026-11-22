@@ -74,6 +74,8 @@ class SettingsActivity : ComponentActivity() {
                     SettingsScreen(
                         initialFields = SettingsFields(
                             todoistToken = settingsRepository.getTodoistToken() ?: "",
+                            nextcloudUsername = settingsRepository.getNextcloudUsername() ?: "",
+                            nextcloudAppPassword = settingsRepository.getNextcloudAppPassword() ?: "",
                             jellyfinServerUrl = settingsRepository.getJellyfinServerUrl(),
                             jellyfinApiKey = settingsRepository.getJellyfinApiKey() ?: "",
                             homeAssistantServerUrl = settingsRepository.getHomeAssistantServerUrl(),
@@ -86,6 +88,8 @@ class SettingsActivity : ComponentActivity() {
                         ),
                         onSave = { fields ->
                             settingsRepository.setTodoistToken(fields.todoistToken)
+                            settingsRepository.setNextcloudUsername(fields.nextcloudUsername)
+                            settingsRepository.setNextcloudAppPassword(fields.nextcloudAppPassword)
                             settingsRepository.setJellyfinServerUrl(fields.jellyfinServerUrl)
                             settingsRepository.setJellyfinApiKey(fields.jellyfinApiKey)
                             settingsRepository.setHomeAssistantServerUrl(fields.homeAssistantServerUrl)

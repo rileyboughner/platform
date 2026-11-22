@@ -23,37 +23,40 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import dev.rileyboughner.launcher.todoist.TodoistDue
-import dev.rileyboughner.launcher.todoist.TodoistRepository
-import dev.rileyboughner.launcher.todoist.TodoistResult
-import dev.rileyboughner.launcher.todoist.TodoistTask
+import dev.rileyboughner.launcher.nextcloud.NextcloudTask
+import dev.rileyboughner.launcher.nextcloud.NextcloudTasksRepository
+import dev.rileyboughner.launcher.nextcloud.NextcloudTasksResult
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /**
- * The Todo page (left of Apps in the pager). Fetches on first show and on
- * manual refresh; never crashes on a network error — see
- * [TodoistRepository.fetchTasks].
+ * The Todo page (left of Apps in the pager). Reads tasks from Nextcloud
+ * Tasks (CalDAV VTODO) — see [NextcloudTasksRepository]. Fetches on first
+ * show and on manual refresh; never crashes on a network error.
+ *
+ * Todoist is retained as a fallback (see the todoist/ package — its
+ * repository, API client, and Settings token field are all still there),
+ * but the Todo page no longer reads from it.
  */
 @Composable
-fun TodoScreen(todoistRepository: TodoistRepository, modifier: Modifier = Modifier) {
-    var hasToken by remember { mutableStateOf(todoistRepository.hasToken()) }
-    var tasks by remember { mutableStateOf<List<TodoistTask>>(emptyList()) }
+fun TodoScreen(nextcloudTasksRepository: NextcloudTasksRepository, modifier: Modifier = Modifier) {
+    var hasCredentials by remember { mutableStateOf(nextcloudTasksRepository.hasCredentials()) }
+    var tasks by remember { mutableStateOf<List<NextcloudTask>>(emptyList()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun refresh() {
-        hasToken = todoistRepository.hasToken()
-        if (!hasToken) return
+        hasCredentials = nextcloudTasksRepository.hasCredentials()
+        if (!hasCredentials) return
         scope.launch {
             isLoading = true
-            when (val result = todoistRepository.fetchTasks()) {
-                is TodoistResult.Success -> {
+            when (val result = nextcloudTasksRepository.fetchTasks()) {
+                is NextcloudTasksResult.Success -> {
                     tasks = sortTasks(result.value)
                     errorMessage = null
                 }
-                is TodoistResult.Error -> errorMessage = formatError(result)
+                is NextcloudTasksResult.Error -> errorMessage = formatError(result)
             }
             isLoading = false
         }
@@ -66,18 +69,18 @@ fun TodoScreen(todoistRepository: TodoistRepository, modifier: Modifier = Modifi
         HairlineDivider()
 
         when {
-            !hasToken -> EmptyState("Add your Todoist API token in Settings to see tasks here.")
+            !hasCredentials -> EmptyState("Add your Nextcloud username + app password in Settings to see tasks here.")
             errorMessage != null -> EmptyState(errorMessage!!)
             !isLoading && tasks.isEmpty() -> EmptyState("No tasks. Nice.")
             else -> LazyColumn {
-                items(tasks, key = { it.id }) { task ->
+                items(tasks, key = { it.uid }) { task ->
                     TodoRow(
                         task = task,
                         onComplete = {
                             scope.launch {
-                                when (val result = todoistRepository.closeTask(task.id)) {
-                                    is TodoistResult.Success -> tasks = tasks.filterNot { it.id == task.id }
-                                    is TodoistResult.Error -> errorMessage = formatError(result)
+                                when (val result = nextcloudTasksRepository.completeTask(task)) {
+                                    is NextcloudTasksResult.Success -> tasks = tasks.filterNot { it.uid == task.uid }
+                                    is NextcloudTasksResult.Error -> errorMessage = formatError(result)
                                 }
                             }
                         },
@@ -90,7 +93,7 @@ fun TodoScreen(todoistRepository: TodoistRepository, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun TodoRow(task: TodoistTask, onComplete: () -> Unit, modifier: Modifier = Modifier) {
+private fun TodoRow(task: NextcloudTask, onComplete: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -107,7 +110,7 @@ private fun TodoRow(task: TodoistTask, onComplete: () -> Unit, modifier: Modifie
         )
         Column(modifier = Modifier.padding(start = 12.dp)) {
             Text(
-                text = task.content,
+                text = task.title,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -132,42 +135,25 @@ private fun EmptyState(message: String, modifier: Modifier = Modifier) {
 }
 
 /** Friendly message plus the real failure (HTTP status or exception detail), so it's diagnosable. */
-private fun formatError(error: TodoistResult.Error): String =
+private fun formatError(error: NextcloudTasksResult.Error): String =
     if (error.detail != null) "${error.message}\n(${error.detail})" else error.message
 
-/** Overdue first, then due today, then upcoming, then no due date — each bucket ordered by date. */
-private fun sortTasks(tasks: List<TodoistTask>): List<TodoistTask> {
-    val today = LocalDate.now()
-
-    fun dueDate(task: TodoistTask): LocalDate? = task.due?.date?.let {
-        runCatching { LocalDate.parse(it) }.getOrNull()
-    }
-
-    fun bucket(task: TodoistTask): Int {
-        val due = dueDate(task) ?: return 2
-        return when {
-            due.isBefore(today) -> -1
-            due.isEqual(today) -> 0
-            else -> 1
-        }
-    }
-
-    return tasks.sortedWith(
+/** Due date first (earliest first, no due date last), then title. */
+private fun sortTasks(tasks: List<NextcloudTask>): List<NextcloudTask> =
+    tasks.sortedWith(
         compareBy(
-            { bucket(it) },
-            { dueDate(it) ?: LocalDate.MAX },
+            { it.due ?: LocalDate.MAX },
+            { it.title.lowercase() },
         ),
     )
-}
 
-private fun dueLabel(due: TodoistDue?): String {
+private fun dueLabel(due: LocalDate?): String {
     if (due == null) return "No due date"
-    val date = runCatching { LocalDate.parse(due.date) }.getOrNull() ?: return due.date
     val today = LocalDate.now()
     return when {
-        date.isBefore(today) -> "Overdue · $date"
-        date.isEqual(today) -> "Today"
-        date.isEqual(today.plusDays(1)) -> "Tomorrow"
-        else -> date.toString()
+        due.isBefore(today) -> "Overdue · $due"
+        due.isEqual(today) -> "Today"
+        due.isEqual(today.plusDays(1)) -> "Tomorrow"
+        else -> due.toString()
     }
 }

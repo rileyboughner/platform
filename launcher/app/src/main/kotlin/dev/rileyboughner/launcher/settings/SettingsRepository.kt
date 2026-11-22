@@ -47,6 +47,25 @@ class SettingsRepository(context: Context) {
         prefs.edit().putString(KEY_TODOIST_TOKEN, token.trim()).apply()
     }
 
+    // Nextcloud Tasks (CalDAV VTODO) credentials for the Todo page — see
+    // dev.rileyboughner.launcher.nextcloud.NextcloudTasksRepository. Riley
+    // enters both himself (the app password is generated in the Nextcloud
+    // web UI under Settings → Security → App passwords); there is no
+    // BuildConfig default here and no token is ever baked into a build.
+    fun getNextcloudUsername(): String? =
+        prefs.getString(KEY_NEXTCLOUD_USERNAME, null)?.takeIf { it.isNotBlank() }
+
+    fun setNextcloudUsername(username: String) {
+        prefs.edit().putString(KEY_NEXTCLOUD_USERNAME, username.trim()).apply()
+    }
+
+    fun getNextcloudAppPassword(): String? =
+        prefs.getString(KEY_NEXTCLOUD_APP_PASSWORD, null)?.takeIf { it.isNotBlank() }
+
+    fun setNextcloudAppPassword(appPassword: String) {
+        prefs.edit().putString(KEY_NEXTCLOUD_APP_PASSWORD, appPassword.trim()).apply()
+    }
+
     fun getJellyfinServerUrl(): String =
         prefs.getString(KEY_JELLYFIN_SERVER_URL, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_JELLYFIN_SERVER_URL
 
@@ -237,6 +256,8 @@ class SettingsRepository(context: Context) {
     companion object {
         private const val PREFS_FILE_NAME = "launcher_secure_settings"
         private const val KEY_TODOIST_TOKEN = "todoist_api_token"
+        private const val KEY_NEXTCLOUD_USERNAME = "nextcloud_username"
+        private const val KEY_NEXTCLOUD_APP_PASSWORD = "nextcloud_app_password"
         private const val KEY_JELLYFIN_SERVER_URL = "jellyfin_server_url"
         private const val KEY_JELLYFIN_API_KEY = "jellyfin_api_key"
         private const val KEY_HOME_ASSISTANT_SERVER_URL = "home_assistant_server_url"
