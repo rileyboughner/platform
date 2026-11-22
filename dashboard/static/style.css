@@ -1,3 +1,38 @@
+/* Graphite theme override — dashboard-only. The shared design tokens
+   (theme-variables.css, Rose Pine) load first; these :root values win
+   because this stylesheet loads after. The shared tokens.json is left
+   untouched so the launcher and other cross-device surfaces stay Rose Pine. */
+:root {
+  --color-base: #0b0b0c;
+  --color-surface: #141415;
+  --color-overlay: #1e1e20;
+  --color-muted: #8a8a90;
+  --color-subtle: #5c5c62;
+  --color-text: #e6e6e6;
+  --color-love: #c07a7a;
+  --color-gold: #c2a878;
+  --color-rose: #b08d8d;
+  --color-pine: #8fa98f;
+  --color-foam: #8a9bb0;
+  --color-iris: #d4d4d8;
+  --color-highlight-low: #111112;
+  --color-highlight-med: #232326;
+  --color-highlight-high: #2e2e33;
+  --color-semantic-background: #0b0b0c;
+  --color-semantic-surface: #141415;
+  --color-semantic-overlay: #1e1e20;
+  --color-semantic-text: #e6e6e6;
+  --color-semantic-text-muted: #8a8a90;
+  --color-semantic-text-subtle: #5c5c62;
+  --color-semantic-accent: #d4d4d8;
+  --color-semantic-accent-secondary: #9a9aa0;
+  --color-semantic-success: #8fa98f;
+  --color-semantic-warning: #c2a878;
+  --color-semantic-error: #c07a7a;
+  --color-semantic-info: #8a9bb0;
+  --color-semantic-border: #2e2e33;
+}
+
 * {
   box-sizing: border-box;
 }
