@@ -43,25 +43,6 @@ services:
     depends_on:
       - gluetun
 
-  transmission:
-    image: lscr.io/linuxserver/transmission:latest
-    container_name: transmission
-    network_mode: "service:gluetun"
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=${TZ}
-      - USER=${TRANSMISSION_USER}
-      - PASS=${TRANSMISSION_PASS}
-      - WHITELIST=127.0.0.1,172.24.*.*,172.25.*.*
-      - PEERPORT=51413
-    volumes:
-      - ${SERVICE_DIRECTORY}/transmission:/config
-      - ${MEDIA_DIRECTORY}/torrents:/downloads
-    restart: unless-stopped
-    depends_on:
-      - gluetun
-
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
