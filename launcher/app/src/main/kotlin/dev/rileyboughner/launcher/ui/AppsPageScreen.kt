@@ -1,8 +1,10 @@
 package dev.rileyboughner.launcher.ui
 
+import android.Manifest
 import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.Settings
@@ -43,6 +45,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.Velocity
@@ -51,6 +54,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.LauncherAppInfo
+import dev.rileyboughner.launcher.calendar.CalendarEvent
+import dev.rileyboughner.launcher.calendar.CalendarRepository
+import dev.rileyboughner.launcher.calendar.eventDay
+import dev.rileyboughner.launcher.calendar.formatDayLabel
+import dev.rileyboughner.launcher.calendar.formatEventTime
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoResult
 import dev.rileyboughner.launcher.health.HealthConnectRepository
@@ -62,6 +70,7 @@ import dev.rileyboughner.launcher.settings.SettingsRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -88,6 +97,8 @@ fun AppsPageScreen(
     appListRepository: AppListRepository,
     duolingoRepository: DuolingoRepository,
     settingsRepository: SettingsRepository,
+    calendarRepository: CalendarRepository,
+    onOpenCalendar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -109,6 +120,16 @@ fun AppsPageScreen(
     var sleepResult by remember { mutableStateOf(HealthConnectRepository.cachedSleepOrNull()) }
     var screenTimeResult by remember { mutableStateOf(ScreenTimeRepository.cachedOrNull()) }
     var duolingoResult by remember { mutableStateOf<DuolingoResult?>(duolingoRepository.peekCachedStats()) }
+    var upNextEvent by remember { mutableStateOf<CalendarEvent?>(null) }
+    // The up-next glance row is only shown when the calendar permission is
+    // already granted. It is never requested from this page — the Calendar
+    // page owns the request — so until then the row is simply omitted.
+    var calendarPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     // Unconditional, regardless of the status check inside it: Health
     // Connect's getSdkStatus() never itself talks to the controller — only
@@ -122,6 +143,11 @@ fun AppsPageScreen(
         LaunchedEffect(Unit) { sleepResult = HealthConnectRepository.fetchLatestSleep(context) }
         LaunchedEffect(Unit) { screenTimeResult = ScreenTimeRepository.fetchTodayScreenTime(context) }
         LaunchedEffect(Unit) { duolingoResult = duolingoRepository.fetchStats() }
+        LaunchedEffect(Unit) {
+            if (calendarPermissionGranted) {
+                upNextEvent = calendarRepository.queryNextUpcomingEvent()
+            }
+        }
     }
 
     // Settings lives in a separate Activity, so toggling "Show glance info"
@@ -143,6 +169,19 @@ fun AppsPageScreen(
                 coroutineScope.launch { HealthConnectRepository.attemptRegistration(context) }
                 if (showGlanceInfo) {
                     coroutineScope.launch { sleepResult = HealthConnectRepository.fetchLatestSleep(context, forceRefresh = true) }
+                    // The calendar permission may have been granted from the
+                    // Calendar page or Settings since this page was last
+                    // shown — re-check it here and refresh the up-next event
+                    // on the same resume, matching the sleep refresh above.
+                    calendarPermissionGranted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.READ_CALENDAR,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (calendarPermissionGranted) {
+                        coroutineScope.launch { upNextEvent = calendarRepository.queryNextUpcomingEvent() }
+                    } else {
+                        upNextEvent = null
+                    }
                 }
             }
         }
@@ -266,6 +305,8 @@ fun AppsPageScreen(
                     sleepResult = sleepResult,
                     screenTimeResult = screenTimeResult,
                     duolingoResult = duolingoResult,
+                    upNextEvent = upNextEvent,
+                    showUpNext = calendarPermissionGranted,
                     onSleepClick = {
                         if (sleepResult !is SleepResult.Success) {
                             context.startActivity(Intent(context, SettingsActivity::class.java))
@@ -283,6 +324,7 @@ fun AppsPageScreen(
                             coroutineScope.launch { duolingoResult = duolingoRepository.fetchStats(forceRefresh = true) }
                         }
                     },
+                    onUpNextClick = onOpenCalendar,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -357,15 +399,21 @@ private fun GlanceSection(
     sleepResult: SleepResult?,
     screenTimeResult: ScreenTimeResult?,
     duolingoResult: DuolingoResult?,
+    upNextEvent: CalendarEvent?,
+    showUpNext: Boolean,
     onSleepClick: () -> Unit,
     onScreenTimeClick: () -> Unit,
     onDuolingoClick: () -> Unit,
+    onUpNextClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         GlanceRow(text = formatSleepLine(sleepResult), onClick = onSleepClick)
         GlanceRow(text = formatScreenTimeLine(screenTimeResult), onClick = onScreenTimeClick)
         GlanceRow(text = formatDuolingoLine(duolingoResult), onClick = onDuolingoClick)
+        if (showUpNext) {
+            GlanceRow(text = formatUpNextLine(upNextEvent), onClick = onUpNextClick)
+        }
     }
 }
 
@@ -397,6 +445,21 @@ private fun formatSleepLine(result: SleepResult?): String = when (result) {
 private fun formatScreenTimeLine(result: ScreenTimeResult?): String = when (result) {
     null, ScreenTimeResult.NoAccess -> "Screen —"
     is ScreenTimeResult.Success -> "Screen ${formatDuration(result.duration)}"
+}
+
+/**
+ * "Up next: <title> <time>" — the day is only named when the event is not
+ * today, so a future event does not read as if it were happening now. The
+ * time uses the same formatting as the Calendar page. Null (no upcoming
+ * event) renders as an em dash rather than hiding the row, so the glance
+ * does not silently lose a line when the calendar is empty.
+ */
+private fun formatUpNextLine(event: CalendarEvent?): String {
+    if (event == null) return "Up next: —"
+    val today = LocalDate.now()
+    val day = eventDay(event)
+    val dayPart = if (day.isEqual(today)) "" else " ${formatDayLabel(day)}"
+    return "Up next: ${event.title}$dayPart ${formatEventTime(event)}"
 }
 
 private fun formatDuolingoLine(result: DuolingoResult?): String = when (result) {

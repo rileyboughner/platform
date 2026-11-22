@@ -21,6 +21,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.settings.SettingsRepository
 import dev.rileyboughner.launcher.todoist.TodoistRepository
+import kotlinx.coroutines.launch
 
 /**
  * Five-page horizontal pager, page order [Dashboard, Home Assistant, Apps,
@@ -63,6 +65,7 @@ fun LauncherPagerScreen(
     modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(initialPage = PAGE_APPS) { PAGE_COUNT }
+    val pagerScope = rememberCoroutineScope()
 
     Column(modifier = modifier.fillMaxSize()) {
         HorizontalPager(
@@ -80,6 +83,8 @@ fun LauncherPagerScreen(
                     appListRepository = appListRepository,
                     duolingoRepository = duolingoRepository,
                     settingsRepository = settingsRepository,
+                    calendarRepository = calendarRepository,
+                    onOpenCalendar = { pagerScope.launch { pagerState.scrollToPage(PAGE_CALENDAR) } },
                     modifier = Modifier.fillMaxSize(),
                 )
                 PAGE_CALENDAR -> CalendarScreen(

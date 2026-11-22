@@ -11,17 +11,23 @@ import android.provider.CalendarContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,8 +38,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -44,11 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.rileyboughner.launcher.calendar.CalendarEvent
 import dev.rileyboughner.launcher.calendar.CalendarRepository
-import java.time.Instant
+import dev.rileyboughner.launcher.calendar.eventDay
+import dev.rileyboughner.launcher.calendar.formatDayLabel
+import dev.rileyboughner.launcher.calendar.formatEventTime
 import java.time.LocalDate
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 /**
  * The Calendar page (right of Apps in the pager). Requests `READ_CALENDAR`
@@ -197,7 +205,7 @@ private fun FilterModeHeader(showAllEvents: Boolean, onToggle: () -> Unit, modif
 @Composable
 private fun DayHeader(day: LocalDate, modifier: Modifier = Modifier) {
     Text(
-        text = dayLabel(day),
+        text = formatDayLabel(day),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onBackground,
         modifier = modifier
@@ -208,22 +216,36 @@ private fun DayHeader(day: LocalDate, modifier: Modifier = Modifier) {
 
 @Composable
 private fun EventRow(event: CalendarEvent, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = event.title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+        // Small dot in the event's calendar color (synced from Nextcloud via
+        // DAVx5); falls back to the theme outline when the provider has none.
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(
+                    event.calendarColor?.let { Color(it) } ?: MaterialTheme.colorScheme.outline,
+                ),
         )
-        Text(
-            text = timeLabel(event),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                text = formatEventTime(event),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -279,34 +301,8 @@ private fun openCalendarAppAt(context: Context, uri: Uri) {
     }
 }
 
-private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
-
-// All-day instances are stored by CalendarContract in UTC regardless of the
-// device's zone, so they need UTC to land on the calendar date Riley expects
-// instead of shifting a day near midnight.
-private fun eventZone(event: CalendarEvent): ZoneId = if (event.allDay) ZoneOffset.UTC else ZoneId.systemDefault()
-
-private fun eventDay(event: CalendarEvent): LocalDate =
-    Instant.ofEpochMilli(event.startMillis).atZone(eventZone(event)).toLocalDate()
-
 private fun groupByDay(events: List<CalendarEvent>): List<Pair<LocalDate, List<CalendarEvent>>> =
     events
         .groupBy(::eventDay)
         .toSortedMap()
         .map { (day, dayEvents) -> day to dayEvents }
-
-private fun dayLabel(day: LocalDate): String {
-    val today = LocalDate.now()
-    return when {
-        day.isEqual(today) -> "Today"
-        day.isEqual(today.plusDays(1)) -> "Tomorrow"
-        else -> day.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
-    }
-}
-
-private fun timeLabel(event: CalendarEvent): String {
-    if (event.allDay) return "All day"
-    val start = Instant.ofEpochMilli(event.startMillis).atZone(ZoneId.systemDefault())
-    val end = Instant.ofEpochMilli(event.endMillis).atZone(ZoneId.systemDefault())
-    return "${timeFormatter.format(start)} – ${timeFormatter.format(end)}"
-}
