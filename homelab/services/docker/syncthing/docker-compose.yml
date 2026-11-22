@@ -1,0 +1,25 @@
+services:
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: syncthing
+    hostname: syncthing
+    restart: unless-stopped
+    networks:
+      - proxy_net
+    ports:
+      - 8384:8384       # Web UI
+      - 22000:22000/tcp # Sync protocol
+      - 22000:22000/udp # Sync protocol
+      - 21027:21027/udp # Discovery
+    volumes:
+      - ${SERVICE_DIRECTORY}/syncthing:/var/syncthing
+      - /mnt/tank/files:/files
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/NewYork
+
+networks:
+  proxy_net:
+    external: true
+    name: proxy_net

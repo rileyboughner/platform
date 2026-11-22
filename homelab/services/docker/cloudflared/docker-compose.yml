@@ -1,0 +1,12 @@
+services:
+  cloudflared:
+    container_name: cloudflared
+    image: cloudflare/cloudflared:latest
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      # Mount the secrets folder
+      - /mnt/tank/secrets/services/cloudflared:/etc/cloudflared/secrets:ro
+      # Mount the config file's parent directory
+      - /mnt/tank/services/cloudflared:/etc/cloudflared/config:ro
+    command: tunnel --config /etc/cloudflared/config/config.yml run

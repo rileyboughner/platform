@@ -1,0 +1,57 @@
+services:
+  nextcloud:
+    image: nextcloud:31-apache
+    container_name: nextcloud
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ${SERVICE_DIRECTORY}/nextcloud/nextcloud:/var/www/html
+      - ${SERVICE_DIRECTORY}/nextcloud/data:/var/www/html/data
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
+      - NEXTCLOUD_TRUSTED_DOMAINS=cloud.rileyboughner.dev 192.168.1.2 localhost
+      - REDIS_HOST=redis
+      - PHP_MEMORY_LIMIT=512M
+      - PHP_UPLOAD_LIMIT=10G
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - proxy_net
+      - nextcloud-net
+  db:
+    image: postgres:16-alpine
+    container_name: nextcloud-db
+    restart: unless-stopped
+    volumes:
+      - ${SERVICE_DIRECTORY}/nextcloud/db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextcloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nextcloud-net
+  redis:
+    image: redis:7-alpine
+    container_name: nextcloud-redis
+    restart: unless-stopped
+    networks:
+      - nextcloud-net
+
+networks:
+  proxy_net:
+    external: true
+  nextcloud-net:

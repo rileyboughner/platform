@@ -1,0 +1,122 @@
+{
+  "title": "Homelab Overview",
+  "uid": "homelab-overview",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Uptime",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "time() - node_boot_time_seconds", "legendFormat": "Uptime", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] }
+    },
+    {
+      "title": "CPU Usage",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "CPU %", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }
+      ] } }, "overrides": [] }
+    },
+    {
+      "title": "Memory Usage",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100", "legendFormat": "Memory %", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }
+      ] } }, "overrides": [] }
+    },
+    {
+      "title": "Load Average (1m)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "node_load1", "legendFormat": "Load", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "title": "Tank Storage Used",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/mnt/tank\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/tank\"})) * 100", "legendFormat": "Tank %", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 }
+      ] } }, "overrides": [] }
+    },
+    {
+      "title": "Tank Storage (Used / Total)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "node_filesystem_size_bytes{mountpoint=\"/mnt/tank\"} - node_filesystem_avail_bytes{mountpoint=\"/mnt/tank\"}", "legendFormat": "Used", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "expr": "node_filesystem_size_bytes{mountpoint=\"/mnt/tank\"}", "legendFormat": "Total", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "title": "Backup Storage Used",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/mnt/backup\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/backup\"})) * 100", "legendFormat": "Backup %", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 }
+      ] } }, "overrides": [] }
+    },
+    {
+      "title": "Backup Storage (Used / Total)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "node_filesystem_size_bytes{mountpoint=\"/mnt/backup\"} - node_filesystem_avail_bytes{mountpoint=\"/mnt/backup\"}", "legendFormat": "Used", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "expr": "node_filesystem_size_bytes{mountpoint=\"/mnt/backup\"}", "legendFormat": "Total", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "title": "CPU & Memory Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "CPU %", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100", "legendFormat": "Memory %", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] }
+    },
+    {
+      "title": "Storage Usage Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/mnt/tank\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/tank\"})) * 100", "legendFormat": "Tank %", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/mnt/backup\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/backup\"})) * 100", "legendFormat": "Backup %", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] }
+    }
+  ]
+}

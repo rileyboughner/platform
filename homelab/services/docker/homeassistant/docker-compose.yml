@@ -1,0 +1,19 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    privileged: true
+    restart: unless-stopped
+    networks:
+      - proxy_net
+    ports: ["8123:8123"]
+    volumes:
+      - ${SERVICE_DIRECTORY}/homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+
+networks:
+  proxy_net:
+    external: true
+    name: proxy_net
+

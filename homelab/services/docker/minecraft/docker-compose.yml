@@ -1,0 +1,30 @@
+services:
+  minecraft:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    ports:
+      - "25565:25565"
+      - "19132:19132/udp"  # Bedrock (Geyser), for Xbox/mobile/console players
+    volumes:
+      - ${SERVICE_DIRECTORY}/minecraft/data:/data
+    # whitelist.json intentionally lives inside the data directory above, not as a
+    # separate bind mount: a single-file bind mount here repeatedly got decoupled
+    # from the host file (breaking on renames from either side) and silently reset
+    # to empty on container recreation, locking out already-whitelisted players.
+    environment:
+      - EULA=TRUE
+      - TYPE=PAPER
+      - VERSION=26.3
+      - MEMORY=12G          # adjust to what the host can spare
+      - TZ=America/NewYork
+      - MOTD=oh so salty
+      - DIFFICULTY=hard
+      - MAX_PLAYERS=100
+      - ENABLE_WHITELIST=TRUE
+      - ONLINE_MODE=TRUE    # requires real Minecraft accounts to join
+      - USE_AIKAR_FLAGS=TRUE
+      - VIEW_DISTANCE=12
+      - SIMULATION_DISTANCE=10

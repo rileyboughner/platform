@@ -1,0 +1,9 @@
+services:
+  musicassistant:
+    image: ghcr.io/music-assistant/server:latest
+    container_name: musicassistant
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ${SERVICE_DIRECTORY}/musicassistant/config:/data
+      - /etc/localtime:/etc/localtime:ro

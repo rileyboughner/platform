@@ -1,0 +1,13 @@
+persistence:
+  config:
+    enabled: true
+    existingClaim: jellyfin-config
+
+  media:
+    enabled: true
+    existingClaim: jellyfin-media
+
+service:
+  type: NodePort
+  port: 8096
+  nodePort: 30096

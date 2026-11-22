@@ -1,0 +1,229 @@
+adminRateLimitMaxBurst: "3"
+adminRateLimitSeconds: "300"
+adminToken:
+  existingSecret: ""
+  existingSecretKey: ""
+  value: ""
+affinity: {}
+commonAnnotations: {}
+commonLabels: {}
+configMapAnnotations: {}
+database:
+  connInit: ""
+  connectionRetries: 15
+  dbName: ""
+  enableWal: true
+  existingSecret: ""
+  existingSecretKey: ""
+  existingSecretPasswordKey: password
+  existingSecretUserKey: username
+  host: ""
+  idleTimeout: 600
+  maxConnections: 10
+  minConnections: 2
+  password: ""
+  port: ""
+  timeout: 30
+  type: default
+  uriOverride: ""
+  username: ""
+dnsConfig: {}
+domain: ""
+duo:
+  existingSecret: ""
+  hostname: ""
+  iKey: ""
+  sKey:
+    existingSecretKey: ""
+    value: ""
+emailChangeAllowed: "true"
+emergencyAccessAllowed: "true"
+emergencyNotifReminderSched: 0 3 * * * *
+emergencyRqstTimeoutSched: 0 7 * * * *
+enableServiceLinks: true
+eventCleanupSched: 0 10 0 * * *
+eventsDayRetain: ""
+experimentalClientFeatureFlags: null
+extendedLogging: "true"
+extraObjects: []
+extraVolumeMounts: []
+extraVolumes: []
+fullnameOverride: ""
+hibp:
+  existingSecret: ""
+  existingSecretKey: ""
+  value: ""
+hibpApiKey: ""
+httpRoute: {}
+iconBlacklistNonGlobalIps: "true"
+iconRedirectCode: "302"
+iconService: internal
+image:
+  extraSecrets: []
+  extraVars: []
+  extraVarsCM: ""
+  extraVarsSecret: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  registry: docker.io
+  repository: vaultwarden/server
+  tag: 1.36.0-alpine
+ingress:
+  additionalAnnotations: {}
+  additionalHostnames: []
+  class: nginx
+  customHeadersConfigMap: {}
+  enabled: false
+  hostname: warden.contoso.com
+  labels: {}
+  nginxAllowList: ""
+  nginxIngressAnnotations: true
+  path: /
+  pathType: Prefix
+  tls: true
+  tlsSecret: ""
+initContainers: []
+invitationExpirationHours: "120"
+invitationOrgName: Vaultwarden
+invitationsAllowed: true
+ipHeader: X-Real-IP
+livenessProbe:
+  enabled: true
+  failureThreshold: 10
+  initialDelaySeconds: 5
+  path: /alive
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1
+logTimestampFormat: '%Y-%m-%d %H:%M:%S.%3f'
+logging:
+  logFile: ""
+  logLevel: ""
+nodeSelector: {}
+orgAttachmentLimit: ""
+orgCreationUsers: ""
+orgEventsEnabled: "false"
+orgGroupsEnabled: "false"
+podAnnotations: {}
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: null
+  minAvailable: 1
+podLabels: {}
+podSecurityContext: {}
+priorityClassName: ""
+pushNotifications:
+  enabled: false
+  existingSecret: ""
+  identityUri: https://identity.bitwarden.com
+  installationId:
+    existingSecretKey: ""
+    value: ""
+  installationKey:
+    existingSecretKey: ""
+    value: ""
+  relayUri: https://push.bitwarden.com
+readinessProbe:
+  enabled: true
+  failureThreshold: 3
+  initialDelaySeconds: 5
+  path: /alive
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1
+replicas: 1
+requireDeviceEmail: "false"
+resourceType: ""
+resources: {}
+rocket:
+  address: 0.0.0.0
+  port: "8080"
+  tls:
+    path: /certs
+    secretName: ""
+  workers: "10"
+securityContext: {}
+sendsAllowed: "true"
+service:
+  annotations: {}
+  ipFamilyPolicy: SingleStack
+  labels: {}
+  sessionAffinity: ""
+  sessionAffinityConfig: {}
+  type: NodePort
+serviceAccount:
+  create: true
+  name: vaultwarden-svc
+showPassHint: "false"
+sidecars: []
+signupDomains: ""
+signupsAllowed: true
+signupsVerify: "true"
+smtp:
+  acceptInvalidCerts: "false"
+  acceptInvalidHostnames: "false"
+  authMechanism: Plain
+  debug: false
+  existingSecret: ""
+  from: ""
+  fromName: ""
+  heloName: ""
+  host: ""
+  password:
+    existingSecretKey: ""
+    value: ""
+  port: 25
+  security: starttls
+  username:
+    existingSecretKey: ""
+    value: ""
+sso:
+  authority: ""
+  authorizeExtraParams: ""
+  cacheExpiration: 0
+  clientId:
+    existingSecretKey: ""
+    value: ""
+  clientSecret:
+    existingSecretKey: ""
+    value: ""
+  debugTokens: false
+  disableSessionHandling: false
+  enabled: false
+  enforceSSO: false
+  existingSecret: ""
+  ignoreEmailVerification: false
+  masterPasswordPolicy: '{"enforceOnLogin":false,"minComplexity":3,"minLength":12,"requireLower":true,"requireNumbers":true,"requireSpecial":true,"requireUpper":true}'
+  onlySSO: false
+  pkce: true
+  scopes: email profile
+  signupsMatchEmail: true
+  trustedAudience: ""
+startupProbe:
+  enabled: false
+  failureThreshold: 10
+  initialDelaySeconds: 5
+  path: /alive
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1
+storage:
+  attachments: {}
+  data: {}
+  existingVolumeClaim:
+    claimName: vaultwarden
+    dataPath: /data
+strategy: {}
+timeZone: ""
+tolerations: []
+trashAutoDeleteDays: ""
+userAttachmentLimit: ""
+userSendLimit: ""
+webVaultEnabled: "true"
+yubico:
+  clientId: ""
+  existingSecret: ""
+  secretKey:
+    existingSecretKey: ""
+    value: ""
+  server: ""

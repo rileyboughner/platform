@@ -1,0 +1,8 @@
+services:
+  portfolio-3d:
+    container_name: portfolio-3d
+    build:
+      context: /home/admin/portfolio-3d
+    ports:
+      - 8092:80
+    restart: unless-stopped
