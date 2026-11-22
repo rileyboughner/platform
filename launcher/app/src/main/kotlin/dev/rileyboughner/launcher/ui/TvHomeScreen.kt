@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +52,15 @@ import java.time.format.DateTimeFormatter
 
 private const val WHEEL_URL = "https://wheel.rileyboughner.dev"
 private const val SCENE_FEEDBACK_MS = 1500L
-private const val OVERSCAN_SAFE_FRACTION = 0.05f
+
+/**
+ * Leanback overscan-safe margin: the standard 28dp inset Android TV
+ * recommends so content stays clear of the panel edges on overscanning
+ * TVs. A fixed dp value (not a fraction of the measured size) keeps the
+ * side bars narrow and consistent — the old 5% fraction put 48dp of empty
+ * space on each side at 1080p, which read as wide black bars.
+ */
+private val OVERSCAN_SAFE_MARGIN = 28.dp
 
 /**
  * Google TV / Leanback home screen — a single page, top to bottom: clock +
@@ -65,10 +74,15 @@ private const val OVERSCAN_SAFE_FRACTION = 0.05f
  * movie-wheel tile opens the real web app via [Intent.ACTION_VIEW] instead
  * of navigating to the native wheel screen.
  *
- * Every edge of the page keeps at least [OVERSCAN_SAFE_FRACTION] (5%) of
- * [BoxWithConstraints]'s measured width/height as margin, since this
- * firmware renders at a fixed 1080p and overscans — a flat dp padding
- * wouldn't scale with the actual panel size the way a measured fraction does.
+ * Every edge of the page keeps [OVERSCAN_SAFE_MARGIN] (28dp, the
+ * Leanback overscan-safe standard) as margin, so content sits close to
+ * the panel edges without being cut off on overscanning TVs. The
+ * horizontally scrollable rows also carry a 20dp leading/trailing
+ * spacer inside the Row, so the first/last tile can scale up on focus
+ * (TvTile grows 1.12x, ~15.6dp past its bounds on each side) without
+ * hitting the Row's clip edge — that clip edge was the "invisible box"
+ * cutting off the Jellyfin tile. The spacer scrolls with the content
+ * because it is a child of the Row, not padding on it.
  *
  * [wallpaperBitmap] is the synced wallpaper from the theme-sync hub
  * ([TvMainActivity] polls it): drawn full-bleed behind the tiles under a
@@ -125,8 +139,8 @@ fun TvHomeScreen(
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
         }
 
-        val horizontalMargin = maxWidth * OVERSCAN_SAFE_FRACTION
-        val verticalMargin = maxHeight * OVERSCAN_SAFE_FRACTION
+        val horizontalMargin = OVERSCAN_SAFE_MARGIN
+        val verticalMargin = OVERSCAN_SAFE_MARGIN
 
         Column(
             modifier = Modifier
@@ -143,6 +157,9 @@ fun TvHomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(32.dp),
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
             ) {
+                // Leading/trailing spacers so the first/last tile can
+                // scale up on focus without hitting the Row's clip edge.
+                Spacer(modifier = Modifier.width(20.dp))
                 if (jellyfinTile != null) {
                     TvTile(
                         label = jellyfinTile.label,
@@ -183,6 +200,7 @@ fun TvHomeScreen(
                 ) {
                     TvTileResourceArtwork(painterResource(R.drawable.tv_tile_movie_wheel), contentDescription = "Movie wheel")
                 }
+                Spacer(modifier = Modifier.width(20.dp))
             }
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -202,6 +220,9 @@ fun TvHomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(24.dp),
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                     ) {
+                        // Leading/trailing spacers so the first/last
+                        // tile can scale up on focus without clipping.
+                        Spacer(modifier = Modifier.width(20.dp))
                         room.lights.forEach { light ->
                             LightTile(
                                 light = light,
@@ -223,6 +244,7 @@ fun TvHomeScreen(
                                 },
                             )
                         }
+                        Spacer(modifier = Modifier.width(20.dp))
                     }
                 }
             }
@@ -241,6 +263,9 @@ fun TvHomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(24.dp),
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                     ) {
+                        // Leading/trailing spacers so the first/last
+                        // tile can scale up on focus without clipping.
+                        Spacer(modifier = Modifier.width(20.dp))
                         room.scenes.forEach { scene ->
                             SceneTile(
                                 scene = scene,
@@ -251,6 +276,7 @@ fun TvHomeScreen(
                                 },
                             )
                         }
+                        Spacer(modifier = Modifier.width(20.dp))
                     }
                 }
             }
