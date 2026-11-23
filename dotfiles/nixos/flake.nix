@@ -79,6 +79,7 @@
         ./modules/keyd.nix
         ./modules/secrets.nix
         ./modules/gaming.nix
+        ./modules/wireless-networking.nix
         ./modules/theme-sync-watch.nix
       ];
     };
