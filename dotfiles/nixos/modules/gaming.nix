@@ -3,6 +3,7 @@
 {
   environment.systemPackages = with pkgs; [
     discord-ptb
+    python3  # games-service (TV launcher game list/launch)
     heroic
     gamescope
     lutris
