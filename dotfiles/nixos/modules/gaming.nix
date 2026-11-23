@@ -21,7 +21,8 @@
   };
 
   # Games service (TV launcher): game list/launch on 8767.
-  networking.firewall.allowedTCPPorts = [ 8767 ];
+  networking.firewall.allowedTCPPorts = [ 8767 47989 47990 ];
+  networking.firewall.allowedUDPPorts = [ 47998 47999 48000 48010 ];
 
   # Sunshine: game streaming server for Moonlight (TV launcher game streaming).
   # Web UI on https://<host>:47990 (pair Moonlight with the PIN shown there).
