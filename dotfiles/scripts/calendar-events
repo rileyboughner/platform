@@ -1,56 +1,218 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+"""calendar-events: print calendar events from Nextcloud CalDAV as JSON.
 
-CLIENT_SECRET_FILE="/run/agenix/gcalcli-client-secret"
-
-die() {
-    echo "calendar-events: $*" >&2
-    exit 1
-}
-
-usage() {
-    cat >&2 <<'EOF'
-Usage: calendar-events <command>
+Reads Nextcloud credentials from /run/agenix/nextcloud-caldav
+(line 1 = username, line 2 = app password).
 
 Commands:
-  events   Print JSON array of today's + tomorrow's events (date, time, title, calendar)
-EOF
-}
+  events [days]  Print JSON array of events from today for <days> days
+                 (default 2: today + tomorrow).
+                 Each item: {date, time, title, calendar}
+                 date is YYYY-MM-DD, time is HH:MM (24h) or "" for all-day.
+  next           Print a single JSON object for the next upcoming event
+                 within the next 7 days, or {} when there is none.
+"""
+import base64
+import json
+import re
+import sys
+import urllib.request
+import urllib.error
+from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 
-load_client_secret() {
-    [ -f "$CLIENT_SECRET_FILE" ] || die "no client secret at $CLIENT_SECRET_FILE"
-    CLIENT_SECRET=$(<"$CLIENT_SECRET_FILE")
-    [ -n "$CLIENT_SECRET" ] || die "client secret at $CLIENT_SECRET_FILE is empty"
-}
+SECRET_FILE = "/run/agenix/nextcloud-caldav"
+BASE_URL = "https://cloud.rileyboughner.dev"
+LOCAL_TZ = ZoneInfo("America/New_York")
 
-# stdin is /dev/null so an unauthenticated gcalcli fails fast on the missing
-# oauth token instead of blocking on an interactive login prompt.
-cmd_events() {
-    load_client_secret
+# Calendars that hold tasks, not events; skip them.
+SKIP_CALENDARS = {"shopping list", "tasks"}
 
-    local until_date raw
-    until_date=$(date -d '+2 days' '+%Y-%m-%d')
 
-    raw=$(gcalcli --nocolor --client-secret "$CLIENT_SECRET" \
-        agenda --tsv --military --details calendar today "$until_date" \
-        < /dev/null 2>/dev/null) \
-        || die "gcalcli agenda failed (not signed in, or network unreachable?)"
+def die(msg):
+    print(f"calendar-events: {msg}", file=sys.stderr)
+    sys.exit(1)
 
-    awk -F'\t' 'NR>1 && $2!=""' <<<"$raw" | jq -R -s '
-        split("\n")
-        | map(select(length > 0) | split("\t"))
-        | map(select(length >= 6))
-        | map({date: .[0], time: .[1], title: .[4], calendar: .[5]})
-    '
-}
 
-case "${1:-}" in
-    events)
-        shift
-        cmd_events "$@"
-        ;;
-    *)
-        usage
-        exit 1
-        ;;
-esac
+def load_credentials():
+    try:
+        with open(SECRET_FILE) as f:
+            lines = [ln.strip() for ln in f if ln.strip()]
+    except FileNotFoundError:
+        die(f"no credentials at {SECRET_FILE} (create a Nextcloud app password and store it with `boner secrets update nextcloud-caldav`)")
+    if len(lines) < 2:
+        die(f"{SECRET_FILE} needs two lines: username, then app password")
+    return lines[0], lines[1]
+
+
+def dav_request(user, password, method, url, body=None, headers=None):
+    req = urllib.request.Request(url, data=body, method=method)
+    token = base64.b64encode(f"{user}:{password}".encode()).decode()
+    req.add_header("Authorization", f"Basic {token}")
+    if headers:
+        for k, v in headers.items():
+            req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        die(f"CalDAV {method} {url} failed: HTTP {e.code}")
+    except urllib.error.URLError as e:
+        die(f"CalDAV request failed (network unreachable?): {e.reason}")
+
+
+def list_calendars(user, password):
+    """Return [(href, displayname)] for the user's calendars."""
+    url = f"{BASE_URL}/remote.php/dav/calendars/{user}/"
+    body = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+        "<d:prop><d:displayname/><d:resourcetype/></d:prop></d:propfind>"
+    ).encode()
+    _, resp = dav_request(user, password, "PROPFIND", url, body,
+                         {"Content-Type": "application/xml", "Depth": "1"})
+    calendars = []
+    for m in re.finditer(r"<d:response>(.*?)</d:response>", resp, re.S):
+        block = m.group(1)
+        href = re.search(r"<d:href>([^<]+)</d:href>", block)
+        name = re.search(r"<d:displayname>([^<]*)</d:displayname>", block)
+        if href and name and "<c:calendar" in block:
+            calendars.append((href.group(1), name.group(1)))
+    return calendars
+
+
+def query_events(user, password, cal_href, start_utc, end_utc):
+    """Return raw ICS text for events in [start_utc, end_utc) in one calendar."""
+    fmt = "%Y%m%dT%H%M%SZ"
+    body = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+        "<d:prop><d:getetag/><c:calendar-data/></d:prop>"
+        "<c:filter><c:comp-filter name=\"VCALENDAR\">"
+        "<c:comp-filter name=\"VEVENT\">"
+        f"<c:time-range start=\"{start_utc.strftime(fmt)}\" end=\"{end_utc.strftime(fmt)}\"/>"
+        "</c:comp-filter></c:comp-filter></c:filter>"
+        "</c:calendar-query>"
+    ).encode()
+    url = f"{BASE_URL}{cal_href}"
+    _, resp = dav_request(user, password, "REPORT", url, body,
+                         {"Content-Type": "application/xml", "Depth": "1"})
+    return re.findall(r"<c:calendar-data>(.*?)</c:calendar-data>", resp, re.S)
+
+
+def unfold(ics):
+    """Unfold folded ICS lines (continuation lines start with space/tab)."""
+    out = []
+    for line in ics.splitlines():
+        if line[:1] in (" ", "\t") and out:
+            out[-1] += line[1:]
+        else:
+            out.append(line)
+    return out
+
+
+def parse_dtstart(value, params):
+    """Return (date_str, time_str) in local time for a DTSTART value."""
+    if params.get("VALUE") == "DATE" or re.fullmatch(r"\d{8}", value):
+        d = datetime.strptime(value, "%Y%m%d").date()
+        return d.isoformat(), ""
+    # Datetime: either UTC (Z) or with a TZID.
+    if value.endswith("Z"):
+        dt = datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=ZoneInfo("UTC"))
+    else:
+        tzid = params.get("TZID", "America/New_York")
+        try:
+            tz = ZoneInfo(tzid)
+        except Exception:
+            tz = LOCAL_TZ
+        dt = datetime.strptime(value, "%Y%m%dT%H%M%S").replace(tzinfo=tz)
+    local = dt.astimezone(LOCAL_TZ)
+    return local.date().isoformat(), local.strftime("%H:%M")
+
+
+def parse_events(ics_text, calendar_name):
+    """Extract {date, time, title, calendar} dicts from one calendar's ICS."""
+    events = []
+    for block in re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", ics_text, re.S):
+        props = {}
+        for line in unfold(block):
+            if ":" not in line:
+                continue
+            keypart, _, val = line.partition(":")
+            parts = keypart.split(";")
+            name = parts[0]
+            params = {}
+            for p in parts[1:]:
+                if "=" in p:
+                    k, _, v = p.partition("=")
+                    params[k] = v
+            props.setdefault(name, []).append((params, val))
+        if "DTSTART" not in props or "SUMMARY" not in props:
+            continue
+        if "STATUS" in props and props["STATUS"][0][1].upper() == "CANCELLED":
+            continue
+        params, val = props["DTSTART"][0]
+        date_str, time_str = parse_dtstart(val, params)
+        title = props["SUMMARY"][0][1].replace("\\,", ",").replace("\\;", ";").replace("\\n", " ")
+        events.append({"date": date_str, "time": time_str,
+                       "title": title, "calendar": calendar_name})
+    return events
+
+
+def fetch_events(days):
+    user, password = load_credentials()
+    now_local = datetime.now(LOCAL_TZ)
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local + timedelta(days=days)
+    start_utc = start_local.astimezone(ZoneInfo("UTC"))
+    end_utc = end_local.astimezone(ZoneInfo("UTC"))
+
+    all_events = []
+    for href, name in list_calendars(user, password):
+        if name.strip().lower() in SKIP_CALENDARS:
+            continue
+        for ics in query_events(user, password, href, start_utc, end_utc):
+            all_events.append((name, ics))
+    events = []
+    for name, ics in all_events:
+        events.extend(parse_events(ics, name))
+    events.sort(key=lambda e: (e["date"], e["time"] or "99:99", e["title"]))
+    return events
+
+
+def cmd_events(args):
+    days = 2
+    if args:
+        try:
+            days = int(args[0])
+        except ValueError:
+            die(f"bad days value: {args[0]}")
+    print(json.dumps(fetch_events(days)))
+
+
+def cmd_next():
+    events = fetch_events(7)
+    now_local = datetime.now(LOCAL_TZ)
+    today = now_local.date().isoformat()
+    now_hm = now_local.strftime("%H:%M")
+    for e in events:
+        if e["date"] > today or (e["date"] == today and (not e["time"] or e["time"] >= now_hm)):
+            print(json.dumps(e))
+            return
+    print("{}")
+
+
+def usage():
+    print(__doc__.strip().split("\n\n", 1)[0], file=sys.stderr)
+    print("Usage: calendar-events <events [days] | next>", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "events":
+        cmd_events(sys.argv[2:])
+    elif cmd == "next":
+        cmd_next()
+    else:
+        usage()
+        sys.exit(1)

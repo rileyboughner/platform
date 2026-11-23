@@ -20,6 +20,10 @@ in
   "todoist-token.age".publicKeys = workstations;
   "qbittorrent.age".publicKeys = workstations;
   "gcalcli-client-secret.age".publicKeys = workstations;
+  # Nextcloud CalDAV credentials for the calendar-events script (desktop
+  # Quickshell widgets). Two lines: Nextcloud username, then an app
+  # password created in Nextcloud Settings -> Security -> Devices & sessions.
+  "nextcloud-caldav.age".publicKeys = workstations;
 
   # Google OAuth client registered as "TVs and Limited Input devices" --
   # the only client type that supports device-code login, which is what

@@ -17,6 +17,14 @@
     owner = username;
   };
 
+  # Nextcloud CalDAV credentials for the calendar-events script (two lines:
+  # username, then an app password). Create the secret with
+  # `boner secrets update nextcloud-caldav` before rebuilding.
+  age.secrets.nextcloud-caldav = {
+    file = ../secrets/nextcloud-caldav.age;
+    owner = username;
+  };
+
   # Each host decrypts its own dedicated server-access key, but consumers
   # (nixos/modules/ssh.nix) always read it from this same stable path.
   age.secrets.server-ssh-key = {

@@ -380,19 +380,19 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     }
 
     // ─────────────────────────────────────────────
-    // Google Calendar (next event)
+    // Nextcloud Calendar (next event)
     // ─────────────────────────────────────────────
 
-    // Checks for gcalcli's cached oauth token without ever invoking gcalcli
-    // itself while unauthenticated, since an unauthenticated call blocks on
-    // an interactive client-id/secret prompt.
+    // Checks for the Nextcloud CalDAV credentials without invoking
+    // calendar-events itself while unauthenticated. The secret holds two
+    // lines: Nextcloud username, then an app password.
     Process {
         id: calendarAuthCheckProcess
 
         command: [
             "sh",
             "-c",
-            "test -f \"${XDG_DATA_HOME:-$HOME/.local/share}/gcalcli/oauth\" -o -f \"$HOME/.gcalcli_oauth\" && echo yes || echo no"
+            "test -f /run/agenix/nextcloud-caldav && echo yes || echo no"
         ]
 
         stdout: StdioCollector {
@@ -412,35 +412,27 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     }
 
     Process {
-        id: calendarInitProcess
-
-        command: [
-            "kitty", "--title", "gcalcli init", "-e",
-            "sh", "-c",
-            "gcalcli --client-secret \"$(cat /run/agenix/gcalcli-client-secret 2>/dev/null)\" init"
-        ]
-    }
-
-    Process {
         id: calendarProcess
 
-        command: [
-            "sh",
-            "-c",
-            "gcalcli --nocolor --client-secret \"$(cat /run/agenix/gcalcli-client-secret 2>/dev/null)\" agenda --tsv --military now $(date -d '+7 days' '+%Y-%m-%d') < /dev/null 2>/dev/null | awk -F'\\t' 'NR>1 && $2!=\"\" {print; exit}'"
-        ]
+        command: ["calendar-events", "next"]
 
         stdout: StdioCollector {
             onStreamFinished: {
-                const line = text.trim()
-                const cols = line.split("\t")
+                let event = null
+                try {
+                    event = JSON.parse(text.trim())
+                } catch (e) {
+                    event = null
+                }
 
-                if (cols.length < 5) {
+                if (!event || !event.date) {
                     root.hasNextEvent = false
                     return
                 }
 
-                const start = new Date(cols[0] + "T" + cols[1] + ":00")
+                const start = event.time
+                    ? new Date(event.date + "T" + event.time + ":00")
+                    : new Date(event.date + "T00:00:00")
 
                 if (isNaN(start.getTime())) {
                     root.hasNextEvent = false
@@ -448,37 +440,42 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 }
 
                 root.nextEventStartMs = start.getTime()
-                root.nextEventTitle = cols[4]
+                root.nextEventTitle = event.title
                 root.hasNextEvent = true
             }
         }
     }
 
-    // Lists every event starting today, for the "today's events" popup
+    // Lists today's events, for the "today's events" popup
     Process {
         id: todayEventsProcess
 
-        command: [
-            "sh",
-            "-c",
-            "gcalcli --nocolor --client-secret \"$(cat /run/agenix/gcalcli-client-secret 2>/dev/null)\" agenda --tsv --military today tomorrow < /dev/null 2>/dev/null | awk -F'\\t' 'NR>1 && $2!=\"\"'"
-        ]
+        command: ["calendar-events", "events"]
 
         stdout: StdioCollector {
             onStreamFinished: {
-                const lines = text.trim().split("\n").filter((l) => l.length > 0)
+                let events = []
+                try {
+                    events = JSON.parse(text.trim())
+                } catch (e) {
+                    events = []
+                }
 
-                root.todayEvents = lines.map((line) => {
-                    const cols = line.split("\t")
-                    if (cols.length < 5) return null
+                const today = new Date()
+                const todayStr = today.getFullYear() + "-"
+                    + String(today.getMonth() + 1).padStart(2, "0") + "-"
+                    + String(today.getDate()).padStart(2, "0")
 
-                    const start = new Date(cols[0] + "T" + cols[1] + ":00")
-                    const timeLabel = isNaN(start.getTime())
-                        ? cols[1]
-                        : Qt.formatDateTime(start, "h:mm AP")
-
-                    return { time: timeLabel, title: cols[4] }
-                }).filter((e) => e !== null)
+                root.todayEvents = events
+                    .filter((e) => e.date === todayStr)
+                    .map((e) => {
+                        if (!e.time) return { time: "All day", title: e.title }
+                        const start = new Date(e.date + "T" + e.time + ":00")
+                        const timeLabel = isNaN(start.getTime())
+                            ? e.time
+                            : Qt.formatDateTime(start, "h:mm AP")
+                        return { time: timeLabel, title: e.title }
+                    })
             }
         }
     }
@@ -1448,7 +1445,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     }
 
     // ─────────────────────────────────────────────
-    // Google Calendar (today's events)
+    // Nextcloud Calendar (today's events)
     // ─────────────────────────────────────────────
 
     PopupWindow {
@@ -3189,7 +3186,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             calendarEventsProcess.running = true
         }
 
-        // date/time are plain "YYYY-MM-DD"/"HH:MM" strings from gcalcli;
+        // date/time are plain "YYYY-MM-DD"/"HH:MM" strings from calendar-events;
         // dayLabel collapses the date against today/tomorrow since the
         // panel only ever spans those two days.
         function dayLabel(dateStr) {
@@ -3203,6 +3200,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         }
 
         function timeLabel(event) {
+            if (!event.time) return "All day"
             const d = new Date(event.date + "T" + event.time + ":00")
             return isNaN(d.getTime()) ? event.time : Qt.formatDateTime(d, "h:mm AP")
         }
@@ -3430,7 +3428,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     Text {
                         visible: !root.calendarAuthenticated
 
-                        text: "Not signed in to gcalcli yet."
+                        text: "Nextcloud calendar not set up yet."
                         color: root.colMuted
 
                         font {
