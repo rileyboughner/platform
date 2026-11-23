@@ -637,7 +637,7 @@ cmd_torrent_download() {
     fi
     host_path="$QBIT_HOST_TORRENTS/${container_path#$QBIT_CONTAINER_TORRENTS/}"
     echo "Copying '$name' from the server to $PWD/ ..."
-    rsync -a --protect-args "admin@server:$host_path" "./"
+    rsync -av --progress --human-readable --protect-args "admin@server:$host_path" "./"
     echo "Done. The server copy stays in place (still seeding)."
 }
 
