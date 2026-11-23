@@ -19,4 +19,12 @@
     extraPackages = [ pkgs.gamescope ];
   };
 
+  # Sunshine: game streaming server for Moonlight (TV launcher game streaming).
+  # Web UI on https://<host>:47990 (pair Moonlight with the PIN shown there).
+  services.sunshine = {
+    enable = true;
+    openFirewall = true;
+    capSysAdmin = true;
+    autoStart = true;
+  };
 }
