@@ -61,8 +61,6 @@
         ./modules/gaming.nix
         ./modules/terraform.nix
         ./modules/quickemu.nix
-        ./modules/docker.nix
-        ./modules/kubernetes.nix
         ./modules/secrets.nix
         ./modules/theme-sync-watch.nix
       ];
