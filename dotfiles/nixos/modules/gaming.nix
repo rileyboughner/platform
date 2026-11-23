@@ -5,6 +5,7 @@
     discord-ptb
     heroic
     gamescope
+    lutris
   ];
 
   # Needed so `gamescope -- steam` can manage its own session/VT.
