@@ -74,6 +74,7 @@ import dev.rileyboughner.tvlauncher.homeassistant.HomeAssistantResult
 import dev.rileyboughner.tvlauncher.homeassistant.HomeAssistantRoom
 import dev.rileyboughner.tvlauncher.homeassistant.HomeAssistantScene
 import dev.rileyboughner.tvlauncher.homeassistant.HomeAssistantSnapshot
+import dev.rileyboughner.tvlauncher.jellyfin.JellyfinRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -107,6 +108,7 @@ private const val BRIGHTNESS_STEP_PERCENT = 10
 @Composable
 fun TvHomeScreen(
     homeAssistantRepository: HomeAssistantRepository,
+    jellyfinRepository: JellyfinRepository,
     wallpaperBitmap: Bitmap? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -242,6 +244,8 @@ fun TvHomeScreen(
             }
 
             Spacer(modifier = Modifier.height(36.dp))
+
+            JellyfinContinueWatchingRow(jellyfinRepository = jellyfinRepository)
 
             val livingRoom = livingRoomFrom(haResult)
             val haStatusMessage = haStatusMessage(haResult, livingRoom)

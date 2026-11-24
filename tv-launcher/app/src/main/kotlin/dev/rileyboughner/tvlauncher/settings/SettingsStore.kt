@@ -42,6 +42,13 @@ class SettingsStore(context: Context) {
         prefs.edit().putString(KEY_HOME_ASSISTANT_TOKEN, token.trim()).apply()
     }
 
+    fun getJellyfinApiKey(): String? =
+        prefs.getString(KEY_JELLYFIN_API_KEY, null)?.takeIf { it.isNotBlank() }
+
+    fun setJellyfinApiKey(apiKey: String) {
+        prefs.edit().putString(KEY_JELLYFIN_API_KEY, apiKey.trim()).apply()
+    }
+
     // Theme/wallpaper sync bookkeeping — see ThemeSyncRepository.
     fun getSyncTheme(): String = prefs.getString(KEY_SYNC_THEME, null) ?: DEFAULT_SYNCED_THEME_KEY
 
@@ -77,6 +84,7 @@ class SettingsStore(context: Context) {
         private const val PREFS_FILE_NAME = "tv_launcher_secure_settings"
         private const val KEY_HOME_ASSISTANT_SERVER_URL = "home_assistant_server_url"
         private const val KEY_HOME_ASSISTANT_TOKEN = "home_assistant_token"
+        private const val KEY_JELLYFIN_API_KEY = "jellyfin_api_key"
         private const val KEY_SYNC_THEME = "theme_sync_theme"
         private const val KEY_SYNC_MODE_CACHE = "theme_sync_mode_cache"
         private const val KEY_SYNC_MODE_CACHE_AT = "theme_sync_mode_cache_at"
@@ -84,6 +92,7 @@ class SettingsStore(context: Context) {
         private const val KEY_SYNC_LAST_APPLIED_AT = "theme_sync_last_applied_at"
 
         const val DEFAULT_HOME_ASSISTANT_URL = "https://home.rileyboughner.dev"
+        const val DEFAULT_JELLYFIN_SERVER_URL = "https://media.rileyboughner.dev"
         const val DEFAULT_SYNCED_THEME_KEY = "rose-pine"
     }
 }

@@ -12,8 +12,8 @@ android {
         applicationId = "dev.rileyboughner.tvlauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
         // No BuildConfig token fields here, ever: this app is a separate
         // public release and must never bake in a credential. The Home
         // Assistant token is fetched from the launcher token server on
@@ -59,6 +59,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // Poster art for the Continue Watching row (same version as the phone launcher).
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

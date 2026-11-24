@@ -16,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import dev.rileyboughner.tvlauncher.homeassistant.HomeAssistantRepository
+import dev.rileyboughner.tvlauncher.jellyfin.JellyfinRepository
 import dev.rileyboughner.tvlauncher.settings.SettingsStore
 import dev.rileyboughner.tvlauncher.settings.TokenSyncApi
 import dev.rileyboughner.tvlauncher.theme.ThemeSyncRepository
@@ -41,10 +42,10 @@ import kotlinx.coroutines.launch
  * UI, no dashboard, no calendar, no todo, no settings screen.
  *
  * Two launch-time jobs run here:
- * - Home Assistant token: pulled from the launcher token server on every
- *   launch ([TokenSyncApi]) and stored encrypted; a missing/blank fetched
- *   token leaves the stored one alone, so an unreachable server never
- *   wipes a working token.
+ * - Tokens: pulled from the launcher token server on every launch
+ *   ([TokenSyncApi]) and stored encrypted — Home Assistant token and
+ *   Jellyfin API key alike; a missing/blank fetched token leaves the
+ *   stored one alone, so an unreachable server never wipes a working one.
  * - Wallpaper: polled from the theme-sync hub ([ThemeSyncRepository.pollTv])
  *   while this activity is in the foreground, plus once immediately on
  *   every resume; the bitmap is drawn as the home screen's background.
@@ -58,23 +59,29 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var settingsStore: SettingsStore
     private lateinit var homeAssistantRepository: HomeAssistantRepository
+    private lateinit var jellyfinRepository: JellyfinRepository
     private lateinit var updateRepository: UpdateRepository
     private lateinit var themeSyncRepository: ThemeSyncRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settingsStore = SettingsStore(applicationContext)
-        // The TV has no Settings screen, so it pulls its Home Assistant
-        // token from the server on every launch instead of waiting for a
-        // manual sync: a missing/blank token leaves the stored one alone,
-        // so an unreachable server never wipes a working token.
+        // The TV has no Settings screen, so it pulls its tokens from the
+        // server on every launch instead of waiting for a manual sync: a
+        // missing/blank token leaves the stored one alone, so an
+        // unreachable server never wipes a working token.
         lifecycleScope.launch {
-            TokenSyncApi.fetchTokens()
-                ?.homeAssistantToken
-                ?.takeIf { it.isNotBlank() }
-                ?.let { settingsStore.setHomeAssistantToken(it) }
+            TokenSyncApi.fetchTokens()?.let { tokens ->
+                tokens.homeAssistantToken
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { settingsStore.setHomeAssistantToken(it) }
+                tokens.jellyfinApiKey
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { settingsStore.setJellyfinApiKey(it) }
+            }
         }
         homeAssistantRepository = HomeAssistantRepository(settingsStore)
+        jellyfinRepository = JellyfinRepository(settingsStore)
         updateRepository = UpdateRepository(applicationContext)
         themeSyncRepository = ThemeSyncRepository(settingsStore)
 
@@ -90,6 +97,7 @@ class MainActivity : ComponentActivity() {
             TvLauncherTheme {
                 TvHomeScreen(
                     homeAssistantRepository = homeAssistantRepository,
+                    jellyfinRepository = jellyfinRepository,
                     wallpaperBitmap = wallpaperBitmap,
                 )
                 UpdatePrompt(updateRepository)
