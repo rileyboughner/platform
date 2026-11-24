@@ -1,6 +1,6 @@
 {
-  "versionCode": 22,
-  "versionName": "0.22.0",
-  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.22.0/app-release.apk",
-  "notes": "TV home layout: narrower side margins (28dp Leanback standard) and the first/last tile in each row no longer clips when focused."
+  "versionCode": 23,
+  "versionName": "0.23.0",
+  "apkUrl": "https://github.com/rileyboughner/platform/releases/download/v0.23.0/app-release.apk",
+  "notes": "App search fix: results now render fully and stay put until you tap one (no more auto-launching the moment the filter narrows to a single match). Glance gains a Weather line (current temp + condition for Cincinnati, cached 30 min, tap to refresh)."
 }

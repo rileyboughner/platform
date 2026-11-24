@@ -27,6 +27,7 @@ import dev.rileyboughner.launcher.theme.ThemeSyncPoller
 import dev.rileyboughner.launcher.theme.ThemeSyncRepository
 import dev.rileyboughner.launcher.nextcloud.NextcloudTasksRepository
 import dev.rileyboughner.launcher.theme.accentColorFor
+import dev.rileyboughner.launcher.weather.WeatherRepository
 import dev.rileyboughner.launcher.ui.LauncherPagerScreen
 import dev.rileyboughner.launcher.update.UpdatePrompt
 import dev.rileyboughner.launcher.update.UpdateRepository
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var homeAssistantRepository: HomeAssistantRepository
     private lateinit var dashboardRepository: DashboardRepository
     private lateinit var duolingoRepository: DuolingoRepository
+    private lateinit var weatherRepository: WeatherRepository
     private lateinit var updateRepository: UpdateRepository
     private lateinit var themeSyncRepository: ThemeSyncRepository
 
@@ -70,6 +72,7 @@ class MainActivity : ComponentActivity() {
         homeAssistantRepository = HomeAssistantRepository(settingsRepository)
         dashboardRepository = DashboardRepository()
         duolingoRepository = DuolingoRepository(applicationContext, settingsRepository)
+        weatherRepository = WeatherRepository(applicationContext)
         updateRepository = UpdateRepository(applicationContext)
         themeSyncRepository = ThemeSyncRepository(applicationContext, settingsRepository)
 
@@ -101,6 +104,7 @@ class MainActivity : ComponentActivity() {
                     homeAssistantRepository = homeAssistantRepository,
                     dashboardRepository = dashboardRepository,
                     duolingoRepository = duolingoRepository,
+                    weatherRepository = weatherRepository,
                     settingsRepository = settingsRepository,
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                 )

@@ -60,6 +60,8 @@ import dev.rileyboughner.launcher.calendar.eventDay
 import dev.rileyboughner.launcher.calendar.formatDayLabel
 import dev.rileyboughner.launcher.calendar.formatEventTime
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
+import dev.rileyboughner.launcher.weather.WeatherRepository
+import dev.rileyboughner.launcher.weather.WeatherResult
 import dev.rileyboughner.launcher.duolingo.DuolingoResult
 import dev.rileyboughner.launcher.health.HealthConnectRepository
 import dev.rileyboughner.launcher.health.SleepResult
@@ -69,6 +71,7 @@ import dev.rileyboughner.launcher.settings.SettingsActivity
 import dev.rileyboughner.launcher.settings.SettingsRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -96,6 +99,7 @@ import java.time.format.DateTimeFormatter
 fun AppsPageScreen(
     appListRepository: AppListRepository,
     duolingoRepository: DuolingoRepository,
+    weatherRepository: WeatherRepository,
     settingsRepository: SettingsRepository,
     calendarRepository: CalendarRepository,
     onOpenCalendar: () -> Unit,
@@ -120,6 +124,7 @@ fun AppsPageScreen(
     var sleepResult by remember { mutableStateOf(HealthConnectRepository.cachedSleepOrNull()) }
     var screenTimeResult by remember { mutableStateOf(ScreenTimeRepository.cachedOrNull()) }
     var duolingoResult by remember { mutableStateOf<DuolingoResult?>(duolingoRepository.peekCachedStats()) }
+    var weatherResult by remember { mutableStateOf<WeatherResult?>(weatherRepository.peekCached()) }
     var upNextEvent by remember { mutableStateOf<CalendarEvent?>(null) }
     // The up-next glance row is only shown when the calendar permission is
     // already granted. It is never requested from this page — the Calendar
@@ -143,6 +148,7 @@ fun AppsPageScreen(
         LaunchedEffect(Unit) { sleepResult = HealthConnectRepository.fetchLatestSleep(context) }
         LaunchedEffect(Unit) { screenTimeResult = ScreenTimeRepository.fetchTodayScreenTime(context) }
         LaunchedEffect(Unit) { duolingoResult = duolingoRepository.fetchStats() }
+        LaunchedEffect(Unit) { weatherResult = weatherRepository.fetch() }
         LaunchedEffect(Unit) {
             if (calendarPermissionGranted) {
                 upNextEvent = calendarRepository.queryNextUpcomingEvent()
@@ -168,6 +174,7 @@ fun AppsPageScreen(
                 visibleFavorites = resolveVisibleFavorites(allApps, settingsRepository)
                 coroutineScope.launch { HealthConnectRepository.attemptRegistration(context) }
                 if (showGlanceInfo) {
+                    coroutineScope.launch { weatherResult = weatherRepository.fetch(forceRefresh = true) }
                     coroutineScope.launch { sleepResult = HealthConnectRepository.fetchLatestSleep(context, forceRefresh = true) }
                     // The calendar permission may have been granted from the
                     // Calendar page or Settings since this page was last
@@ -305,6 +312,7 @@ fun AppsPageScreen(
                     sleepResult = sleepResult,
                     screenTimeResult = screenTimeResult,
                     duolingoResult = duolingoResult,
+                    weatherResult = weatherResult,
                     upNextEvent = upNextEvent,
                     showUpNext = calendarPermissionGranted,
                     onSleepClick = {
@@ -323,6 +331,9 @@ fun AppsPageScreen(
                         } else {
                             coroutineScope.launch { duolingoResult = duolingoRepository.fetchStats(forceRefresh = true) }
                         }
+                    },
+                    onWeatherClick = {
+                        coroutineScope.launch { weatherResult = weatherRepository.fetch(forceRefresh = true) }
                     },
                     onUpNextClick = onOpenCalendar,
                     modifier = Modifier.fillMaxWidth(),
@@ -399,11 +410,13 @@ private fun GlanceSection(
     sleepResult: SleepResult?,
     screenTimeResult: ScreenTimeResult?,
     duolingoResult: DuolingoResult?,
+    weatherResult: WeatherResult?,
     upNextEvent: CalendarEvent?,
     showUpNext: Boolean,
     onSleepClick: () -> Unit,
     onScreenTimeClick: () -> Unit,
     onDuolingoClick: () -> Unit,
+    onWeatherClick: () -> Unit,
     onUpNextClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -411,6 +424,7 @@ private fun GlanceSection(
         GlanceRow(text = formatSleepLine(sleepResult), onClick = onSleepClick)
         GlanceRow(text = formatScreenTimeLine(screenTimeResult), onClick = onScreenTimeClick)
         GlanceRow(text = formatDuolingoLine(duolingoResult), onClick = onDuolingoClick)
+        GlanceRow(text = formatWeatherLine(weatherResult), onClick = onWeatherClick)
         if (showUpNext) {
             GlanceRow(text = formatUpNextLine(upNextEvent), onClick = onUpNextClick)
         }
@@ -460,6 +474,12 @@ private fun formatUpNextLine(event: CalendarEvent?): String {
     val day = eventDay(event)
     val dayPart = if (day.isEqual(today)) "" else " ${formatDayLabel(day)}"
     return "Up next: ${event.title}$dayPart ${formatEventTime(event)}"
+}
+
+private fun formatWeatherLine(result: WeatherResult?): String = when (result) {
+    null -> "Weather …"
+    is WeatherResult.Unavailable -> "Weather —"
+    is WeatherResult.Success -> "Weather ${result.temperatureF.roundToInt()}° ${result.condition}"
 }
 
 private fun formatDuolingoLine(result: DuolingoResult?): String = when (result) {

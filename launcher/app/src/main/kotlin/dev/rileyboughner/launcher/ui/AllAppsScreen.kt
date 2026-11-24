@@ -31,9 +31,16 @@ import dev.rileyboughner.launcher.LauncherAppInfo
  * [dev.rileyboughner.launcher.AppListRepository]), with a plain text
  * filter. [autoFocusSearch] is true when this screen was opened via the
  * Apps page's swipe-up gesture — it focuses the filter field and opens
- * the keyboard immediately so Riley can start typing without an extra tap,
- * and arms the single-match auto-launch below. When opened by tapping
- * "All apps" instead, neither of those kick in until he actually types.
+ * the keyboard immediately so Riley can start typing without an extra tap.
+ * When opened by tapping "All apps" instead, neither of those kick in
+ * until he actually types.
+ *
+ * The list takes the remaining space above the keyboard (weight(1f)) so
+ * the results always render fully in view instead of extending behind it.
+ * Typing only filters — launching is always an explicit tap on a row. An
+ * earlier single-match auto-launch was removed: it fired the moment the
+ * filter narrowed to one app, so the results never rendered stably and
+ * Riley was yanked into an app mid-typing.
  */
 @Composable
 fun AllAppsScreen(
@@ -45,21 +52,6 @@ fun AllAppsScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val filtered = if (query.isBlank()) apps else apps.filter { it.label.contains(query, ignoreCase = true) }
-
-    // Auto-launch the one remaining match — but only once per "search
-    // session" (continuous non-empty typing), and never for an empty
-    // query. Clearing the field back to empty re-arms it for the next
-    // session instead of firing again on the match that's left over from
-    // the previous one.
-    var autoLaunchArmed by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(query, filtered.size) {
-        if (query.isEmpty()) {
-            autoLaunchArmed = true
-        } else if (autoLaunchArmed && filtered.size == 1) {
-            autoLaunchArmed = false
-            onAppClick(filtered.single())
-        }
-    }
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -97,7 +89,7 @@ fun AllAppsScreen(
             return@Column
         }
 
-        LazyColumn {
+        LazyColumn(modifier = Modifier.weight(1f)) {
             items(filtered, key = { it.packageName }) { app ->
                 AppTextRow(label = app.label, badgeCount = app.badgeCount, onClick = { onAppClick(app) })
                 HairlineDivider()

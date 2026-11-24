@@ -29,6 +29,7 @@ import dev.rileyboughner.launcher.AppListRepository
 import dev.rileyboughner.launcher.calendar.CalendarRepository
 import dev.rileyboughner.launcher.dashboard.DashboardRepository
 import dev.rileyboughner.launcher.duolingo.DuolingoRepository
+import dev.rileyboughner.launcher.weather.WeatherRepository
 import dev.rileyboughner.launcher.homeassistant.HomeAssistantRepository
 import dev.rileyboughner.launcher.jellyfin.JellyfinRepository
 import dev.rileyboughner.launcher.nextcloud.NextcloudTasksRepository
@@ -60,6 +61,7 @@ fun LauncherPagerScreen(
     homeAssistantRepository: HomeAssistantRepository,
     dashboardRepository: DashboardRepository,
     duolingoRepository: DuolingoRepository,
+    weatherRepository: WeatherRepository,
     settingsRepository: SettingsRepository,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -82,6 +84,7 @@ fun LauncherPagerScreen(
                 PAGE_APPS -> AppsPageScreen(
                     appListRepository = appListRepository,
                     duolingoRepository = duolingoRepository,
+                    weatherRepository = weatherRepository,
                     settingsRepository = settingsRepository,
                     calendarRepository = calendarRepository,
                     onOpenCalendar = { pagerScope.launch { pagerState.scrollToPage(PAGE_CALENDAR) } },
