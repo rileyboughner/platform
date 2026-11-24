@@ -90,6 +90,7 @@ _rows_torrent() {
     _row "torrent add <magnet>" "Add a torrent to qBittorrent (manual, category boner)"
     _row "torrent list"         "List manually added torrents with status"
     _row "torrent download"     "Copy a completed torrent to the current directory"
+    _row "torrent remove <name>"  "Remove a torrent from qBittorrent and delete its files"
 }
 
 _rows_tv() {
@@ -528,6 +529,7 @@ cmd_torrent() {
         add)      cmd_torrent_add "${2:-}" ;;
         list)     cmd_torrent_list ;;
         download) cmd_torrent_download "${2:-}" ;;
+        remove)   cmd_torrent_remove "${2:-}" ;;
         _complete) cmd_torrent_complete ;;
         *)
             _usage_torrent
@@ -639,6 +641,44 @@ cmd_torrent_download() {
     echo "Copying '$name' from the server to $PWD/ ..."
     rsync -av --progress --human-readable --protect-args "admin@server:$host_path" "./"
     echo "Done. The server copy stays in place (still seeding)."
+}
+
+cmd_torrent_remove() {
+    local query="${1:-}"
+    if [ -z "$query" ]; then
+        _usage_torrent
+        exit 1
+    fi
+    _qbit_login
+    local json match
+    json=$(curl -s --max-time 15 -b "$QBIT_COOKIE" "$QBIT_BASE/api/v2/torrents/info?category=$QBIT_CATEGORY")
+    match=$(printf '%s' "$json" | jq -r --arg q "$query" '
+        map(select((.name | ascii_downcase | contains($q | ascii_downcase)) or (.hash | startswith($q))))
+        | .[0] // empty')
+    if [ -z "$match" ]; then
+        echo "Error: no manual torrent matching '$query'." >&2
+        exit 1
+    fi
+    local hash name
+    hash=$(printf '%s' "$match" | jq -r '.hash')
+    name=$(printf '%s' "$match" | jq -r '.name')
+    printf 'Remove "%s" from qBittorrent and DELETE its files from the server? [y/N] ' "$name"
+    local ans
+    read -r ans
+    case "$ans" in
+        [yY]|[yY][eE][sS]) ;;
+        *) echo "Cancelled."; return 0 ;;
+    esac
+    local http_code
+    http_code=$(curl -s --max-time 30 -b "$QBIT_COOKIE" -o /dev/null -w '%{http_code}' \
+        --data-urlencode "hashes=$hash" \
+        --data-urlencode "deleteFiles=true" \
+        "$QBIT_BASE/api/v2/torrents/delete" 2>/dev/null || echo "000")
+    if [ "$http_code" != "200" ]; then
+        echo "Error: qBittorrent refused the remove (HTTP $http_code)." >&2
+        exit 1
+    fi
+    echo "Removed: $name (torrent and files deleted from the server)."
 }
 
 # --- TV cast ---
