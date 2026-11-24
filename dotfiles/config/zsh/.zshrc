@@ -100,7 +100,7 @@ _boner() {
           _describe 'command' sub
           ;;
         torrent)
-          sub=('add:add a torrent by magnet link' 'list:list manual torrents' 'download:download a completed torrent')
+          sub=('add:add a torrent by magnet link' 'list:list manual torrents' 'download:download a completed torrent' 'remove:remove a torrent and delete its files')
           _describe 'command' sub
           ;;
       esac
@@ -141,6 +141,12 @@ _boner() {
           if [[ ${words[3]} == download ]]; then
             local -a names
             names=("${(@f)$(boner torrent _complete 2>/dev/null)}")
+            if (( ${#names[@]} > 0 )); then
+              compadd -a names
+            fi
+          elif [[ ${words[3]} == remove ]]; then
+            local -a names
+            names=("${(@f)$(boner torrent _complete-all 2>/dev/null)}")
             if (( ${#names[@]} > 0 )); then
               compadd -a names
             fi

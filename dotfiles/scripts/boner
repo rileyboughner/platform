@@ -531,6 +531,7 @@ cmd_torrent() {
         download) cmd_torrent_download "${2:-}" ;;
         remove)   cmd_torrent_remove "${2:-}" ;;
         _complete) cmd_torrent_complete ;;
+        _complete-all) cmd_torrent_complete_all ;;
         *)
             _usage_torrent
             exit 1
@@ -585,9 +586,19 @@ cmd_torrent_list() {
     printf '%s' "$json" | jq -r '
         def human: if . >= 1073741824 then ((./1073741824*10|floor)/10|tostring)+" GiB" elif . >= 1048576 then ((./1048576*10|floor)/10|tostring)+" MiB" elif . >= 1024 then ((./1024*10|floor)/10|tostring)+" KiB" else (tostring+" B") end;
         def rate: (human + "/s");
-        (["NAME","SIZE","PROGRESS","STATE","DL","UP"] | @tsv),
-        (.[] | [(.name | .[0:55]), (.size | human), ((.progress*100|floor|tostring)+"%"), .state, (.dlspeed | rate), (.upspeed | rate)] | @tsv)
+        (["NAME","SIZE","PROGRESS","STATE","SEEDS","DL","UP"] | @tsv),
+        (.[] | [(.name | .[0:55]), (.size | human), ((.progress*100|floor|tostring)+"%"), .state, (.num_seeds | tostring), (.dlspeed | rate), (.upspeed | rate)] | @tsv)
     ' | column -t -s "$(printf '\t')"
+}
+
+# Hidden helper for shell completion: prints the names of all manual
+# torrents, one per line, for `boner torrent remove` tab completion.
+# Not shown in usage.
+cmd_torrent_complete_all() {
+    _qbit_login
+    local json
+    json=$(curl -s --max-time 15 -b "$QBIT_COOKIE" "$QBIT_BASE/api/v2/torrents/info?category=$QBIT_CATEGORY")
+    printf '%s' "$json" | jq -r '.[] | .name'
 }
 
 # Hidden helper for shell completion: prints the names of completed
