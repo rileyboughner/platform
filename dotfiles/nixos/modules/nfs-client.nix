@@ -13,6 +13,12 @@
     options = [ "rw" "_netdev" "x-systemd.automount" "noauto" "nofail" "vers=4" ];
   };
 
+  fileSystems."/home/${username}/Documents/Torrents" = {
+    device = "${hosts.server.tailnetName}:/mnt/tank/media/torrents/manual";
+    fsType = "nfs";
+    options = [ "rw" "_netdev" "x-systemd.automount" "noauto" "nofail" "vers=4" ];
+  };
+
   environment.systemPackages = with pkgs; [
     nfs-utils
   ];

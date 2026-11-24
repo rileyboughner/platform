@@ -10,6 +10,8 @@
   services.nfs.server.exports = ''
     /mnt/tank/files  ${hosts.lan}(rw,sync,no_subtree_check,insecure,no_root_squash)
     /mnt/tank/files  ${hosts.tailnet}(rw,sync,no_subtree_check,insecure,no_root_squash)
+    /mnt/tank/media/torrents/manual  ${hosts.lan}(rw,sync,no_subtree_check,insecure,no_root_squash)
+    /mnt/tank/media/torrents/manual  ${hosts.tailnet}(rw,sync,no_subtree_check,insecure,no_root_squash)
   '';
 
   # Firewall: allow NFS traffic (rpcbind + nfs)
