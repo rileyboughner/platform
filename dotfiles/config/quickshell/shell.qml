@@ -193,8 +193,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
     // Fullscreen toggle for the calendar/task panels (IPC targets
     // calendar-fullscreen / todoist-fullscreen, bound to SUPER+ALT+C and
-    // the task fullscreen key). If already fullscreen, hide it; otherwise
-    // hide everything else and show this panel filling the screen.
+    // SUPER+ALT+N). If already fullscreen, hide it; otherwise hide
+    // everything else and show this panel at scratchpad size (92%).
     function togglePanelFullscreen(target) {
         if (target.visible && target.fullscreen === true) {
             target.visible = false
@@ -2899,8 +2899,10 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property bool tasksLoading: true
         property string tasksError: ""
 
-        // Fullscreen mode (task fullscreen key via IPC): anchors left so the
-        // panel fills the whole screen instead of the 380px side panel.
+        // Fullscreen mode (task fullscreen key via IPC): sized like the
+        // pypr scratchpads (92% of the screen, 4% left/right margins, 40px
+        // from the top) instead of filling the whole screen. See
+        // anchors/margins below. Side mode is the normal 380px panel.
         property bool fullscreen: false
 
         function fetchTasks() {
@@ -2938,12 +2940,16 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         WlrLayershell.namespace: "todoist-panel"
 
         anchors.top: true
-        anchors.bottom: true
+        anchors.bottom: !fullscreen
         anchors.right: true
         anchors.left: fullscreen
 
         implicitWidth: 380
-        margins.top: 0
+        implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
+        margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
+        margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
+        margins.top: fullscreen ? 40 : 0
+        margins.bottom: 0
 
         color: root.colBg
         visible: false
@@ -3360,9 +3366,15 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property string eventsError: ""
         property int dayOffset: 0
 
-        // Fullscreen mode (SUPER+ALT+C via IPC): anchors left so the panel
-        // fills the whole screen instead of the 380px side panel.
+        // Fullscreen mode (SUPER+ALT+C via IPC): sized like the pypr
+        // scratchpads (92% of the screen, 4% left/right margins, 40px from
+        // the top) instead of filling the whole screen. See anchors/margins
+        // below. Side mode is the normal 380px right-side panel.
         property bool fullscreen: false
+
+        // Set on open so the first fetch auto-advances to the next day with
+        // events when today is empty. Cleared after that fetch.
+        property bool autoAdvanceOnLoad: false
 
         // Selected day as "YYYY-MM-DD"; recomputed when dayOffset changes.
         property string selectedDateStr: {
@@ -3374,6 +3386,27 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         // Events for the selected day only. No time filtering: past events
         // earlier in the day still show.
         property var dayEvents: eventsList.filter(function(e) { return e.date === selectedDateStr })
+
+        // The 7 days (Monday..Sunday) of the selected day's week, as
+        // "YYYY-MM-DD" strings. Used for the fullscreen week view.
+        property var weekDays: {
+            const sel = new Date(selectedDateStr + "T00:00:00")
+            const mondayOffset = (sel.getDay() + 6) % 7
+            const monday = new Date(sel)
+            monday.setDate(sel.getDate() - mondayOffset)
+            const days = []
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(monday)
+                d.setDate(monday.getDate() + i)
+                days.push(Qt.formatDate(d, "yyyy-MM-dd"))
+            }
+            return days
+        }
+
+        // One entry per week day: {date, events}. No time filtering.
+        property var weekModel: weekDays.map(function(ds) {
+            return { date: ds, events: eventsList.filter(function(e) { return e.date === ds }) }
+        })
 
         function fetchEvents() {
             calendarEventsProcess.running = true
@@ -3388,8 +3421,42 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             return Qt.formatDate(d, "ddd MMM d")
         }
 
+        // Header label for the fullscreen week view, e.g. "Nov 30 – Dec 6".
+        function weekRangeLabel() {
+            const first = new Date(weekDays[0] + "T00:00:00")
+            const last = new Date(weekDays[6] + "T00:00:00")
+            return Qt.formatDate(first, "MMM d") + " – " + Qt.formatDate(last, "MMM d")
+        }
+
+        // Label for one day in the week view, e.g. "Mon Nov 30".
+        // Today gets a "Today · " prefix so it stands out.
+        function weekDayLabel(dateStr) {
+            const d = new Date(dateStr + "T00:00:00")
+            const label = Qt.formatDate(d, "ddd MMM d")
+            const todayStr = Qt.formatDate(new Date(), "yyyy-MM-dd")
+            return dateStr === todayStr ? "Today · " + label : label
+        }
+
+        // Advance dayOffset forward to the next day (today..+13) that has at
+        // least one event. Used on open so the panel lands on a day with
+        // events instead of an empty today. Stays at 0 if no day has events.
+        function advanceToNextEventDay() {
+            for (let off = 0; off <= 13; off++) {
+                const d = new Date()
+                d.setDate(d.getDate() + off)
+                const ds = Qt.formatDate(d, "yyyy-MM-dd")
+                if (eventsList.some(function(e) { return e.date === ds })) {
+                    dayOffset = off
+                    return
+                }
+            }
+            dayOffset = 0
+        }
+
         function stepDay(delta) {
-            dayOffset = Math.max(-7, Math.min(13, dayOffset + delta))
+            // In the fullscreen week view a click moves a whole week.
+            const step = fullscreen ? 7 : 1
+            dayOffset = Math.max(-7, Math.min(13, dayOffset + delta * step))
         }
 
         function addEvent() {
@@ -3413,12 +3480,16 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         WlrLayershell.namespace: "calendar-panel"
 
         anchors.top: true
-        anchors.bottom: true
+        anchors.bottom: !fullscreen
         anchors.right: true
         anchors.left: fullscreen
 
         implicitWidth: 380
-        margins.top: 0
+        implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
+        margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
+        margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
+        margins.top: fullscreen ? 40 : 0
+        margins.bottom: 0
 
         color: root.colBg
         visible: false
@@ -3426,11 +3497,16 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         onVisibleChanged: {
             if (visible) {
                 calendarPanel.eventsError = ""
+                // Always start from today on open; the first fetch then
+                // auto-advances to the next day with events if today is empty.
+                calendarPanel.dayOffset = 0
+                calendarPanel.autoAdvanceOnLoad = true
                 if (root.calendarAuthenticated) {
                     calendarPanel.eventsLoading = true
                     calendarPanel.fetchEvents()
                 } else {
                     calendarPanel.eventsLoading = false
+                    calendarPanel.autoAdvanceOnLoad = false
                 }
             }
         }
@@ -3453,6 +3529,9 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     try {
                         calendarPanel.eventsList = JSON.parse(calendarEventsStdout.text)
                         calendarPanel.eventsError = ""
+                        if (calendarPanel.autoAdvanceOnLoad) {
+                            calendarPanel.advanceToNextEventDay()
+                        }
                     } catch (error) {
                         calendarPanel.eventsError = "Failed to parse events"
                     }
@@ -3460,6 +3539,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     const firstLine = calendarEventsStderr.text.trim().split("\n")[0]
                     calendarPanel.eventsError = firstLine || "calendar-events failed"
                 }
+                calendarPanel.autoAdvanceOnLoad = false
             }
         }
 
@@ -3558,6 +3638,46 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             }
         }
 
+        Component {
+            id: calendarWeekDayComponent
+
+            Column {
+                id: calWeekDay
+
+                required property var modelData // {date, events}
+
+                width: parent.width
+                spacing: 4
+
+                Text {
+                    text: calendarPanel.weekDayLabel(calWeekDay.modelData.date)
+                    color: root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize
+                        bold: true
+                    }
+                }
+
+                Repeater {
+                    model: calWeekDay.modelData.events
+                    delegate: calendarEventRowComponent
+                }
+
+                Text {
+                    visible: calWeekDay.modelData.events.length === 0
+                    text: "No events"
+                    color: root.colMuted
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize - 1
+                    }
+                }
+            }
+        }
+
         // ---- Chrome: thin left border matching the bar-popup borders ----
 
         Rectangle {
@@ -3633,7 +3753,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
 
                         Text {
-                            text: calendarPanel.selectedDayLabel()
+                            text: calendarPanel.fullscreen ? calendarPanel.weekRangeLabel() : calendarPanel.selectedDayLabel()
                             color: root.colFg
 
                             font {
@@ -3736,6 +3856,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
                     Text {
                         visible: root.calendarAuthenticated
+                            && !calendarPanel.fullscreen
                             && !calendarPanel.eventsLoading
                             && calendarPanel.dayEvents.length === 0
                             && calendarPanel.eventsError.length === 0
@@ -3749,8 +3870,9 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
                     }
 
+                    // Side mode: just the selected day.
                     Column {
-                        visible: root.calendarAuthenticated && !calendarPanel.eventsLoading
+                        visible: root.calendarAuthenticated && !calendarPanel.fullscreen && !calendarPanel.eventsLoading
 
                         width: calendarEventsContent.width
                         spacing: 4
@@ -3761,44 +3883,68 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
                     }
 
+                    // Fullscreen mode: the whole week (Monday..Sunday),
+                    // each day with its own header and events.
                     Column {
+                        visible: root.calendarAuthenticated && calendarPanel.fullscreen && !calendarPanel.eventsLoading
+
+                        width: calendarEventsContent.width
+                        spacing: 12
+
+                        Repeater {
+                            model: calendarPanel.weekModel
+                            delegate: calendarWeekDayComponent
+                        }
+                    }
+
+                    // Add-event form: one compact row — title expands, a
+                    // small time field, and a "+" button. Same function as
+                    // before (title + optional HH:MM, blank = all day).
+                    Rectangle {
                         visible: root.calendarAuthenticated
 
                         width: calendarEventsContent.width
-                        spacing: 6
+                        height: calendarAddRow.implicitHeight + 12
 
-                        TextField {
-                            id: calendarAddTitleField
-
-                            width: parent.width
-
-                            placeholderText: "Add event…"
-                            placeholderTextColor: root.colMuted
-                            color: root.colFg
-
-                            font {
-                                family: root.fontFamily
-                                pixelSize: root.fontSize - 1
-                            }
-
-                            background: Rectangle {
-                                color: "transparent"
-                                border.color: root.colMuted
-                                border.width: 1
-                                radius: 6
-                            }
-
-                            onAccepted: calendarPanel.addEvent()
-                        }
+                        radius: 8
+                        color: Qt.rgba(root.colMuted.r, root.colMuted.g, root.colMuted.b, 0.08)
+                        border.color: root.colMuted
+                        border.width: 1
 
                         RowLayout {
-                            width: parent.width
-                            spacing: 6
+                            id: calendarAddRow
+
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            anchors.topMargin: 6
+                            anchors.bottomMargin: 6
+
+                            spacing: 8
+
+                            TextField {
+                                id: calendarAddTitleField
+
+                                Layout.fillWidth: true
+
+                                placeholderText: "Add event…"
+                                placeholderTextColor: root.colMuted
+                                color: root.colFg
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 1
+                                }
+
+                                background: Item {}
+
+                                onAccepted: calendarPanel.addEvent()
+                            }
 
                             TextField {
                                 id: calendarAddTimeField
 
-                                Layout.preferredWidth: 90
+                                Layout.preferredWidth: 64
 
                                 placeholderText: "HH:MM"
                                 placeholderTextColor: root.colMuted
@@ -3809,32 +3955,15 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                                     pixelSize: root.fontSize - 1
                                 }
 
-                                background: Rectangle {
-                                    color: "transparent"
-                                    border.color: root.colMuted
-                                    border.width: 1
-                                    radius: 6
-                                }
+                                background: Item {}
 
                                 onAccepted: calendarPanel.addEvent()
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-
-                                text: "blank = all day"
-                                color: root.colMuted
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 2
-                                }
                             }
 
                             MouseArea {
                                 id: calendarAddButtonArea
 
-                                implicitWidth: calendarAddButtonText.implicitWidth
+                                implicitWidth: calendarAddButtonText.implicitWidth + 8
                                 implicitHeight: calendarAddButtonText.implicitHeight
                                 hoverEnabled: true
 
@@ -3843,12 +3972,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                                 Text {
                                     id: calendarAddButtonText
 
-                                    text: "Add"
-                                    color: calendarAddButtonArea.containsMouse ? root.colAccent : root.colFg
+                                    anchors.centerIn: parent
+
+                                    text: "+"
+                                    color: calendarAddButtonArea.containsMouse ? root.colAccent : root.colMuted
 
                                     font {
                                         family: root.fontFamily
-                                        pixelSize: root.fontSize
+                                        pixelSize: root.fontSize + 2
                                         bold: true
                                     }
                                 }
