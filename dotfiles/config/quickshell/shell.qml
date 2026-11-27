@@ -2950,7 +2950,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.top: fullscreen ? root.implicitHeight : 0
-        margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.04) : 0
+        margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.08 - root.implicitHeight) : 0
 
         color: root.colBg
         visible: false
@@ -3491,7 +3491,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.top: fullscreen ? root.implicitHeight : 0
-        margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.04) : 0
+        margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.08 - root.implicitHeight) : 0
 
         color: root.colBg
         visible: false
