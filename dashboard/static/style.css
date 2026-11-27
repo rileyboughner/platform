@@ -228,3 +228,36 @@ body {
   margin-top: 0;
 }
 
+.services-filter {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: var(--spacing-12);
+  background: var(--color-semantic-overlay);
+  border: 1px solid var(--color-semantic-border);
+  border-radius: var(--radius-small);
+  color: var(--color-semantic-text);
+  font-size: var(--font-size-14);
+  font-family: var(--font-family-sans);
+  padding: var(--spacing-8) var(--spacing-12);
+}
+
+.services-filter:focus {
+  outline: 1px solid var(--color-semantic-accent);
+}
+
+.service-link {
+  color: var(--color-semantic-text);
+  text-decoration: underline;
+  text-decoration-color: var(--color-semantic-text-subtle);
+  text-underline-offset: 2px;
+}
+
+.service-link:hover {
+  color: var(--color-semantic-accent);
+}
+
+.service-sub {
+  font-size: var(--font-size-12);
+}
+

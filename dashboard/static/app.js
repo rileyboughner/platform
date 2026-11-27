@@ -113,89 +113,163 @@ function renderServer(data) {
   if (data.host_error) body.appendChild(errorState(data.host_error));
   if (data.disk_error) body.appendChild(errorState(data.disk_error));
   if (data.uptime_error) body.appendChild(errorState(data.uptime_error));
+}
 
-  if (data.containers_error) {
-    body.appendChild(errorState(data.containers_error));
+let servicesFilterValue = "";
+
+function serviceDot(source, status) {
+  if (source === "Docker") {
+    return status === "running" ? "running"
+      : status === "exited" || status === "dead" ? "exited"
+      : "other";
+  }
+  return status === "Running" ? "running"
+    : status === "Succeeded" ? "completed"
+    : status === "Failed" ? "exited"
+    : "other";
+}
+
+// One filterable list of every service: Docker containers and Kubernetes
+// pods together. A name is a link when its published port (Docker) or its
+// NodePort service (Kubernetes) has a public cloudflared hostname.
+function renderServices(dockerData, k8sData) {
+  const body = document.querySelector("#card-services .card-body");
+  const existingFilter = body.querySelector(".services-filter");
+  if (existingFilter) servicesFilterValue = existingFilter.value;
+  body.innerHTML = "";
+
+  if (dockerData.error) body.appendChild(errorState(dockerData.error));
+  if (dockerData.stats_error) body.appendChild(errorState(dockerData.stats_error));
+  if (k8sData.error) body.appendChild(errorState(k8sData.error));
+
+  const services = [];
+  for (const c of dockerData.containers || []) {
+    services.push({
+      name: c.name,
+      sub: null,
+      source: "Docker",
+      status: c.state || "—",
+      up: c.state === "running",
+      dot: serviceDot("Docker", c.state),
+      cpu: c.cpu_percent != null ? `${c.cpu_percent}%` : "—",
+      memory: c.memory_bytes != null ? formatBytes(c.memory_bytes) : "—",
+      ready: "—",
+      restarts: "—",
+      url: c.url || null,
+    });
+  }
+  for (const p of k8sData.pods || []) {
+    services.push({
+      name: p.name,
+      sub: p.namespace,
+      source: "Kubernetes",
+      status: p.status || "—",
+      up: p.status === "Running" || p.status === "Succeeded",
+      dot: serviceDot("Kubernetes", p.status),
+      cpu: "—",
+      memory: "—",
+      ready: p.ready,
+      restarts: String(p.restarts),
+      url: p.url || null,
+    });
+  }
+
+  if (services.length === 0) {
+    if (!dockerData.error && !k8sData.error) {
+      body.appendChild(emptyState("No services found."));
+    }
     return;
   }
-  if (!data.containers || data.containers.length === 0) {
-    body.appendChild(emptyState("No containers found."));
-    return;
-  }
 
-  function containerTable(containers) {
+  const filterInput = el("input", {
+    class: "services-filter",
+    type: "text",
+    placeholder: "Filter services…",
+  });
+  filterInput.value = servicesFilterValue;
+  body.appendChild(filterInput);
+
+  const tableWrap = el("div");
+  body.appendChild(tableWrap);
+
+  function serviceTable(rows) {
     const table = el("table", { class: "container-table" });
     table.appendChild(
       el("tr", {}, [
-        el("th", { text: "Container" }),
-        el("th", { text: "State" }),
+        el("th", { text: "Service" }),
+        el("th", { text: "Source" }),
+        el("th", { text: "Status" }),
         el("th", { text: "CPU" }),
-        el("th", { text: "RAM" }),
+        el("th", { text: "Memory" }),
+        el("th", { text: "Ready" }),
+        el("th", { text: "Restarts" }),
       ])
     );
-    for (const c of containers) {
-      const dotClass = c.state === "running" ? "running" : c.state === "exited" || c.state === "dead" ? "exited" : "other";
+    for (const s of rows) {
+      const nameCell = el("td", {});
+      nameCell.appendChild(el("span", { class: `dot ${s.dot}` }));
+      if (s.url) {
+        nameCell.appendChild(
+          el("a", {
+            class: "service-link",
+            href: s.url,
+            target: "_blank",
+            rel: "noopener",
+            text: s.name,
+          })
+        );
+      } else {
+        nameCell.appendChild(el("span", { text: s.name }));
+      }
+      if (s.sub) {
+        nameCell.appendChild(el("span", { class: "muted service-sub", text: ` ${s.sub}` }));
+      }
       table.appendChild(
         el("tr", {}, [
-          el("td", {}, [el("span", { class: `dot ${dotClass}` }), el("span", { text: c.name })]),
-          el("td", { text: c.state || "—" }),
-          el("td", { text: c.cpu_percent != null ? `${c.cpu_percent}%` : "—" }),
-          el("td", { text: c.memory_bytes != null ? formatBytes(c.memory_bytes) : "—" }),
+          nameCell,
+          el("td", {}, [el("span", { class: "badge", text: s.source })]),
+          el("td", { text: s.status }),
+          el("td", { text: s.cpu }),
+          el("td", { text: s.memory }),
+          el("td", { text: s.ready }),
+          el("td", { text: s.restarts }),
         ])
       );
     }
     return table;
   }
 
-  // Not-running containers first so a stopped service is impossible to miss.
-  const down = data.containers.filter((c) => c.state !== "running");
-  const up = data.containers.filter((c) => c.state === "running");
-  if (down.length > 0) {
-    body.appendChild(el("div", { class: "subsection-title", text: `Not running (${down.length})` }));
-    body.appendChild(containerTable(down));
-  }
-  body.appendChild(el("div", { class: "subsection-title", text: `Running (${up.length})` }));
-  body.appendChild(containerTable(up));
-}
-
-function renderKubernetes(data) {
-  const body = document.querySelector("#card-kubernetes .card-body");
-  body.innerHTML = "";
-  if (data.error) {
-    body.appendChild(errorState(data.error));
-    return;
-  }
-  if (!data.pods || data.pods.length === 0) {
-    body.appendChild(emptyState("No pods found."));
-    return;
-  }
-  const table = el("table", { class: "container-table" });
-  table.appendChild(
-    el("tr", {}, [
-      el("th", { text: "Pod" }),
-      el("th", { text: "Namespace" }),
-      el("th", { text: "Ready" }),
-      el("th", { text: "Status" }),
-      el("th", { text: "Restarts" }),
-    ])
-  );
-  for (const p of data.pods) {
-    const dotClass =
-      p.status === "Running" ? "running"
-      : p.status === "Succeeded" ? "completed"
-      : p.status === "Failed" ? "exited"
-      : "other";
-    table.appendChild(
-      el("tr", {}, [
-        el("td", {}, [el("span", { class: `dot ${dotClass}` }), el("span", { text: p.name })]),
-        el("td", { text: p.namespace }),
-        el("td", { text: p.ready }),
-        el("td", { text: p.status }),
-        el("td", { text: String(p.restarts) }),
-      ])
+  function renderTable() {
+    tableWrap.innerHTML = "";
+    const query = filterInput.value.trim().toLowerCase();
+    const visible = query
+      ? services.filter(
+          (s) =>
+            s.name.toLowerCase().includes(query) ||
+            (s.sub && s.sub.toLowerCase().includes(query))
+        )
+      : services;
+    if (visible.length === 0) {
+      tableWrap.appendChild(emptyState("No matching services."));
+      return;
+    }
+    // Not-running services first so a stopped service is impossible to miss.
+    const down = visible.filter((s) => !s.up);
+    const up = visible.filter((s) => s.up);
+    if (down.length > 0) {
+      tableWrap.appendChild(
+        el("div", { class: "subsection-title", text: `Not running (${down.length})` })
+      );
+      tableWrap.appendChild(serviceTable(down));
+    }
+    tableWrap.appendChild(
+      el("div", { class: "subsection-title", text: `Running (${up.length})` })
     );
+    tableWrap.appendChild(serviceTable(up));
   }
-  body.appendChild(table);
+
+  filterInput.addEventListener("input", renderTable);
+  renderTable();
 }
 
 async function refresh() {
@@ -204,7 +278,7 @@ async function refresh() {
     const data = await resp.json();
     renderSeerr(data.seerr || {});
     renderServer(data.server || {});
-    renderKubernetes(data.kubernetes || {});
+    renderServices(data.docker || {}, data.kubernetes || {});
     document.getElementById("last-updated").textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     document.getElementById("last-updated").textContent = "update failed";

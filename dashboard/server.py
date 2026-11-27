@@ -27,6 +27,10 @@ DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 HOST_UPTIME_PATH = os.environ.get("HOST_UPTIME_PATH", "/host/proc-uptime")
 DISK_PATH = os.environ.get("DISK_PATH", "/mnt/tank/services/jellyseer/settings.json")
 
+CLOUDFLARED_CONFIG_PATH = os.environ.get(
+    "CLOUDFLARED_CONFIG_PATH", "/mnt/tank/services/cloudflared/config.yml"
+)
+
 KUBECONFIG = os.environ.get("KUBECONFIG", "/kube/k3s.yaml")
 K8S_API_SERVER = os.environ.get("K8S_API_SERVER", "https://192.168.1.2:6443")
 
@@ -145,6 +149,34 @@ def get_seerr():
 
 # ------------------------------------------------------------ Server status
 
+def _cloudflared_port_map():
+    """Public hostname per host port, from the cloudflared ingress config.
+    Only http/https services are linkable; tcp entries (e.g. Minecraft)
+    and the catch-all 404 are skipped. First hostname wins on a shared port."""
+    port_map = {}
+    try:
+        with open(CLOUDFLARED_CONFIG_PATH) as f:
+            lines = f.readlines()
+    except Exception:
+        return port_map
+    hostname = None
+    for raw_line in lines:
+        line = raw_line.strip()
+        if line.startswith("- hostname:"):
+            hostname = line.split(":", 1)[1].strip()
+        elif line.startswith("service:") and hostname:
+            service = line.split(":", 1)[1].strip()
+            if service.startswith("http://") or service.startswith("https://"):
+                try:
+                    port = int(service.rsplit(":", 1)[1])
+                except ValueError:
+                    port = None
+                if port and port not in port_map:
+                    port_map[port] = hostname
+            hostname = None
+    return port_map
+
+
 def _cadvisor_base_url():
     """cAdvisor sits on the plain default "bridge" network, which has no
     embedded DNS, so resolve its reachable address via the Docker socket
@@ -159,20 +191,6 @@ def _cadvisor_base_url():
 
 def get_server():
     result = {}
-    containers = {}
-
-    try:
-        raw = _docker_socket_json("/containers/json?all=1")
-        for c in raw:
-            name = (c.get("Names") or ["?"])[0].lstrip("/")
-            containers[name] = {
-                "name": name,
-                "image": c.get("Image"),
-                "state": c.get("State"),
-                "status": c.get("Status"),
-            }
-    except Exception:
-        result["containers_error"] = "Docker socket is not reachable; container state unavailable."
 
     try:
         cadvisor_url = _cadvisor_base_url()
@@ -189,6 +207,64 @@ def get_server():
         host_cpu_pct = _cpu_percent(rstats[0], rstats[-1], num_cores) if len(rstats) >= 2 else None
         host_mem_used = rstats[-1].get("memory", {}).get("working_set") if rstats else None
 
+        result["host"] = {
+            "cpu_percent": host_cpu_pct,
+            "memory_used_bytes": host_mem_used,
+            "memory_total_bytes": mem_capacity,
+            "num_cores": num_cores,
+        }
+    except Exception:
+        result["host_error"] = "cAdvisor is not reachable."
+
+    try:
+        du = shutil.disk_usage(DISK_PATH)
+        result["disk"] = {"total": du.total, "used": du.used, "free": du.free}
+    except Exception:
+        result["disk_error"] = "/mnt/tank is not reachable."
+
+    try:
+        with open(HOST_UPTIME_PATH) as f:
+            result["uptime_seconds"] = float(f.read().split()[0])
+    except Exception:
+        result["uptime_error"] = "Host uptime is not available."
+
+    return result
+
+
+# ----------------------------------------------------------------- Docker
+
+def get_docker():
+    """Containers via the Docker socket, enriched with cAdvisor CPU/RAM and
+    a public URL when a published port has a cloudflared hostname."""
+    port_map = _cloudflared_port_map()
+    containers = {}
+    try:
+        raw = _docker_socket_json("/containers/json?all=1")
+        for c in raw:
+            name = (c.get("Names") or ["?"])[0].lstrip("/")
+            public_ports = sorted({
+                p.get("PublicPort")
+                for p in c.get("Ports") or []
+                if p.get("PublicPort")
+            })
+            url = None
+            for port in public_ports:
+                if port in port_map:
+                    url = f"https://{port_map[port]}"
+                    break
+            containers[name] = {
+                "name": name,
+                "image": c.get("Image"),
+                "state": c.get("State"),
+                "status": c.get("Status"),
+                "url": url,
+            }
+    except Exception:
+        return {"error": "Docker socket is not reachable; container state unavailable."}
+
+    result = {}
+    try:
+        cadvisor_url = _cadvisor_base_url()
         docker_stats = _http_json(
             f"{cadvisor_url}/api/v1.3/docker",
             timeout=8,
@@ -207,37 +283,19 @@ def get_server():
             mem = stats[-1].get("memory", {}).get("working_set")
             containers[name]["cpu_percent"] = cpu_pct
             containers[name]["memory_bytes"] = mem
-
-        result["host"] = {
-            "cpu_percent": host_cpu_pct,
-            "memory_used_bytes": host_mem_used,
-            "memory_total_bytes": mem_capacity,
-            "num_cores": num_cores,
-        }
     except Exception:
-        result["host_error"] = "cAdvisor is not reachable."
+        result["stats_error"] = "cAdvisor is not reachable; CPU/RAM unavailable."
 
     result["containers"] = sorted(containers.values(), key=lambda c: c["name"])
-
-    try:
-        du = shutil.disk_usage(DISK_PATH)
-        result["disk"] = {"total": du.total, "used": du.used, "free": du.free}
-    except Exception:
-        result["disk_error"] = "/mnt/tank is not reachable."
-
-    try:
-        with open(HOST_UPTIME_PATH) as f:
-            result["uptime_seconds"] = float(f.read().split()[0])
-    except Exception:
-        result["uptime_error"] = "Host uptime is not available."
-
     return result
 
 
 # ------------------------------------------------------------- Kubernetes
 
 def get_kubernetes():
-    """Pods across all namespaces via kubectl (kubeconfig mounted read-only)."""
+    """Pods across all namespaces via kubectl (kubeconfig mounted read-only),
+    with a public URL when a NodePort service selecting the pod has a
+    cloudflared hostname."""
     try:
         out = subprocess.run(
             [
@@ -256,6 +314,45 @@ def get_kubernetes():
         data = json.loads(out.stdout)
     except Exception:
         return {"error": "Could not parse kubectl output."}
+
+    # Public URL per pod, via NodePort services whose selector matches the
+    # pod's labels and whose nodePort has a cloudflared hostname.
+    pod_urls = {}
+    try:
+        port_map = _cloudflared_port_map()
+        svc_out = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig", KUBECONFIG,
+                "--server", K8S_API_SERVER,
+                "get", "svc", "-A", "-o", "json",
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        if svc_out.returncode == 0:
+            svc_data = json.loads(svc_out.stdout)
+            nodeport_services = []
+            for svc in svc_data.get("items", []):
+                spec = svc.get("spec", {})
+                selector = spec.get("selector") or {}
+                if not selector:
+                    continue
+                for port in spec.get("ports", []):
+                    node_port = port.get("nodePort")
+                    if node_port and node_port in port_map:
+                        nodeport_services.append((selector, port_map[node_port]))
+            for item in data.get("items", []):
+                meta = item.get("metadata", {})
+                labels = meta.get("labels") or {}
+                for selector, hostname in nodeport_services:
+                    if all(labels.get(k) == v for k, v in selector.items()):
+                        pod_urls[f"{meta.get('namespace', '?')}/{meta.get('name', '?')}"] = (
+                            f"https://{hostname}"
+                        )
+                        break
+    except Exception:
+        pass  # URLs are a bonus; pods still render without them.
+
     pods = []
     for item in data.get("items", []):
         meta = item.get("metadata", {})
@@ -270,6 +367,7 @@ def get_kubernetes():
             "ready": f"{ready}/{total}" if total else "—",
             "status": status.get("phase", "?"),
             "restarts": restarts,
+            "url": pod_urls.get(f"{meta.get('namespace', '?')}/{meta.get('name', '?')}"),
         })
     pods.sort(key=lambda p: (p["namespace"], p["name"]))
     return {"pods": pods}
@@ -325,6 +423,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({
                 "seerr": get_seerr(),
                 "server": get_server(),
+                "docker": get_docker(),
                 "kubernetes": get_kubernetes(),
             })
             return
