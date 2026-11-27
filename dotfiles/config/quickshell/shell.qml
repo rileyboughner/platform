@@ -3257,7 +3257,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         Process {
             id: calendarEventsProcess
 
-            command: ["calendar-events", "events", "21"]
+            command: ["calendar-events", "events", "21", "-7"]
 
             stdout: StdioCollector {
                 id: calendarEventsStdout

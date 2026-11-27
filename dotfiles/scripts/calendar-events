@@ -5,9 +5,12 @@ Reads Nextcloud credentials from /run/agenix/nextcloud-caldav
 (line 1 = username, line 2 = app password).
 
 Commands:
-  events [days]  Print JSON array of events from today for <days> days
-                 (default 2: today + tomorrow).
-                 Each item: {date, time, title, calendar}
+  events [days] [start_offset]
+                 Print JSON array of events for <days> days starting
+                 <start_offset> days from today (default 2, 0; negative
+                 start_offset reaches into the past, e.g. `events 21 -7`
+                 covers 7 days ago through 13 days ahead).
+                 Each item: {date, time, title, calendar, uid}
                  date is YYYY-MM-DD, time is HH:MM (24h) or "" for all-day.
   next           Print a single JSON object for the next upcoming event
                  within the next 7 days, or {} when there is none.
@@ -43,6 +46,7 @@ CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/
 CACHE_FILE = os.path.join(CACHE_DIR, "events.json")
 CACHE_TTL = 600  # seconds (10 minutes)
 CACHE_DAYS = 30  # cache a 30-day window so any shorter query is served from it
+CACHE_START_OFFSET = -7  # cache starts 7 days ago (past-day browsing)
 
 # Calendars that hold tasks, not events; skip them.
 SKIP_CALENDARS = {"shopping list", "tasks"}
@@ -210,11 +214,11 @@ def save_cache(events):
         pass
 
 
-def fetch_live(days):
-    """Fetch events live from Nextcloud for the next <days> days."""
+def fetch_live(days, start_offset=0):
+    """Fetch events live from Nextcloud for <days> days starting <start_offset> days from today (negative = past)."""
     user, password = load_credentials()
     now_local = datetime.now(LOCAL_TZ)
-    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=start_offset)
     end_local = start_local + timedelta(days=days)
     start_utc = start_local.astimezone(ZoneInfo("UTC"))
     end_utc = end_local.astimezone(ZoneInfo("UTC"))
@@ -232,25 +236,28 @@ def fetch_live(days):
     return events
 
 
-def _in_window(events, days):
-    """Filter an event list to [today, today+days)."""
+def _in_window(events, days, start_offset=0):
+    """Filter an event list to [today+start_offset, today+start_offset+days)."""
     today = datetime.now(LOCAL_TZ).date()
-    end = today + timedelta(days=days)
-    today_s = today.isoformat()
+    start = today + timedelta(days=start_offset)
+    end = start + timedelta(days=days)
+    start_s = start.isoformat()
     end_s = end.isoformat()
-    return [e for e in events if today_s <= e["date"] < end_s]
+    return [e for e in events if start_s <= e["date"] < end_s]
 
 
-def fetch_events(days):
-    """Return events for the next <days> days, from cache when fresh."""
-    if days <= CACHE_DAYS:
+def fetch_events(days, start_offset=0):
+    """Return events for <days> days starting <start_offset> days from today, from cache when fresh."""
+    # The cache holds a 30-day window starting 7 days ago, so any request
+    # inside [-7, +23) is served from it.
+    if start_offset >= CACHE_START_OFFSET and start_offset + days <= CACHE_START_OFFSET + CACHE_DAYS:
         cached = load_cache()
         if cached is not None:
-            return _in_window(cached, days)
-        events = fetch_live(CACHE_DAYS)
+            return _in_window(cached, days, start_offset)
+        events = fetch_live(CACHE_DAYS, CACHE_START_OFFSET)
         save_cache(events)
-        return _in_window(events, days)
-    return fetch_live(days)
+        return _in_window(events, days, start_offset)
+    return fetch_live(days, start_offset)
 
 
 def find_calendar(user, password, name):
@@ -364,18 +371,24 @@ def cmd_delete(args):
 
 def cmd_refresh():
     """Force a live fetch and update the cache (for a background timer)."""
-    events = fetch_live(CACHE_DAYS)
+    events = fetch_live(CACHE_DAYS, CACHE_START_OFFSET)
     save_cache(events)
 
 
 def cmd_events(args):
     days = 2
+    start_offset = 0
     if args:
         try:
             days = int(args[0])
         except ValueError:
             die(f"bad days value: {args[0]}")
-    print(json.dumps(fetch_events(days)))
+    if len(args) > 1:
+        try:
+            start_offset = int(args[1])
+        except ValueError:
+            die(f"bad start offset: {args[1]}")
+    print(json.dumps(fetch_events(days, start_offset)))
 
 
 def cmd_next():
@@ -392,7 +405,7 @@ def cmd_next():
 
 def usage():
     print(__doc__.strip().split("\n\n", 1)[0], file=sys.stderr)
-    print("Usage: calendar-events <events [days] | next | refresh | add \"Title\" [date] [time] [duration] | delete <uid>>", file=sys.stderr)
+    print("Usage: calendar-events <events [days] [start_offset] | next | refresh | add \"Title\" [date] [time] [duration] | delete <uid>>", file=sys.stderr)
 
 
 if __name__ == "__main__":
