@@ -17,6 +17,7 @@ Commands:
                  Create an event on the "Events" calendar. date is
                  YYYY-MM-DD (default today); time is HH:MM (default
                  all-day); duration is minutes (default 60).
+  delete <uid>   Delete the event with that UID (from any calendar).
 
 Results are cached for 10 minutes so the panel opens instantly; a stale
 cache triggers one live fetch and then serves from the fresh cache.
@@ -175,8 +176,9 @@ def parse_events(ics_text, calendar_name):
         params, val = props["DTSTART"][0]
         date_str, time_str = parse_dtstart(val, params)
         title = props["SUMMARY"][0][1].replace("\\,", ",").replace("\\;", ";").replace("\\n", " ")
+        uid = props["UID"][0][1] if "UID" in props else ""
         events.append({"date": date_str, "time": time_str,
-                       "title": title, "calendar": calendar_name})
+                       "title": title, "calendar": calendar_name, "uid": uid})
     return events
 
 
@@ -323,7 +325,41 @@ def cmd_add(args):
         os.remove(CACHE_FILE)
     except OSError:
         pass
-    print(json.dumps({"date": date_s, "time": out_time, "title": title, "calendar": "Events"}))
+    print(json.dumps({"date": date_s, "time": out_time, "title": title, "calendar": "Events", "uid": uid}))
+
+
+def cmd_delete(args):
+    """Delete an event by UID: delete <uid>. Searches all calendars for it."""
+    if not args:
+        die("usage: calendar-events delete <uid>")
+    uid = args[0]
+    user, password = load_credentials()
+    for href, name in list_calendars(user, password):
+        if name.strip().lower() in SKIP_CALENDARS:
+            continue
+        url = f"{BASE_URL}{href}{uid}.ics"
+        # Probe with a HEAD-like GET; a 404 means it is not in this calendar.
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0")
+        token = base64.b64encode(f"{user}:{password}".encode()).decode()
+        req.add_header("Authorization", f"Basic {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            die(f"CalDAV GET {url} failed: HTTP {e.code}")
+        except urllib.error.URLError as e:
+            die(f"CalDAV request failed (network unreachable?): {e.reason}")
+        dav_request(user, password, "DELETE", url)
+        try:
+            os.remove(CACHE_FILE)
+        except OSError:
+            pass
+        print(json.dumps({"deleted": uid, "calendar": name}))
+        return
+    die(f"no event with UID {uid} found")
 
 
 def cmd_refresh():
@@ -356,7 +392,7 @@ def cmd_next():
 
 def usage():
     print(__doc__.strip().split("\n\n", 1)[0], file=sys.stderr)
-    print("Usage: calendar-events <events [days] | next | refresh | add \"Title\" [date] [time] [duration]>", file=sys.stderr)
+    print("Usage: calendar-events <events [days] | next | refresh | add \"Title\" [date] [time] [duration] | delete <uid>>", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -369,6 +405,8 @@ if __name__ == "__main__":
         cmd_refresh()
     elif cmd == "add":
         cmd_add(sys.argv[2:])
+    elif cmd == "delete":
+        cmd_delete(sys.argv[2:])
     else:
         usage()
         sys.exit(1)
