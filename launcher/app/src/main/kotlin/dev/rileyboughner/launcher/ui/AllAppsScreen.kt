@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +40,18 @@ import dev.rileyboughner.launcher.LauncherAppInfo
  * earlier single-match auto-launch was removed: it fired the moment the
  * filter narrowed to one app, so the results never rendered stably and
  * Riley was yanked into an app mid-typing.
+ *
+ * Do NOT add imePadding() back to the Column below. The manifest sets
+ * windowSoftInputMode="adjustResize", and the window does resize for the
+ * keyboard (the page dots sit above it), so the content already sits
+ * above the keyboard. This window is translucent (Theme.Launcher.Wallpaper,
+ * so the system wallpaper shows through) and the IME inset is still
+ * reported against the full display, so imePadding() adds the keyboard
+ * height a second time inside the already-resized window. That squeezed
+ * the list to zero height: with the keyboard open the whole results area
+ * rendered blank (and the filter field's placeholder was clipped too),
+ * and everything only appeared once the keyboard closed. Removing
+ * imePadding() is the fix (v0.23.1); the resize alone handles it.
  */
 @Composable
 fun AllAppsScreen(
@@ -64,7 +75,7 @@ fun AllAppsScreen(
 
     BackHandler(onBack = onBack)
 
-    Column(modifier = modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+    Column(modifier = modifier.fillMaxSize().safeDrawingPadding()) {
         AppTextRow(label = "← Apps", onClick = onBack)
         HairlineDivider()
 
