@@ -47,6 +47,9 @@ def load_credentials():
 
 def dav_request(user, password, method, url, body=None, headers=None):
     req = urllib.request.Request(url, data=body, method=method)
+    # Cloudflare blocks the default Python-urllib User-Agent (403), so use a
+    # browser-like one.
+    req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0")
     token = base64.b64encode(f"{user}:{password}".encode()).decode()
     req.add_header("Authorization", f"Basic {token}")
     if headers:
