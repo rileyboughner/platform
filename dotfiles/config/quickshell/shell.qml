@@ -184,7 +184,37 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         calendarPanel.visible = false
         smsPanel.visible = false
 
+        // A normal open (SUPER+C / SUPER+N or the bar) is never fullscreen.
+        calendarPanel.fullscreen = false
+        todoistPanel.fullscreen = false
+
         target.visible = !wasVisible
+    }
+
+    // Fullscreen toggle for the calendar/task panels (IPC targets
+    // calendar-fullscreen / todoist-fullscreen, bound to SUPER+ALT+C and
+    // the task fullscreen key). If already fullscreen, hide it; otherwise
+    // hide everything else and show this panel filling the screen.
+    function togglePanelFullscreen(target) {
+        if (target.visible && target.fullscreen === true) {
+            target.visible = false
+            target.fullscreen = false
+            return
+        }
+
+        audioPopup.visible = false
+        wifiPopup.visible = false
+        bluetoothPopup.visible = false
+        wallpaperPopup.visible = false
+        calendarPopup.visible = false
+        themePopup.visible = false
+        sidePanel.visible = false
+        todoistPanel.visible = false
+        calendarPanel.visible = false
+        smsPanel.visible = false
+
+        target.fullscreen = true
+        target.visible = true
     }
 
     anchors.top: true
@@ -655,6 +685,22 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(calendarPanel)
+        }
+    }
+
+    IpcHandler {
+        target: "calendar-fullscreen"
+
+        function toggle(): void {
+            root.togglePanelFullscreen(calendarPanel)
+        }
+    }
+
+    IpcHandler {
+        target: "todoist-fullscreen"
+
+        function toggle(): void {
+            root.togglePanelFullscreen(todoistPanel)
         }
     }
 
@@ -2853,6 +2899,10 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property bool tasksLoading: true
         property string tasksError: ""
 
+        // Fullscreen mode (task fullscreen key via IPC): anchors left so the
+        // panel fills the whole screen instead of the 380px side panel.
+        property bool fullscreen: false
+
         function fetchTasks() {
             todoistTasksProcess.running = true
         }
@@ -2860,6 +2910,16 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         function completeTask(id) {
             todoistCompleteProcess.command = ["todoist-tasks", "complete", id]
             todoistCompleteProcess.running = true
+        }
+
+        function addTask() {
+            const content = todoistAddContentField.text.trim()
+            if (!content) return
+            const due = todoistAddDueField.text.trim()
+            const cmd = ["todoist-tasks", "add", content]
+            if (due) cmd.push(due)
+            todoistAddProcess.command = cmd
+            todoistAddProcess.running = true
         }
 
         // has_time tasks carry a full ISO datetime; date-only tasks are
@@ -2880,6 +2940,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.top: true
         anchors.bottom: true
         anchors.right: true
+        anchors.left: fullscreen
 
         implicitWidth: 380
         margins.top: 0
@@ -2936,6 +2997,28 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     todoistPanel.tasksError = firstLine || "todoist-tasks complete failed"
                 }
                 todoistPanel.fetchTasks()
+            }
+        }
+
+        Process {
+            id: todoistAddProcess
+
+            stdout: StdioCollector {
+                id: todoistAddStdout
+            }
+            stderr: StdioCollector {
+                id: todoistAddStderr
+            }
+
+            onExited: (exitCode) => {
+                if (exitCode === 0) {
+                    todoistAddContentField.text = ""
+                    todoistAddDueField.text = ""
+                    todoistPanel.tasksError = ""
+                    todoistPanel.fetchTasks()
+                } else {
+                    todoistPanel.tasksError = todoistAddStderr.text.trim() || "Failed to add task"
+                }
             }
         }
 
@@ -3167,6 +3250,99 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                             delegate: todoistTaskRowComponent
                         }
                     }
+
+                    Column {
+                        width: tasksContent.width
+                        spacing: 6
+
+                        TextField {
+                            id: todoistAddContentField
+
+                            width: parent.width
+
+                            placeholderText: "Add task…"
+                            placeholderTextColor: root.colMuted
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                            }
+
+                            background: Rectangle {
+                                color: "transparent"
+                                border.color: root.colMuted
+                                border.width: 1
+                                radius: 6
+                            }
+
+                            onAccepted: todoistPanel.addTask()
+                        }
+
+                        RowLayout {
+                            width: parent.width
+                            spacing: 6
+
+                            TextField {
+                                id: todoistAddDueField
+
+                                Layout.preferredWidth: 120
+
+                                placeholderText: "YYYY-MM-DD"
+                                placeholderTextColor: root.colMuted
+                                color: root.colFg
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 1
+                                }
+
+                                background: Rectangle {
+                                    color: "transparent"
+                                    border.color: root.colMuted
+                                    border.width: 1
+                                    radius: 6
+                                }
+
+                                onAccepted: todoistPanel.addTask()
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+
+                                text: "blank = no due date"
+                                color: root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 2
+                                }
+                            }
+
+                            MouseArea {
+                                id: todoistAddButtonArea
+
+                                implicitWidth: todoistAddButtonText.implicitWidth
+                                implicitHeight: todoistAddButtonText.implicitHeight
+                                hoverEnabled: true
+
+                                onClicked: todoistPanel.addTask()
+
+                                Text {
+                                    id: todoistAddButtonText
+
+                                    text: "Add"
+                                    color: todoistAddButtonArea.containsMouse ? root.colAccent : root.colFg
+
+                                    font {
+                                        family: root.fontFamily
+                                        pixelSize: root.fontSize
+                                        bold: true
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -3183,6 +3359,10 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property bool eventsLoading: true
         property string eventsError: ""
         property int dayOffset: 0
+
+        // Fullscreen mode (SUPER+ALT+C via IPC): anchors left so the panel
+        // fills the whole screen instead of the 380px side panel.
+        property bool fullscreen: false
 
         // Selected day as "YYYY-MM-DD"; recomputed when dayOffset changes.
         property string selectedDateStr: {
@@ -3235,6 +3415,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.top: true
         anchors.bottom: true
         anchors.right: true
+        anchors.left: fullscreen
 
         implicitWidth: 380
         margins.top: 0
