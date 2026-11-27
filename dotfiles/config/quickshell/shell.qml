@@ -3744,7 +3744,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 anchors.top: calendarPanel.fullscreen ? undefined : parent.top
                 anchors.bottom: calendarPanel.fullscreen ? parent.bottom : undefined
 
-                height: root.calendarAuthenticated ? calendarAddRow.implicitHeight + 12 : 0
+                height: root.calendarAuthenticated ? calendarAddTitleField.implicitHeight + 12 : 0
 
                 radius: 8
                 color: Qt.rgba(root.colMuted.r, root.colMuted.g, root.colMuted.b, 0.08)
@@ -3754,11 +3754,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 RowLayout {
                     id: calendarAddRow
 
-                    anchors.fill: parent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    anchors.topMargin: 6
-                    anchors.bottomMargin: 6
 
                     spacing: 8
 
