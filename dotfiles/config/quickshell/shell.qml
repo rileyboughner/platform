@@ -3641,39 +3641,73 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         Component {
             id: calendarWeekDayComponent
 
-            Column {
+            // One day column in the fullscreen 7-column week view.
+            // Fills an equal share of the row and stretches to the
+            // tallest day so the divider spans the full week height.
+            Item {
                 id: calWeekDay
 
                 required property var modelData // {date, events}
 
-                width: parent.width
-                spacing: 4
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                implicitHeight: calWeekDayColumn.implicitHeight
 
-                Text {
-                    text: calendarPanel.weekDayLabel(calWeekDay.modelData.date)
-                    color: root.colFg
+                Column {
+                    id: calWeekDayColumn
 
-                    font {
-                        family: root.fontFamily
-                        pixelSize: root.fontSize
-                        bold: true
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.rightMargin: 8
+
+                    spacing: 4
+
+                    Text {
+                        width: parent.width
+                        elide: Text.ElideRight
+
+                        text: calendarPanel.weekDayLabel(calWeekDay.modelData.date)
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Repeater {
+                        model: calWeekDay.modelData.events
+                        delegate: calendarEventRowComponent
+                    }
+
+                    Text {
+                        visible: calWeekDay.modelData.events.length === 0
+
+                        width: parent.width
+                        elide: Text.ElideRight
+
+                        text: "No events"
+                        color: root.colMuted
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                        }
                     }
                 }
 
-                Repeater {
-                    model: calWeekDay.modelData.events
-                    delegate: calendarEventRowComponent
-                }
+                // Divider between day columns (not after the last one).
+                Rectangle {
+                    visible: index < 6
 
-                Text {
-                    visible: calWeekDay.modelData.events.length === 0
-                    text: "No events"
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 1
                     color: root.colMuted
-
-                    font {
-                        family: root.fontFamily
-                        pixelSize: root.fontSize - 1
-                    }
+                    opacity: 0.4
                 }
             }
         }
@@ -3883,13 +3917,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
                     }
 
-                    // Fullscreen mode: the whole week (Monday..Sunday),
-                    // each day with its own header and events.
-                    Column {
+                    // Fullscreen mode: the whole week (Monday..Sunday)
+                    // as 7 columns, one per day, like Google Calendar's
+                    // week view. Columns share the width equally.
+                    RowLayout {
                         visible: root.calendarAuthenticated && calendarPanel.fullscreen && !calendarPanel.eventsLoading
 
                         width: calendarEventsContent.width
-                        spacing: 12
+                        spacing: 0
 
                         Repeater {
                             model: calendarPanel.weekModel
