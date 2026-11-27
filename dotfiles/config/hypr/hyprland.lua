@@ -374,7 +374,6 @@ hl.bind(mainMod .. " + Space", hl.dsp.exec_cmd("pypr toggle term"))
 hl.bind(mainMod .. " + ALT + Space", hl.dsp.exec_cmd("pypr toggle term2"))
 
 hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("pypr toggle claude"))
-hl.bind(mainMod .. " + ALT + B", hl.dsp.exec_cmd("quickshell ipc call sidepanel toggle"))
 
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("pypr toggle zoho"))
 hl.bind(mainMod .. " + ALT + M", hl.dsp.exec_cmd("pypr toggle outlook"))
@@ -389,7 +388,7 @@ hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("pypr toggle messages"))
 hl.bind(mainMod .. " + ALT + P", hl.dsp.exec_cmd("quickshell ipc call sms toggle"))
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pypr toggle dashboard"))
 hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("pypr toggle muse"))
-hl.bind(mainMod .. " + H", hl.dsp.exec_cmd("pypr toggle homeassistant"))
+hl.bind(mainMod .. " + H", hl.dsp.exec_cmd("quickshell ipc call sidepanel toggle"))
 
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("quickshell ipc call bar toggle"))
 
