@@ -3744,7 +3744,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 anchors.top: calendarPanel.fullscreen ? undefined : parent.top
                 anchors.bottom: calendarPanel.fullscreen ? parent.bottom : undefined
 
-                height: root.calendarAuthenticated ? calendarAddTitleField.implicitHeight + 12 : 0
+                height: root.calendarAuthenticated ? (root.fontSize + 24) : 0
 
                 radius: 8
                 color: Qt.rgba(root.colMuted.r, root.colMuted.g, root.colMuted.b, 0.08)
@@ -3766,6 +3766,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         id: calendarAddTitleField
 
                         Layout.fillWidth: true
+                        Layout.preferredHeight: root.fontSize + 10
+                        Layout.alignment: Qt.AlignVCenter
 
                         placeholderText: "Add event…"
                         placeholderTextColor: root.colMuted
@@ -3785,6 +3787,8 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         id: calendarAddTimeField
 
                         Layout.preferredWidth: 64
+                        Layout.preferredHeight: root.fontSize + 10
+                        Layout.alignment: Qt.AlignVCenter
 
                         placeholderText: "HH:MM"
                         placeholderTextColor: root.colMuted
