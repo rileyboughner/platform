@@ -6,7 +6,6 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - "25565:25565"
       - "19132:19132/udp"  # Bedrock (Geyser), for Xbox/mobile/console players
     volumes:
       - ${SERVICE_DIRECTORY}/minecraft/data:/data
@@ -28,3 +27,22 @@ services:
       - USE_AIKAR_FLAGS=TRUE
       - VIEW_DISTANCE=12
       - SIMULATION_DISTANCE=10
+  mc-ondemand:
+    build: ./ondemand
+    image: mc-ondemand:latest
+    container_name: mc-ondemand
+    restart: unless-stopped
+    ports:
+      - "25565:25565"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - BACKEND_HOST=minecraft
+      - BACKEND_PORT=25565
+      - CONTAINER_NAME=minecraft
+      - LISTEN_PORT=25565
+      - IDLE_MINUTES=10
+      - POLL_SECONDS=30
+      - STOP_GRACE_SECONDS=60
+      - MOTD_ASLEEP=Server is asleep - connect to wake it up!
+      - MOTD_STARTING=Server is starting up - try again in a moment!
