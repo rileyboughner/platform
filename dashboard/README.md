@@ -1,8 +1,10 @@
 # dashboard
 
-Links/services at the top, Seerr request status (pending/processing
-only — available requests are filtered out), Home Assistant presence,
-and server/container status below.
+Password-protected. Services card groups every Docker container and
+Kubernetes pod by purpose, with per-group storage totals and
+CPU/Memory/Storage usage bars, plus Start/Stop controls. Also shows
+Seerr request status (pending/processing only — available requests are
+filtered out) and server/container status.
 
 The links section is filterable (text search) and reorderable
 (drag tiles to reorder; the order is persisted in the browser's
@@ -14,8 +16,37 @@ Styled using the CSS custom properties generated in
 
 Stack: a single Python stdlib HTTP server (`server.py`) serving the
 static frontend and a `/api/all` endpoint that fans out to Seerr, Home
-Assistant, cAdvisor, and the Docker socket. No frameworks, no build
-step.
+Assistant, cAdvisor, the Docker socket, and kubectl. No frameworks, no
+build step.
+
+## Auth
+
+Every route except `GET /login` and `POST /login` requires a session
+cookie. Log in with the single shared password from `DASHBOARD_PASSWORD`
+(set in `.env`, never committed); sessions last 30 days but are held in
+memory, so restarting the container invalidates them. `POST /logout`
+clears the cookie.
+
+## API
+
+- `GET /api/all` — the full dashboard payload (seerr, server, docker,
+  kubernetes, group_order, group_storage, storage_ready).
+- `POST /api/docker/<name>/start` / `/stop` — start or stop a Docker
+  container via the Docker socket. The dashboard's own container
+  refuses `/stop`.
+- `POST /api/k8s/<namespace>/<deployment|statefulset>/<name>/start` / `/stop`
+  — scale the owning Deployment/StatefulSet to 0 (stop) or back to its
+  prior replica count (start). Pods with no scalable owner (bare pods,
+  completed Jobs) have no toggle.
+
+## Storage
+
+Per-service storage is `du`-based disk usage of each service's bind
+mounts under `/mnt/tank` (Docker) or PVC host paths under
+`/var/lib/rancher/k3s/storage` (Kubernetes local-path volumes). It's
+recomputed in a background thread at most every 10 minutes and served
+from cache so `/api/all` stays fast; a service shows a dash until its
+storage is resolvable. Group totals dedupe shared host paths.
 
 ## Secrets
 
@@ -26,6 +57,8 @@ step.
   `HA_TOKEN` in `.env` (gitignored, see `.env.example`). If it's
   empty, the Home section shows an honest empty state instead of
   guessing or reusing another token.
+- `DASHBOARD_PASSWORD` (also in `.env`) is the single shared login
+  password. Never logged, never committed.
 
 ## Run
 

@@ -14,16 +14,22 @@ services:
       - CADVISOR_URL=${CADVISOR_URL:-}
       - KUBECONFIG=/kube/k3s.yaml
       - K8S_API_SERVER=https://192.168.1.2:6443
+      - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
     volumes:
       # Seerr's API key.
       - /mnt/tank/services/jellyseer/settings.json:/mnt/tank/services/jellyseer/settings.json:ro
       # Canonical hostnames for the links section.
       - /mnt/tank/services/cloudflared/config.yml:/mnt/tank/services/cloudflared/config.yml:ro
-      # Read-only Docker API access for per-container state (cAdvisor covers the stats).
+      # Docker API access for per-container state (cAdvisor covers the stats) and
+      # for the start/stop controls -- POSTing start/stop goes over the socket
+      # connection itself, not a filesystem write, so :ro here is sufficient.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /proc/uptime:/host/proc-uptime:ro
       # Read-only k3s kubeconfig for the Kubernetes section (server overridden to the LAN IP).
       - /etc/rancher/k3s/k3s.yaml:/kube/k3s.yaml:ro
+      # Read-only access to service data for the per-group storage totals.
+      - /mnt/tank:/mnt/tank:ro
+      - /var/lib/rancher/k3s/storage:/var/lib/rancher/k3s/storage:ro
     networks:
       - proxy_net
       - arr_net

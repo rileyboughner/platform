@@ -42,6 +42,22 @@ function statusSlug(status) {
   return status.toLowerCase().replace(/\s+/g, "-");
 }
 
+// Compact loading-bar indicator with the numeric value alongside the fill.
+// percent is 0-100 or null (no bar, just the label).
+function bar(percent, label) {
+  const wrap = el("div", { class: "bar-wrap" });
+  if (percent != null) {
+    const pct = Math.max(0, Math.min(100, percent));
+    const track = el("div", { class: "bar-track" });
+    const fill = el("div", { class: "bar-fill" });
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    wrap.appendChild(track);
+  }
+  wrap.appendChild(el("span", { class: "bar-label", text: label }));
+  return wrap;
+}
+
 function renderSeerr(data) {
   const body = document.querySelector("#card-seerr .card-body");
   body.innerHTML = "";
@@ -126,6 +142,7 @@ function serviceDot(source, status) {
       : status === "exited" || status === "dead" ? "exited"
       : "other";
   }
+  if (status === "Scaled to 0") return "exited";
   return status === "Running" ? "running"
     : status === "Succeeded" ? "completed"
     : status === "Failed" ? "exited"
@@ -140,6 +157,7 @@ function serviceSortValue(s, key) {
     case "status": return s.status.toLowerCase();
     case "cpu": return s.cpuNum;
     case "memory": return s.memNum;
+    case "storage": return s.storageNum;
     case "ready": return s.readyNum;
     case "restarts": return s.restartsNum;
     default: return s.name.toLowerCase();
@@ -157,10 +175,74 @@ function compareServices(a, b) {
   return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
 }
 
-// One filterable list of every service: Docker containers and Kubernetes
-// pods together. A name is a link when its published port (Docker) or its
-// NodePort service (Kubernetes) has a public cloudflared hostname.
-function renderServices(dockerData, k8sData) {
+async function postAction(path) {
+  const resp = await fetch(path, { method: "POST" });
+  if (resp.status === 401) {
+    window.location.href = "/login";
+    throw new Error("unauthorized");
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.error || `request failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+async function runAction(path) {
+  try {
+    await postAction(path);
+  } catch (e) {
+    if (e.message !== "unauthorized") alert(`Action failed: ${e.message}`);
+  }
+  refresh();
+}
+
+function confirmAndRun(message, path) {
+  if (!window.confirm(message)) return;
+  runAction(path);
+}
+
+function actionCell(s) {
+  const td = el("td", { class: "actions-cell" });
+  if (s.source === "Docker") {
+    if (s.up) {
+      if (!s.protected) {
+        const btn = el("button", { class: "action-btn stop", type: "button", text: "Stop" });
+        btn.addEventListener("click", () => confirmAndRun(`Stop ${s.name}?`, `/api/docker/${encodeURIComponent(s.rawName)}/stop`));
+        td.appendChild(btn);
+      }
+    } else {
+      const btn = el("button", { class: "action-btn start", type: "button", text: "Start" });
+      btn.addEventListener("click", () => runAction(`/api/docker/${encodeURIComponent(s.rawName)}/start`));
+      td.appendChild(btn);
+    }
+  } else if (s.source === "Kubernetes" && s.owner) {
+    const ownerPath = `/api/k8s/${encodeURIComponent(s.owner.namespace)}/${s.owner.kind}/${encodeURIComponent(s.owner.name)}`;
+    if (s.up) {
+      const btn = el("button", { class: "action-btn stop", type: "button", text: "Stop" });
+      btn.addEventListener("click", () => confirmAndRun(`Stop ${s.name}?`, `${ownerPath}/stop`));
+      td.appendChild(btn);
+    } else {
+      const btn = el("button", { class: "action-btn start", type: "button", text: "Start" });
+      btn.addEventListener("click", () => runAction(`${ownerPath}/start`));
+      td.appendChild(btn);
+    }
+  }
+  return td;
+}
+
+// One filterable list of every service, grouped by purpose: Docker
+// containers and Kubernetes pods together. A name is a link when its
+// published port (Docker) or its NodePort service (Kubernetes) has a
+// public cloudflared hostname.
+function renderServices(data) {
+  const dockerData = data.docker || {};
+  const k8sData = data.kubernetes || {};
+  const groupOrder = data.group_order || [];
+  const groupStorage = data.group_storage || {};
+  const storageReady = !!data.storage_ready;
+  const diskTotal = (data.server || {}).disk ? data.server.disk.total : null;
+
   const body = document.querySelector("#card-services .card-body");
   const existingFilter = body.querySelector(".services-filter");
   if (existingFilter) servicesFilterValue = existingFilter.value;
@@ -172,42 +254,62 @@ function renderServices(dockerData, k8sData) {
 
   const services = [];
   for (const c of dockerData.containers || []) {
+    const storageNum = c.storage_bytes != null ? c.storage_bytes : null;
     services.push({
       name: c.name,
+      rawName: c.raw_name,
       sub: null,
       source: "Docker",
+      group: c.group || "Other",
       status: c.state || "—",
       up: c.state === "running",
       dot: serviceDot("Docker", c.state),
       cpu: c.cpu_percent != null ? `${c.cpu_percent}%` : "—",
       cpuNum: c.cpu_percent != null ? c.cpu_percent : null,
+      cpuPct: c.cpu_percent != null ? c.cpu_percent : null,
       memory: c.memory_bytes != null ? formatBytes(c.memory_bytes) : "—",
       memNum: c.memory_bytes != null ? c.memory_bytes : null,
+      memPct: c.memory_bytes != null && c.memory_limit_bytes ? (c.memory_bytes / c.memory_limit_bytes) * 100 : null,
+      storage: storageNum != null ? formatBytes(storageNum) : "—",
+      storageNum,
+      storagePct: storageNum != null && diskTotal ? (storageNum / diskTotal) * 100 : null,
       ready: "—",
       readyNum: null,
       restarts: "—",
       restartsNum: null,
       url: c.url || null,
+      protected: !!c.protected,
+      owner: null,
     });
   }
   for (const p of k8sData.pods || []) {
     const readyMatch = /^(\d+)\/(\d+)$/.exec(p.ready || "");
+    const storageNum = p.storage_bytes != null ? p.storage_bytes : null;
     services.push({
       name: p.name,
+      rawName: p.raw_name,
       sub: p.namespace,
       source: "Kubernetes",
+      group: p.group || "Other",
       status: p.status || "—",
       up: p.status === "Running" || p.status === "Succeeded",
       dot: serviceDot("Kubernetes", p.status),
       cpu: "—",
       cpuNum: null,
+      cpuPct: null,
       memory: "—",
       memNum: null,
+      memPct: null,
+      storage: storageNum != null ? formatBytes(storageNum) : "—",
+      storageNum,
+      storagePct: storageNum != null && diskTotal ? (storageNum / diskTotal) * 100 : null,
       ready: p.ready,
       readyNum: readyMatch ? parseInt(readyMatch[1], 10) : null,
       restarts: String(p.restarts),
       restartsNum: p.restarts,
       url: p.url || null,
+      protected: false,
+      owner: p.owner || null,
     });
   }
 
@@ -272,8 +374,10 @@ function renderServices(dockerData, k8sData) {
         sortHeader("Status", "status"),
         sortHeader("CPU", "cpu"),
         sortHeader("Memory", "memory"),
+        sortHeader("Storage", "storage"),
         sortHeader("Ready", "ready"),
         sortHeader("Restarts", "restarts"),
+        el("th", { text: "" }),
       ])
     );
     for (const s of rows) {
@@ -300,10 +404,12 @@ function renderServices(dockerData, k8sData) {
           nameCell,
           el("td", {}, [el("span", { class: "badge", text: s.source })]),
           el("td", { text: s.status }),
-          el("td", { text: s.cpu }),
-          el("td", { text: s.memory }),
+          el("td", {}, [bar(s.cpuPct, s.cpu)]),
+          el("td", {}, [bar(s.memPct, s.memory)]),
+          el("td", {}, [bar(s.storagePct, s.storage)]),
           el("td", { text: s.ready }),
           el("td", { text: s.restarts }),
+          actionCell(s),
         ])
       );
     }
@@ -325,20 +431,43 @@ function renderServices(dockerData, k8sData) {
       tableWrap.appendChild(emptyState("No matching services."));
       return;
     }
-    // Not-running services first so a stopped service is impossible to miss;
-    // the chosen sort applies inside each group.
-    const down = visible.filter((s) => !s.up).sort(compareServices);
-    const up = visible.filter((s) => s.up).sort(compareServices);
-    if (down.length > 0) {
-      tableWrap.appendChild(
-        el("div", { class: "subsection-title", text: `Not running (${down.length})` })
-      );
-      tableWrap.appendChild(serviceTable(down));
+
+    let anyGroup = false;
+    for (const group of groupOrder) {
+      const groupServices = visible.filter((s) => s.group === group);
+      if (groupServices.length === 0) continue;
+      anyGroup = true;
+
+      const totalBytes = groupStorage[group];
+      const groupHeader = el("div", { class: "group-header" }, [
+        el("span", { class: "group-title", text: group }),
+        el("span", {
+          class: "group-storage",
+          text: totalBytes != null ? formatBytes(totalBytes) : storageReady ? "—" : "computing…",
+        }),
+      ]);
+      tableWrap.appendChild(groupHeader);
+
+      // Not-running services first so a stopped service is impossible to
+      // miss; the chosen sort applies inside each group.
+      const down = groupServices.filter((s) => !s.up).sort(compareServices);
+      const up = groupServices.filter((s) => s.up).sort(compareServices);
+      if (down.length > 0) {
+        tableWrap.appendChild(
+          el("div", { class: "subsection-title", text: `Not running (${down.length})` })
+        );
+        tableWrap.appendChild(serviceTable(down));
+      }
+      if (up.length > 0) {
+        tableWrap.appendChild(
+          el("div", { class: "subsection-title", text: `Running (${up.length})` })
+        );
+        tableWrap.appendChild(serviceTable(up));
+      }
     }
-    tableWrap.appendChild(
-      el("div", { class: "subsection-title", text: `Running (${up.length})` })
-    );
-    tableWrap.appendChild(serviceTable(up));
+    if (!anyGroup) {
+      tableWrap.appendChild(emptyState("No matching services."));
+    }
   }
 
   filterInput.addEventListener("input", renderTable);
@@ -348,14 +477,26 @@ function renderServices(dockerData, k8sData) {
 async function refresh() {
   try {
     const resp = await fetch("/api/all");
+    if (resp.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
     const data = await resp.json();
     renderSeerr(data.seerr || {});
     renderServer(data.server || {});
-    renderServices(data.docker || {}, data.kubernetes || {});
+    renderServices(data);
     document.getElementById("last-updated").textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     document.getElementById("last-updated").textContent = "update failed";
   }
+}
+
+const logoutBtn = document.getElementById("logout-btn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    await fetch("/logout", { method: "POST" });
+    window.location.href = "/login";
+  });
 }
 
 refresh();
