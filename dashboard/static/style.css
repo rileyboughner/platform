@@ -371,6 +371,21 @@ body {
   white-space: nowrap;
 }
 
+/* Server card totals: the bar spans the full tile width, numbers below it. */
+.stat-tile .bar-wrap {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--spacing-6);
+}
+
+.stat-tile .bar-track {
+  flex: none;
+}
+
+.stat-tile .bar-label {
+  font-size: var(--font-size-14);
+}
+
 .actions-cell {
   text-align: right;
   white-space: nowrap;

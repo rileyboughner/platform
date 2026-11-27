@@ -91,31 +91,32 @@ function renderServer(data) {
   grid.appendChild(
     el("div", { class: "stat-tile" }, [
       el("div", { class: "stat-label", text: "CPU" }),
-      el("div", {
-        class: "stat-value",
-        text: host.cpu_percent != null ? `${host.cpu_percent}%` : "—",
-      }),
+      bar(host.cpu_percent, host.cpu_percent != null ? `${host.cpu_percent}%` : "—"),
     ])
   );
+  const ramPct =
+    host.memory_used_bytes != null && host.memory_total_bytes
+      ? (host.memory_used_bytes / host.memory_total_bytes) * 100
+      : null;
+  const ramLabel =
+    host.memory_used_bytes != null && host.memory_total_bytes != null
+      ? `${formatBytes(host.memory_used_bytes)} / ${formatBytes(host.memory_total_bytes)}`
+      : "—";
   grid.appendChild(
     el("div", { class: "stat-tile" }, [
       el("div", { class: "stat-label", text: "RAM" }),
-      el("div", {
-        class: "stat-value",
-        text:
-          host.memory_used_bytes != null && host.memory_total_bytes != null
-            ? `${formatBytes(host.memory_used_bytes)} / ${formatBytes(host.memory_total_bytes)}`
-            : "—",
-      }),
+      bar(ramPct, ramLabel),
     ])
   );
+  const diskPct =
+    data.disk && data.disk.total ? (data.disk.used / data.disk.total) * 100 : null;
+  const diskLabel = data.disk
+    ? `${formatBytes(data.disk.used)} / ${formatBytes(data.disk.total)}`
+    : "—";
   grid.appendChild(
     el("div", { class: "stat-tile" }, [
       el("div", { class: "stat-label", text: "/mnt/tank" }),
-      el("div", {
-        class: "stat-value",
-        text: data.disk ? `${formatBytes(data.disk.used)} / ${formatBytes(data.disk.total)}` : "—",
-      }),
+      bar(diskPct, diskLabel),
     ])
   );
   grid.appendChild(
