@@ -8,6 +8,7 @@ import Quickshell.Bluetooth
 import Quickshell.Widgets
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 
 PanelWindow {
     id: root
@@ -3172,7 +3173,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     }
 
     // ─────────────────────────────────────────────
-    // Calendar Panel (today + tomorrow's events)
+    // Calendar Panel (day view: navigate days, add events)
     // ─────────────────────────────────────────────
 
     PanelWindow {
@@ -3181,22 +3182,44 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property var eventsList: []
         property bool eventsLoading: true
         property string eventsError: ""
+        property int dayOffset: 0
+
+        // Selected day as "YYYY-MM-DD"; recomputed when dayOffset changes.
+        property string selectedDateStr: {
+            const d = new Date()
+            d.setDate(d.getDate() + dayOffset)
+            return Qt.formatDate(d, "yyyy-MM-dd")
+        }
+
+        // Events for the selected day only. No time filtering: past events
+        // earlier in the day still show.
+        property var dayEvents: eventsList.filter(function(e) { return e.date === selectedDateStr })
 
         function fetchEvents() {
             calendarEventsProcess.running = true
         }
 
-        // date/time are plain "YYYY-MM-DD"/"HH:MM" strings from calendar-events;
-        // dayLabel collapses the date against today/tomorrow since the
-        // panel only ever spans those two days.
-        function dayLabel(dateStr) {
-            const today = new Date()
-            const eventDate = new Date(dateStr + "T00:00:00")
-            const diffDays = Math.round((eventDate - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000)
+        function selectedDayLabel() {
+            if (dayOffset === 0) return "Today"
+            if (dayOffset === 1) return "Tomorrow"
+            if (dayOffset === -1) return "Yesterday"
+            const d = new Date()
+            d.setDate(d.getDate() + dayOffset)
+            return Qt.formatDate(d, "ddd MMM d")
+        }
 
-            if (diffDays === 0) return "Today"
-            if (diffDays === 1) return "Tomorrow"
-            return dateStr
+        function stepDay(delta) {
+            dayOffset = Math.max(-7, Math.min(13, dayOffset + delta))
+        }
+
+        function addEvent() {
+            const title = calendarAddTitleField.text.trim()
+            if (!title) return
+            const time = calendarAddTimeField.text.trim()
+            const cmd = ["calendar-events", "add", title, selectedDateStr]
+            if (time) cmd.push(time)
+            calendarAddProcess.command = cmd
+            calendarAddProcess.running = true
         }
 
         function timeLabel(event) {
@@ -3234,7 +3257,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         Process {
             id: calendarEventsProcess
 
-            command: ["calendar-events", "events"]
+            command: ["calendar-events", "events", "21"]
 
             stdout: StdioCollector {
                 id: calendarEventsStdout
@@ -3255,6 +3278,29 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 } else {
                     const firstLine = calendarEventsStderr.text.trim().split("\n")[0]
                     calendarPanel.eventsError = firstLine || "calendar-events failed"
+                }
+            }
+        }
+
+        Process {
+            id: calendarAddProcess
+
+            stdout: StdioCollector {
+                id: calendarAddStdout
+            }
+            stderr: StdioCollector {
+                id: calendarAddStderr
+            }
+
+            onExited: (exitCode) => {
+                if (exitCode === 0) {
+                    calendarAddTitleField.text = ""
+                    calendarAddTimeField.text = ""
+                    calendarPanel.eventsError = ""
+                    calendarPanel.fetchEvents()
+                } else {
+                    const firstLine = calendarAddStderr.text.trim().split("\n")[0]
+                    calendarPanel.eventsError = firstLine || "Failed to add event"
                 }
             }
         }
@@ -3289,7 +3335,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         spacing: 6
 
                         Text {
-                            text: calendarPanel.dayLabel(calEventRow.modelData.date) + " · " + calendarPanel.timeLabel(calEventRow.modelData)
+                            text: calendarPanel.timeLabel(calEventRow.modelData)
                             color: root.colAccent
 
                             font {
@@ -3381,6 +3427,65 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                             }
                         }
 
+                        MouseArea {
+                            id: calendarPanelPrevArea
+
+                            implicitWidth: calendarPanelPrevText.implicitWidth
+                            implicitHeight: calendarPanelPrevText.implicitHeight
+                            hoverEnabled: true
+                            opacity: calendarPanel.dayOffset <= -7 ? 0.35 : 1
+
+                            onClicked: calendarPanel.stepDay(-1)
+
+                            Text {
+                                id: calendarPanelPrevText
+
+                                text: "<"
+                                color: calendarPanelPrevArea.containsMouse ? root.colFg : root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize
+                                    bold: true
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: calendarPanel.selectedDayLabel()
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                                bold: true
+                            }
+                        }
+
+                        MouseArea {
+                            id: calendarPanelNextArea
+
+                            implicitWidth: calendarPanelNextText.implicitWidth
+                            implicitHeight: calendarPanelNextText.implicitHeight
+                            hoverEnabled: true
+                            opacity: calendarPanel.dayOffset >= 13 ? 0.35 : 1
+
+                            onClicked: calendarPanel.stepDay(1)
+
+                            Text {
+                                id: calendarPanelNextText
+
+                                text: ">"
+                                color: calendarPanelNextArea.containsMouse ? root.colFg : root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize
+                                    bold: true
+                                }
+                            }
+                        }
+
                         Text {
                             Layout.fillWidth: true
 
@@ -3451,10 +3556,10 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                     Text {
                         visible: root.calendarAuthenticated
                             && !calendarPanel.eventsLoading
-                            && calendarPanel.eventsList.length === 0
+                            && calendarPanel.dayEvents.length === 0
                             && calendarPanel.eventsError.length === 0
 
-                        text: "No events today or tomorrow."
+                        text: "No events on this day."
                         color: root.colMuted
 
                         font {
@@ -3470,8 +3575,103 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         spacing: 4
 
                         Repeater {
-                            model: calendarPanel.eventsList
+                            model: calendarPanel.dayEvents
                             delegate: calendarEventRowComponent
+                        }
+                    }
+
+                    Column {
+                        visible: root.calendarAuthenticated
+
+                        width: calendarEventsContent.width
+                        spacing: 6
+
+                        TextField {
+                            id: calendarAddTitleField
+
+                            width: parent.width
+
+                            placeholderText: "Add event…"
+                            placeholderTextColor: root.colMuted
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize - 1
+                            }
+
+                            background: Rectangle {
+                                color: "transparent"
+                                border.color: root.colMuted
+                                border.width: 1
+                                radius: 6
+                            }
+
+                            onAccepted: calendarPanel.addEvent()
+                        }
+
+                        RowLayout {
+                            width: parent.width
+                            spacing: 6
+
+                            TextField {
+                                id: calendarAddTimeField
+
+                                Layout.preferredWidth: 90
+
+                                placeholderText: "HH:MM"
+                                placeholderTextColor: root.colMuted
+                                color: root.colFg
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 1
+                                }
+
+                                background: Rectangle {
+                                    color: "transparent"
+                                    border.color: root.colMuted
+                                    border.width: 1
+                                    radius: 6
+                                }
+
+                                onAccepted: calendarPanel.addEvent()
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+
+                                text: "blank = all day"
+                                color: root.colMuted
+
+                                font {
+                                    family: root.fontFamily
+                                    pixelSize: root.fontSize - 2
+                                }
+                            }
+
+                            MouseArea {
+                                id: calendarAddButtonArea
+
+                                implicitWidth: calendarAddButtonText.implicitWidth
+                                implicitHeight: calendarAddButtonText.implicitHeight
+                                hoverEnabled: true
+
+                                onClicked: calendarPanel.addEvent()
+
+                                Text {
+                                    id: calendarAddButtonText
+
+                                    text: "Add"
+                                    color: calendarAddButtonArea.containsMouse ? root.colAccent : root.colFg
+
+                                    font {
+                                        family: root.fontFamily
+                                        pixelSize: root.fontSize
+                                        bold: true
+                                    }
+                                }
+                            }
                         }
                     }
                 }
