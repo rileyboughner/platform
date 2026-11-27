@@ -385,7 +385,8 @@ hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("pypr toggle messages"))
 -- New quickshell SMS panel, kept on its own bind alongside the kdeconnect-sms
 -- scratchpad above so both can be compared before SUPER+P is ever repointed.
 hl.bind(mainMod .. " + ALT + P", hl.dsp.exec_cmd("quickshell ipc call sms toggle"))
-hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pypr toggle dashboard"))
+hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pypr toggle muse"))
+hl.bind(mainMod .. " + ALT + D", hl.dsp.exec_cmd("pypr toggle dashboard"))
 
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("quickshell ipc call bar toggle"))
 
