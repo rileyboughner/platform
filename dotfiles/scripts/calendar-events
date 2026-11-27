@@ -13,6 +13,10 @@ Commands:
                  within the next 7 days, or {} when there is none.
   refresh        Fetch live from Nextcloud and update the cache (for a
                  background timer). Prints nothing on success.
+  add "Title" [date] [time] [duration]
+                 Create an event on the "Events" calendar. date is
+                 YYYY-MM-DD (default today); time is HH:MM (default
+                 all-day); duration is minutes (default 60).
 
 Results are cached for 10 minutes so the panel opens instantly; a stale
 cache triggers one live fetch and then serves from the fresh cache.
@@ -247,6 +251,81 @@ def fetch_events(days):
     return fetch_live(days)
 
 
+def find_calendar(user, password, name):
+    """Return the href of the calendar whose display name matches (case-insensitive), or None."""
+    for href, cal_name in list_calendars(user, password):
+        if cal_name.strip().lower() == name.strip().lower():
+            return href
+    return None
+
+
+def _ics_escape(text):
+    return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def cmd_add(args):
+    """Create an event: add "Title" [date YYYY-MM-DD] [time HH:MM] [duration_minutes].
+
+    date defaults to today; time empty/absent means all-day; duration
+    defaults to 60 minutes for timed events. Adds to the "Events" calendar.
+    Prints the created event as JSON.
+    """
+    import uuid
+    if not args:
+        die('usage: calendar-events add "Title" [date] [time] [duration_minutes]')
+    title = args[0]
+    date_s = args[1] if len(args) > 1 else datetime.now(LOCAL_TZ).date().isoformat()
+    time_s = args[2] if len(args) > 2 else ""
+    duration = 60
+    if len(args) > 3:
+        try:
+            duration = int(args[3])
+        except ValueError:
+            die(f"bad duration: {args[3]}")
+    try:
+        d = date.fromisoformat(date_s)
+    except ValueError:
+        die(f"bad date: {date_s} (use YYYY-MM-DD)")
+    uid = f"{uuid.uuid4()}@calendar-events"
+    now_utc = datetime.now(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+    if time_s:
+        try:
+            hh, mm = time_s.split(":")
+            start_local = datetime(d.year, d.month, d.day, int(hh), int(mm), tzinfo=LOCAL_TZ)
+        except ValueError:
+            die(f"bad time: {time_s} (use HH:MM)")
+        end_local = start_local + timedelta(minutes=duration)
+        start_s = start_local.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+        end_s = end_local.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+        dtstart = f"DTSTART:{start_s}"
+        dtend = f"DTEND:{end_s}"
+        out_time = time_s
+    else:
+        dtstart = f"DTSTART;VALUE=DATE:{d.strftime('%Y%m%d')}"
+        dtend = f"DTEND;VALUE=DATE:{(d + timedelta(days=1)).strftime('%Y%m%d')}"
+        out_time = ""
+    ics = (
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//calendar-events//EN\r\n"
+        "BEGIN:VEVENT\r\n"
+        f"UID:{uid}\r\nDTSTAMP:{now_utc}\r\n"
+        f"{dtstart}\r\n{dtend}\r\nSUMMARY:{_ics_escape(title)}\r\n"
+        "END:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    user, password = load_credentials()
+    href = find_calendar(user, password, "Events")
+    if href is None:
+        die('no calendar named "Events" found')
+    url = f"{BASE_URL}{href}{uid}.ics"
+    dav_request(user, password, "PUT", url, ics.encode(),
+                {"Content-Type": "text/calendar; charset=utf-8"})
+    # Invalidate the cache so the new event shows up on the next read.
+    try:
+        os.remove(CACHE_FILE)
+    except OSError:
+        pass
+    print(json.dumps({"date": date_s, "time": out_time, "title": title, "calendar": "Events"}))
+
+
 def cmd_refresh():
     """Force a live fetch and update the cache (for a background timer)."""
     events = fetch_live(CACHE_DAYS)
@@ -277,7 +356,7 @@ def cmd_next():
 
 def usage():
     print(__doc__.strip().split("\n\n", 1)[0], file=sys.stderr)
-    print("Usage: calendar-events <events [days] | next | refresh>", file=sys.stderr)
+    print("Usage: calendar-events <events [days] | next | refresh | add \"Title\" [date] [time] [duration]>", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -288,6 +367,8 @@ if __name__ == "__main__":
         cmd_next()
     elif cmd == "refresh":
         cmd_refresh()
+    elif cmd == "add":
+        cmd_add(sys.argv[2:])
     else:
         usage()
         sys.exit(1)
