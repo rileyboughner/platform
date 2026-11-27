@@ -116,6 +116,9 @@ function renderServer(data) {
 }
 
 let servicesFilterValue = "";
+let servicesSources = { Docker: true, Kubernetes: true };
+let servicesSortKey = "name";
+let servicesSortDir = 1;
 
 function serviceDot(source, status) {
   if (source === "Docker") {
@@ -127,6 +130,31 @@ function serviceDot(source, status) {
     : status === "Succeeded" ? "completed"
     : status === "Failed" ? "exited"
     : "other";
+}
+
+// Sortable value per column; null means "no data" and always sorts last.
+function serviceSortValue(s, key) {
+  switch (key) {
+    case "name": return s.name.toLowerCase();
+    case "source": return s.source;
+    case "status": return s.status.toLowerCase();
+    case "cpu": return s.cpuNum;
+    case "memory": return s.memNum;
+    case "ready": return s.readyNum;
+    case "restarts": return s.restartsNum;
+    default: return s.name.toLowerCase();
+  }
+}
+
+function compareServices(a, b) {
+  const va = serviceSortValue(a, servicesSortKey);
+  const vb = serviceSortValue(b, servicesSortKey);
+  if (va == null && vb == null) return 0;
+  if (va == null) return 1;
+  if (vb == null) return -1;
+  const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+  if (cmp !== 0) return cmp * servicesSortDir;
+  return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
 }
 
 // One filterable list of every service: Docker containers and Kubernetes
@@ -152,13 +180,18 @@ function renderServices(dockerData, k8sData) {
       up: c.state === "running",
       dot: serviceDot("Docker", c.state),
       cpu: c.cpu_percent != null ? `${c.cpu_percent}%` : "—",
+      cpuNum: c.cpu_percent != null ? c.cpu_percent : null,
       memory: c.memory_bytes != null ? formatBytes(c.memory_bytes) : "—",
+      memNum: c.memory_bytes != null ? c.memory_bytes : null,
       ready: "—",
+      readyNum: null,
       restarts: "—",
+      restartsNum: null,
       url: c.url || null,
     });
   }
   for (const p of k8sData.pods || []) {
+    const readyMatch = /^(\d+)\/(\d+)$/.exec(p.ready || "");
     services.push({
       name: p.name,
       sub: p.namespace,
@@ -167,9 +200,13 @@ function renderServices(dockerData, k8sData) {
       up: p.status === "Running" || p.status === "Succeeded",
       dot: serviceDot("Kubernetes", p.status),
       cpu: "—",
+      cpuNum: null,
       memory: "—",
+      memNum: null,
       ready: p.ready,
+      readyNum: readyMatch ? parseInt(readyMatch[1], 10) : null,
       restarts: String(p.restarts),
+      restartsNum: p.restarts,
       url: p.url || null,
     });
   }
@@ -181,28 +218,62 @@ function renderServices(dockerData, k8sData) {
     return;
   }
 
+  const controls = el("div", { class: "services-controls" });
   const filterInput = el("input", {
     class: "services-filter",
     type: "text",
     placeholder: "Filter services…",
   });
   filterInput.value = servicesFilterValue;
-  body.appendChild(filterInput);
+  controls.appendChild(filterInput);
+  for (const source of ["Docker", "Kubernetes"]) {
+    const toggle = el("button", {
+      type: "button",
+      class: servicesSources[source] ? "source-toggle active" : "source-toggle",
+      text: source,
+    });
+    toggle.addEventListener("click", () => {
+      servicesSources[source] = !servicesSources[source];
+      toggle.classList.toggle("active", servicesSources[source]);
+      renderTable();
+    });
+    controls.appendChild(toggle);
+  }
+  body.appendChild(controls);
 
   const tableWrap = el("div");
   body.appendChild(tableWrap);
+
+  function sortHeader(label, key) {
+    const th = el("th", { class: "sortable", text: label });
+    if (servicesSortKey === key) {
+      th.appendChild(
+        el("span", { class: "sort-ind", text: servicesSortDir === 1 ? " ▲" : " ▼" })
+      );
+    }
+    th.addEventListener("click", () => {
+      if (servicesSortKey === key) {
+        servicesSortDir = -servicesSortDir;
+      } else {
+        servicesSortKey = key;
+        servicesSortDir = 1;
+      }
+      renderTable();
+    });
+    return th;
+  }
 
   function serviceTable(rows) {
     const table = el("table", { class: "container-table" });
     table.appendChild(
       el("tr", {}, [
-        el("th", { text: "Service" }),
-        el("th", { text: "Source" }),
-        el("th", { text: "Status" }),
-        el("th", { text: "CPU" }),
-        el("th", { text: "Memory" }),
-        el("th", { text: "Ready" }),
-        el("th", { text: "Restarts" }),
+        sortHeader("Service", "name"),
+        sortHeader("Source", "source"),
+        sortHeader("Status", "status"),
+        sortHeader("CPU", "cpu"),
+        sortHeader("Memory", "memory"),
+        sortHeader("Ready", "ready"),
+        sortHeader("Restarts", "restarts"),
       ])
     );
     for (const s of rows) {
@@ -242,20 +313,22 @@ function renderServices(dockerData, k8sData) {
   function renderTable() {
     tableWrap.innerHTML = "";
     const query = filterInput.value.trim().toLowerCase();
-    const visible = query
-      ? services.filter(
-          (s) =>
-            s.name.toLowerCase().includes(query) ||
-            (s.sub && s.sub.toLowerCase().includes(query))
-        )
-      : services;
+    const visible = services.filter((s) => {
+      if (!servicesSources[s.source]) return false;
+      if (!query) return true;
+      return (
+        s.name.toLowerCase().includes(query) ||
+        (s.sub && s.sub.toLowerCase().includes(query))
+      );
+    });
     if (visible.length === 0) {
       tableWrap.appendChild(emptyState("No matching services."));
       return;
     }
-    // Not-running services first so a stopped service is impossible to miss.
-    const down = visible.filter((s) => !s.up);
-    const up = visible.filter((s) => s.up);
+    // Not-running services first so a stopped service is impossible to miss;
+    // the chosen sort applies inside each group.
+    const down = visible.filter((s) => !s.up).sort(compareServices);
+    const up = visible.filter((s) => s.up).sort(compareServices);
     if (down.length > 0) {
       tableWrap.appendChild(
         el("div", { class: "subsection-title", text: `Not running (${down.length})` })

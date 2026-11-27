@@ -228,11 +228,18 @@ body {
   margin-top: 0;
 }
 
+.services-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin-bottom: var(--spacing-12);
+}
+
 .services-filter {
   display: block;
   width: 100%;
   max-width: 320px;
-  margin-bottom: var(--spacing-12);
   background: var(--color-semantic-overlay);
   border: 1px solid var(--color-semantic-border);
   border-radius: var(--radius-small);
@@ -244,6 +251,37 @@ body {
 
 .services-filter:focus {
   outline: 1px solid var(--color-semantic-accent);
+}
+
+.source-toggle {
+  background: var(--color-semantic-overlay);
+  color: var(--color-semantic-text-subtle);
+  border: 1px solid var(--color-semantic-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-14);
+  font-family: var(--font-family-sans);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.source-toggle.active {
+  background: var(--color-semantic-accent);
+  color: var(--color-semantic-background);
+  border-color: var(--color-semantic-accent);
+}
+
+.container-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.container-table th.sortable:hover {
+  color: var(--color-semantic-text);
+}
+
+.sort-ind {
+  font-size: var(--font-size-12);
 }
 
 .service-link {
