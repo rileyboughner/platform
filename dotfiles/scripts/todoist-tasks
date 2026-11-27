@@ -4,6 +4,13 @@ set -euo pipefail
 TOKEN_FILE="/run/agenix/todoist-token"
 API="https://api.todoist.com/api/v1"
 
+# Cache: pre-loaded tasks so the panel opens instantly instead of doing
+# live Todoist API requests every time. Refreshed in the background and
+# on stale reads.
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/todoist-tasks"
+CACHE_FILE="$CACHE_DIR/tasks.json"
+CACHE_TTL=600  # seconds (10 minutes)
+
 die() {
     echo "todoist-tasks: $*" >&2
     exit 1
@@ -15,8 +22,33 @@ Usage: todoist-tasks <command> [args]
 
 Commands:
   tasks           Print JSON array of today's + overdue tasks
+  refresh         Fetch live from Todoist and update the cache
   complete <id>   Mark a task complete
+  add "content" [due_date] [due_time]
+                  Create a task (due_date YYYY-MM-DD, due_time HH:MM)
 EOF
+}
+
+# Print the cached task list if it exists and is fresh (under CACHE_TTL);
+# returns 1 when there is no usable cache.
+load_cache() {
+    [ -f "$CACHE_FILE" ] || return 1
+    local now mtime age
+    now=$(date +%s)
+    mtime=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)
+    age=$((now - mtime))
+    [ "$age" -lt "$CACHE_TTL" ] || return 1
+    cat "$CACHE_FILE"
+}
+
+save_cache() {
+    mkdir -p "$CACHE_DIR" 2>/dev/null || true
+    local tmp="$CACHE_FILE.tmp"
+    cat > "$tmp" && mv "$tmp" "$CACHE_FILE"
+}
+
+invalidate_cache() {
+    rm -f "$CACHE_FILE" 2>/dev/null || true
 }
 
 load_token() {
@@ -67,13 +99,17 @@ fetch_all_projects() {
 # `due` is left to the caller (same split as the todayEventsProcess pattern
 # in shell.qml).
 cmd_tasks() {
+    # Serve from cache when fresh so the panel opens instantly.
+    if load_cache 2>/dev/null; then
+        return 0
+    fi
     load_token
-    local today projects_json tasks_json
+    local today projects_json tasks_json out
     today=$(date +%F)
     projects_json=$(fetch_all_projects | jq -s 'map({(.id): .name}) | add // {}')
     tasks_json=$(fetch_all_tasks | jq -s .)
 
-    jq -n --arg today "$today" --argjson projects "$projects_json" --argjson tasks "$tasks_json" '
+    out=$(jq -n --arg today "$today" --argjson projects "$projects_json" --argjson tasks "$tasks_json" '
         def key: (.due.date // ((.due.datetime // "")[0:10]));
         $tasks
         | map(select(.due != null and key != "" and (key <= $today)))
@@ -86,7 +122,54 @@ cmd_tasks() {
             has_time: ((.due.datetime // "") != ""),
             overdue: (key < $today)
           })
-    '
+    ')
+    printf '%s' "$out" | save_cache
+    printf '%s' "$out"
+}
+
+cmd_refresh() {
+    # Force a live fetch and update the cache (for a background timer).
+    load_token
+    local today projects_json tasks_json out
+    today=$(date +%F)
+    projects_json=$(fetch_all_projects | jq -s 'map({(.id): .name}) | add // {}')
+    tasks_json=$(fetch_all_tasks | jq -s .)
+
+    out=$(jq -n --arg today "$today" --argjson projects "$projects_json" --argjson tasks "$tasks_json" '
+        def key: (.due.date // ((.due.datetime // "")[0:10]));
+        $tasks
+        | map(select(.due != null and key != "" and (key <= $today)))
+        | sort_by(.due.datetime // .due.date // "")
+        | map({
+            id: .id,
+            content: .content,
+            project: ($projects[.project_id] // "Inbox"),
+            due: (.due.datetime // .due.date // ""),
+            has_time: ((.due.datetime // "") != ""),
+            overdue: (key < $today)
+          })
+    ')
+    printf '%s' "$out" | save_cache
+}
+
+cmd_add() {
+    local content="${1:-}" due_date="${2:-}" due_time="${3:-}"
+    [ -n "$content" ] || { usage; exit 1; }
+    load_token
+    local body
+    if [ -n "$due_time" ] && [ -n "$due_date" ]; then
+        # Timed: Todoist wants an RFC3339 datetime; use local time.
+        local dt
+        dt=$(date -d "$due_date $due_time" +%Y-%m-%dT%H:%M:%S 2>/dev/null) || die "bad date/time: $due_date $due_time"
+        body=$(jq -n --arg c "$content" --arg d "$dt" '{content: $c, due_datetime: $d}')
+    elif [ -n "$due_date" ]; then
+        body=$(jq -n --arg c "$content" --arg d "$due_date" '{content: $c, due_date: $d}')
+    else
+        body=$(jq -n --arg c "$content" '{content: $c}')
+    fi
+    curl -fsS -X POST "$API/tasks" -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" -d "$body" | jq '{id, content, due}'
+    invalidate_cache
 }
 
 cmd_complete() {
@@ -95,6 +178,7 @@ cmd_complete() {
     load_token
     curl -fsS -o /dev/null -X POST "$API/tasks/$id/close" \
         -H "Authorization: Bearer $TOKEN" || die "complete failed for task $id"
+    invalidate_cache
 }
 
 case "${1:-}" in
@@ -102,9 +186,17 @@ case "${1:-}" in
         shift
         cmd_tasks "$@"
         ;;
+    refresh)
+        shift
+        cmd_refresh "$@"
+        ;;
     complete)
         shift
         cmd_complete "$@"
+        ;;
+    add)
+        shift
+        cmd_add "$@"
         ;;
     *)
         usage
