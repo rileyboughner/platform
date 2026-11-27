@@ -374,13 +374,15 @@ hl.bind(mainMod .. " + Space", hl.dsp.exec_cmd("pypr toggle term"))
 hl.bind(mainMod .. " + ALT + Space", hl.dsp.exec_cmd("pypr toggle term2"))
 
 hl.bind(mainMod .. " + G", hl.dsp.exec_cmd("pypr toggle claude"))
-hl.bind(mainMod .. " + ALT + N", hl.dsp.exec_cmd("quickshell ipc call sidepanel toggle"))
+hl.bind(mainMod .. " + ALT + B", hl.dsp.exec_cmd("quickshell ipc call sidepanel toggle"))
 
 hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("pypr toggle zoho"))
 hl.bind(mainMod .. " + ALT + M", hl.dsp.exec_cmd("pypr toggle outlook"))
 
 hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("quickshell ipc call todoist toggle"))
+hl.bind(mainMod .. " + ALT + N", hl.dsp.exec_cmd("quickshell ipc call todoist-fullscreen toggle"))
 hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("quickshell ipc call calendar toggle"))
+hl.bind(mainMod .. " + ALT + C", hl.dsp.exec_cmd("quickshell ipc call calendar-fullscreen toggle"))
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("pypr toggle messages"))
 -- New quickshell SMS panel, kept on its own bind alongside the kdeconnect-sms
 -- scratchpad above so both can be compared before SUPER+P is ever repointed.
