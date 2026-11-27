@@ -3725,19 +3725,117 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             opacity: 0.4
         }
 
-        ColumnLayout {
+        Item {
             id: calendarPanelLayout
 
             anchors.fill: parent
             anchors.margins: 8
 
-            spacing: 8
+            // Add-event form: top in side mode, bottom in fullscreen mode.
+            // One compact row — title expands, a small time field, and a
+            // "+" button. Same function (title + optional HH:MM, blank = all day).
+            Rectangle {
+                id: calendarAddForm
+
+                visible: root.calendarAuthenticated
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: calendarPanel.fullscreen ? undefined : parent.top
+                anchors.bottom: calendarPanel.fullscreen ? parent.bottom : undefined
+
+                height: root.calendarAuthenticated ? calendarAddRow.implicitHeight + 12 : 0
+
+                radius: 8
+                color: Qt.rgba(root.colMuted.r, root.colMuted.g, root.colMuted.b, 0.08)
+                border.color: root.colMuted
+                border.width: 1
+
+                RowLayout {
+                    id: calendarAddRow
+
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    anchors.topMargin: 6
+                    anchors.bottomMargin: 6
+
+                    spacing: 8
+
+                    TextField {
+                        id: calendarAddTitleField
+
+                        Layout.fillWidth: true
+
+                        placeholderText: "Add event…"
+                        placeholderTextColor: root.colMuted
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                        }
+
+                        background: Item {}
+
+                        onAccepted: calendarPanel.addEvent()
+                    }
+
+                    TextField {
+                        id: calendarAddTimeField
+
+                        Layout.preferredWidth: 64
+
+                        placeholderText: "HH:MM"
+                        placeholderTextColor: root.colMuted
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 1
+                        }
+
+                        background: Item {}
+
+                        onAccepted: calendarPanel.addEvent()
+                    }
+
+                    MouseArea {
+                        id: calendarAddButtonArea
+
+                        implicitWidth: calendarAddButtonText.implicitWidth + 8
+                        implicitHeight: calendarAddButtonText.implicitHeight
+                        hoverEnabled: true
+
+                        onClicked: calendarPanel.addEvent()
+
+                        Text {
+                            id: calendarAddButtonText
+
+                            anchors.centerIn: parent
+
+                            text: "+"
+                            color: calendarAddButtonArea.containsMouse ? root.colAccent : root.colMuted
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize + 2
+                                bold: true
+                            }
+                        }
+                    }
+                }
+            }
 
             Flickable {
                 id: calendarEventsFlick
 
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: calendarPanel.fullscreen ? parent.top : calendarAddForm.bottom
+                anchors.topMargin: calendarPanel.fullscreen ? 0 : (root.calendarAuthenticated ? 8 : 0)
+                anchors.bottom: calendarPanel.fullscreen ? calendarAddForm.top : parent.bottom
+                anchors.bottomMargin: calendarPanel.fullscreen ? (root.calendarAuthenticated ? 8 : 0) : 0
 
                 contentWidth: width
                 contentHeight: calendarEventsContent.implicitHeight
@@ -3934,95 +4032,6 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         }
                     }
 
-                    // Add-event form: one compact row — title expands, a
-                    // small time field, and a "+" button. Same function as
-                    // before (title + optional HH:MM, blank = all day).
-                    Rectangle {
-                        visible: root.calendarAuthenticated
-
-                        width: calendarEventsContent.width
-                        height: calendarAddRow.implicitHeight + 12
-
-                        radius: 8
-                        color: Qt.rgba(root.colMuted.r, root.colMuted.g, root.colMuted.b, 0.08)
-                        border.color: root.colMuted
-                        border.width: 1
-
-                        RowLayout {
-                            id: calendarAddRow
-
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            anchors.topMargin: 6
-                            anchors.bottomMargin: 6
-
-                            spacing: 8
-
-                            TextField {
-                                id: calendarAddTitleField
-
-                                Layout.fillWidth: true
-
-                                placeholderText: "Add event…"
-                                placeholderTextColor: root.colMuted
-                                color: root.colFg
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 1
-                                }
-
-                                background: Item {}
-
-                                onAccepted: calendarPanel.addEvent()
-                            }
-
-                            TextField {
-                                id: calendarAddTimeField
-
-                                Layout.preferredWidth: 64
-
-                                placeholderText: "HH:MM"
-                                placeholderTextColor: root.colMuted
-                                color: root.colFg
-
-                                font {
-                                    family: root.fontFamily
-                                    pixelSize: root.fontSize - 1
-                                }
-
-                                background: Item {}
-
-                                onAccepted: calendarPanel.addEvent()
-                            }
-
-                            MouseArea {
-                                id: calendarAddButtonArea
-
-                                implicitWidth: calendarAddButtonText.implicitWidth + 8
-                                implicitHeight: calendarAddButtonText.implicitHeight
-                                hoverEnabled: true
-
-                                onClicked: calendarPanel.addEvent()
-
-                                Text {
-                                    id: calendarAddButtonText
-
-                                    anchors.centerIn: parent
-
-                                    text: "+"
-                                    color: calendarAddButtonArea.containsMouse ? root.colAccent : root.colMuted
-
-                                    font {
-                                        family: root.fontFamily
-                                        pixelSize: root.fontSize + 2
-                                        bold: true
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
