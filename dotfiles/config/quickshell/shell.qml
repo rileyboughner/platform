@@ -2945,11 +2945,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.left: fullscreen
 
         implicitWidth: 380
-        // Fullscreen geometry: anchored top+bottom with margins, so the panel sits flush under the 30px bar (root.implicitHeight) and leaves a 4% gap at the bottom.
+        // Fullscreen geometry: anchored top+bottom with margins. Top margin is 0 so the panel follows the top bar via the layer exclusive zone like the side panels (below the bar when it is there, to the top when it is not). Bottom margin keeps the height at 92% of the screen.
         implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
-        margins.top: fullscreen ? root.implicitHeight : 0
+        margins.top: 0
         margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.08 - root.implicitHeight) : 0
 
         color: root.colBg
@@ -3486,11 +3486,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.left: fullscreen
 
         implicitWidth: 380
-        // Fullscreen geometry: anchored top+bottom with margins, so the panel sits flush under the 30px bar (root.implicitHeight) and leaves a 4% gap at the bottom.
+        // Fullscreen geometry: anchored top+bottom with margins. Top margin is 0 so the panel follows the top bar via the layer exclusive zone like the side panels (below the bar when it is there, to the top when it is not). Bottom margin keeps the height at 92% of the screen.
         implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
-        margins.top: fullscreen ? root.implicitHeight : 0
+        margins.top: 0
         margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.08 - root.implicitHeight) : 0
 
         color: root.colBg
