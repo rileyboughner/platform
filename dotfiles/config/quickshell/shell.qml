@@ -224,6 +224,19 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     implicitHeight: 30
     color: root.colBg
 
+    // When the bar is hidden/shown the layer exclusive zone changes.
+    // Mapped panels do not re-position on their own, so force any visible
+    // panel to remap so it shrinks back below the bar (or expands to the
+    // top) with the new exclusive zone.
+    onVisibleChanged: {
+        for (const p of [sidePanel, todoistPanel, calendarPanel, smsPanel]) {
+            if (p.visible) {
+                p.visible = false
+                p.visible = true
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────
     // IP Address
     // ─────────────────────────────────────────────
@@ -2949,7 +2962,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
-        margins.top: 0
+        margins.top: fullscreen ? 8 : 0
         margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.08 - root.implicitHeight) : 0
 
         color: root.colBg
@@ -3490,7 +3503,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
-        margins.top: 0
+        margins.top: fullscreen ? 8 : 0
         margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.08 - root.implicitHeight) : 0
 
         color: root.colBg
