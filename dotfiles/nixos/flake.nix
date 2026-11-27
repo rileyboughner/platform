@@ -63,6 +63,7 @@
         ./modules/quickemu.nix
         ./modules/secrets.nix
         ./modules/theme-sync-watch.nix
+        ./modules/calendar-cache-refresh.nix
       ];
     };
 
@@ -81,6 +82,7 @@
         ./modules/gaming.nix
         ./modules/wireless-networking.nix
         ./modules/theme-sync-watch.nix
+        ./modules/calendar-cache-refresh.nix
       ];
     };
 
