@@ -2940,17 +2940,17 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         WlrLayershell.namespace: "todoist-panel"
 
         anchors.top: true
-        anchors.bottom: !fullscreen
+        anchors.bottom: true
         anchors.right: true
         anchors.left: fullscreen
 
         implicitWidth: 380
-        // Fullscreen geometry accounts for the top bar (root.implicitHeight = 30px): top margin is bar + 40px, height is 92% of the work area below the bar.
+        // Fullscreen geometry: anchored top+bottom with margins, so the panel sits flush under the 30px bar (root.implicitHeight) and leaves a 4% gap at the bottom.
         implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.top: fullscreen ? root.implicitHeight : 0
-        margins.bottom: 0
+        margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.04) : 0
 
         color: root.colBg
         visible: false
@@ -3481,17 +3481,17 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         WlrLayershell.namespace: "calendar-panel"
 
         anchors.top: true
-        anchors.bottom: !fullscreen
+        anchors.bottom: true
         anchors.right: true
         anchors.left: fullscreen
 
         implicitWidth: 380
-        // Fullscreen geometry accounts for the top bar (root.implicitHeight = 30px): top margin is bar + 40px, height is 92% of the work area below the bar.
+        // Fullscreen geometry: anchored top+bottom with margins, so the panel sits flush under the 30px bar (root.implicitHeight) and leaves a 4% gap at the bottom.
         implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.top: fullscreen ? root.implicitHeight : 0
-        margins.bottom: 0
+        margins.bottom: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.04) : 0
 
         color: root.colBg
         visible: false
