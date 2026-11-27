@@ -11,11 +11,18 @@ Commands:
                  date is YYYY-MM-DD, time is HH:MM (24h) or "" for all-day.
   next           Print a single JSON object for the next upcoming event
                  within the next 7 days, or {} when there is none.
+  refresh        Fetch live from Nextcloud and update the cache (for a
+                 background timer). Prints nothing on success.
+
+Results are cached for 10 minutes so the panel opens instantly; a stale
+cache triggers one live fetch and then serves from the fresh cache.
 """
 import base64
 import json
+import os
 import re
 import sys
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, date
@@ -24,6 +31,13 @@ from zoneinfo import ZoneInfo
 SECRET_FILE = "/run/agenix/nextcloud-caldav"
 BASE_URL = "https://cloud.rileyboughner.dev"
 LOCAL_TZ = ZoneInfo("America/New_York")
+
+# Cache: pre-loaded events so the panel opens instantly instead of doing
+# live CalDAV requests every time. Refreshed in the background and on stale reads.
+CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "calendar-events")
+CACHE_FILE = os.path.join(CACHE_DIR, "events.json")
+CACHE_TTL = 600  # seconds (10 minutes)
+CACHE_DAYS = 30  # cache a 30-day window so any shorter query is served from it
 
 # Calendars that hold tasks, not events; skip them.
 SKIP_CALENDARS = {"shopping list", "tasks"}
@@ -162,7 +176,36 @@ def parse_events(ics_text, calendar_name):
     return events
 
 
-def fetch_events(days):
+def load_cache():
+    """Return cached events list if the cache exists and is fresh, else None."""
+    try:
+        with open(CACHE_FILE) as f:
+            data = json.load(f)
+        fetched_at = data.get("fetched_at", 0)
+        events = data.get("events", [])
+        if time.time() - fetched_at > CACHE_TTL:
+            return None
+        if not isinstance(events, list):
+            return None
+        return events
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def save_cache(events):
+    """Write events to the cache file (best effort; never fails the command)."""
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        tmp = CACHE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump({"fetched_at": time.time(), "events": events}, f)
+        os.replace(tmp, CACHE_FILE)
+    except OSError:
+        pass
+
+
+def fetch_live(days):
+    """Fetch events live from Nextcloud for the next <days> days."""
     user, password = load_credentials()
     now_local = datetime.now(LOCAL_TZ)
     start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -181,6 +224,33 @@ def fetch_events(days):
         events.extend(parse_events(ics, name))
     events.sort(key=lambda e: (e["date"], e["time"] or "99:99", e["title"]))
     return events
+
+
+def _in_window(events, days):
+    """Filter an event list to [today, today+days)."""
+    today = datetime.now(LOCAL_TZ).date()
+    end = today + timedelta(days=days)
+    today_s = today.isoformat()
+    end_s = end.isoformat()
+    return [e for e in events if today_s <= e["date"] < end_s]
+
+
+def fetch_events(days):
+    """Return events for the next <days> days, from cache when fresh."""
+    if days <= CACHE_DAYS:
+        cached = load_cache()
+        if cached is not None:
+            return _in_window(cached, days)
+        events = fetch_live(CACHE_DAYS)
+        save_cache(events)
+        return _in_window(events, days)
+    return fetch_live(days)
+
+
+def cmd_refresh():
+    """Force a live fetch and update the cache (for a background timer)."""
+    events = fetch_live(CACHE_DAYS)
+    save_cache(events)
 
 
 def cmd_events(args):
@@ -207,7 +277,7 @@ def cmd_next():
 
 def usage():
     print(__doc__.strip().split("\n\n", 1)[0], file=sys.stderr)
-    print("Usage: calendar-events <events [days] | next>", file=sys.stderr)
+    print("Usage: calendar-events <events [days] | next | refresh>", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -216,6 +286,8 @@ if __name__ == "__main__":
         cmd_events(sys.argv[2:])
     elif cmd == "next":
         cmd_next()
+    elif cmd == "refresh":
+        cmd_refresh()
     else:
         usage()
         sys.exit(1)
