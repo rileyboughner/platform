@@ -79,7 +79,7 @@ def list_calendars(user, password):
         block = m.group(1)
         href = re.search(r"<d:href>([^<]+)</d:href>", block)
         name = re.search(r"<d:displayname>([^<]*)</d:displayname>", block)
-        if href and name and "<c:calendar" in block:
+        if href and name and ":calendar" in block:
             calendars.append((href.group(1), name.group(1)))
     return calendars
 
@@ -100,7 +100,7 @@ def query_events(user, password, cal_href, start_utc, end_utc):
     url = f"{BASE_URL}{cal_href}"
     _, resp = dav_request(user, password, "REPORT", url, body,
                          {"Content-Type": "application/xml", "Depth": "1"})
-    return re.findall(r"<c:calendar-data>(.*?)</c:calendar-data>", resp, re.S)
+    return re.findall(r"<[^:>]+:calendar-data>(.*?)</[^:>]+:calendar-data>", resp, re.S)
 
 
 def unfold(ics):
