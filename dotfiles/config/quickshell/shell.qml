@@ -2945,10 +2945,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.left: fullscreen
 
         implicitWidth: 380
-        implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
+        // Fullscreen geometry accounts for the top bar (root.implicitHeight = 30px): top margin is bar + 40px, height is 92% of the work area below the bar.
+        implicitHeight: fullscreen ? Math.round(((screen ? screen.height : 1080) - root.implicitHeight) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
-        margins.top: fullscreen ? 40 : 0
+        margins.top: fullscreen ? root.implicitHeight + 40 : 0
         margins.bottom: 0
 
         color: root.colBg
@@ -3485,10 +3486,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         anchors.left: fullscreen
 
         implicitWidth: 380
-        implicitHeight: fullscreen ? Math.round((screen ? screen.height : 1080) * 0.92) : 0
+        // Fullscreen geometry accounts for the top bar (root.implicitHeight = 30px): top margin is bar + 40px, height is 92% of the work area below the bar.
+        implicitHeight: fullscreen ? Math.round(((screen ? screen.height : 1080) - root.implicitHeight) * 0.92) : 0
         margins.left: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
         margins.right: fullscreen ? Math.round((screen ? screen.width : 1920) * 0.04) : 0
-        margins.top: fullscreen ? 40 : 0
+        margins.top: fullscreen ? root.implicitHeight + 40 : 0
         margins.bottom: 0
 
         color: root.colBg
