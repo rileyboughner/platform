@@ -3741,8 +3741,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: calendarPanel.fullscreen ? undefined : parent.top
-                anchors.bottom: calendarPanel.fullscreen ? parent.bottom : undefined
+                y: calendarPanel.fullscreen ? (parent.height - height) : 0
 
                 height: root.calendarAuthenticated ? (root.fontSize + 24) : 0
 
