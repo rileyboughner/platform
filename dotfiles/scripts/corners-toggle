@@ -2,9 +2,9 @@
 # Toggle Hyprland window corner rounding between square (0) and rounded (10).
 # Persists the value to ~/.cache/hyprland/corners, the single source of
 # truth read by hyprland.lua on every Hyprland reload, and applies it live
-# by reloading the config (hyprctl keyword does not work with Lua configs,
-# so config-only reload is how the new value takes effect). Prints the new
-# rounding value on stdout.
+# with hyprctl eval (hyprctl keyword is rejected by the Lua config parser,
+# so eval is the live equivalent: it applies instantly with no reload).
+# Prints the new rounding value on stdout.
 set -eu
 
 STATE="$HOME/.cache/hyprland/corners"
@@ -25,5 +25,5 @@ fi
 
 mkdir -p "$(dirname "$STATE")"
 printf '%s\n' "$next" > "$STATE"
-hyprctl reload config-only >/dev/null 2>&1 || true
+hyprctl eval "hl.config({decoration = {rounding = $next}})" >/dev/null 2>&1 || true
 printf '%s\n' "$next"

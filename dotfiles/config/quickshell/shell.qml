@@ -5909,6 +5909,56 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                             onClicked: settingsPanel.toggleCorners()
                         }
                     }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 1
+                        color: root.colMuted
+                        opacity: 0.4
+                    }
+
+                    Text {
+                        text: "Wallpaper"
+                        topPadding: 6
+                        color: root.colAccent
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 34
+                        color: wallpaperRowArea.containsMouse
+                            ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                            : "transparent"
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: "Pick wallpaper"
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                            }
+                        }
+
+                        MouseArea {
+                            id: wallpaperRowArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+
+                            onClicked: root.togglePopup(wallpaperPopup)
+                        }
+                    }
                 }
             }
         }
