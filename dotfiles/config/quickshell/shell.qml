@@ -183,6 +183,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         todoistPanel.visible = false
         calendarPanel.visible = false
         smsPanel.visible = false
+        settingsPanel.visible = false
 
         // A normal open (SUPER+C / SUPER+N or the bar) is never fullscreen.
         calendarPanel.fullscreen = false
@@ -212,6 +213,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         todoistPanel.visible = false
         calendarPanel.visible = false
         smsPanel.visible = false
+        settingsPanel.visible = false
 
         target.fullscreen = true
         target.visible = true
@@ -229,7 +231,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
     // panel to remap so it shrinks back below the bar (or expands to the
     // top) with the new exclusive zone.
     onVisibleChanged: {
-        for (const p of [sidePanel, todoistPanel, calendarPanel, smsPanel]) {
+        for (const p of [sidePanel, todoistPanel, calendarPanel, smsPanel, settingsPanel]) {
             if (p.visible) {
                 p.visible = false
                 p.visible = true
@@ -682,6 +684,14 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
         function toggle(): void {
             root.togglePopup(sidePanel)
+        }
+    }
+
+    IpcHandler {
+        target: "settingspanel"
+
+        function toggle(): void {
+            root.togglePopup(settingsPanel)
         }
     }
 
@@ -5584,6 +5594,321 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 font {
                     family: root.fontFamily
                     pixelSize: root.fontSize - 2
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // Settings Panel (dotfiles settings)
+    // ─────────────────────────────────────────────
+
+    PanelWindow {
+        id: settingsPanel
+
+        property var themes: []
+        property string currentTheme: ""
+        property int cornersRounding: 10
+        property string settingsError: ""
+
+        function refreshThemes() {
+            settingsThemeListProcess.running = true
+        }
+        function refreshThemeState() {
+            settingsThemeStateProcess.running = true
+        }
+        function refreshCornersState() {
+            settingsCornersStateProcess.running = true
+        }
+        function applyTheme(name) {
+            settingsThemeSetProcess.command = ["theme-set", name]
+            settingsThemeSetProcess.running = true
+        }
+        function toggleCorners() {
+            settingsCornersToggleProcess.running = true
+        }
+
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.namespace: "settings-panel"
+
+        anchors.top: true
+        anchors.bottom: true
+        anchors.right: true
+
+        implicitWidth: 380
+        margins.top: 0
+
+        color: root.colBg
+        visible: false
+
+        onVisibleChanged: {
+            if (visible) {
+                settingsPanel.settingsError = ""
+                settingsPanel.refreshThemes()
+                settingsPanel.refreshThemeState()
+                settingsPanel.refreshCornersState()
+            }
+        }
+
+        // ---- Backend processes ----
+
+        Process {
+            id: settingsThemeListProcess
+
+            // Repo themes first, then any machine-local ones under
+            // ~/.config/themes, same resolution order as theme-common.sh.
+            command: [
+                "sh", "-c",
+                'find "$1" "$2" -mindepth 1 -maxdepth 1 -name "*.json" -printf "%f\\n" 2>/dev/null | sed "s/\\.json$//" | sort -u',
+                "_",
+                Quickshell.env("HOME") + "/.platform/dotfiles/config/themes",
+                Quickshell.env("HOME") + "/.config/themes"
+            ]
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    settingsPanel.themes = text.trim().split("\n").filter((t) => t.length > 0)
+                }
+            }
+        }
+
+        Process {
+            id: settingsThemeStateProcess
+
+            command: ["sh", "-c", "cat \"$HOME/.cache/theme/current\" 2>/dev/null || true"]
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    settingsPanel.currentTheme = text.trim()
+                }
+            }
+        }
+
+        Process {
+            id: settingsCornersStateProcess
+
+            command: ["sh", "-c", "cat \"$HOME/.cache/hyprland/corners\" 2>/dev/null || echo 10"]
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const v = parseInt(text.trim(), 10)
+                    settingsPanel.cornersRounding = isNaN(v) ? 10 : v
+                }
+            }
+        }
+
+        Process {
+            id: settingsThemeSetProcess
+
+            onExited: (exitCode) => {
+                if (exitCode !== 0) {
+                    settingsPanel.settingsError = "theme apply failed"
+                }
+                settingsPanel.refreshThemeState()
+            }
+        }
+
+        Process {
+            id: settingsCornersToggleProcess
+
+            command: [Quickshell.env("HOME") + "/.platform/dotfiles/scripts/corners-toggle"]
+
+            stdout: StdioCollector {
+                id: settingsCornersToggleStdout
+            }
+
+            onExited: (exitCode) => {
+                if (exitCode === 0) {
+                    const v = parseInt(settingsCornersToggleStdout.text.trim(), 10)
+                    if (!isNaN(v)) settingsPanel.cornersRounding = v
+                } else {
+                    settingsPanel.settingsError = "corners toggle failed"
+                }
+            }
+        }
+
+        // ---- Theme row delegate ----
+
+        Component {
+            id: themeRowComponent
+
+            Rectangle {
+                id: themeRow
+
+                required property var modelData
+                readonly property bool isActive: settingsPanel.currentTheme === themeRow.modelData
+
+                width: parent.width
+                height: 34
+                color: themeRowArea.containsMouse
+                    ? Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.06)
+                    : "transparent"
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    text: themeRow.modelData
+                    color: themeRow.isActive ? root.colAccent : root.colFg
+
+                    font {
+                        family: root.fontFamily
+                        pixelSize: root.fontSize
+                        bold: themeRow.isActive
+                    }
+                }
+
+                MouseArea {
+                    id: themeRowArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    onClicked: settingsPanel.applyTheme(themeRow.modelData)
+                }
+            }
+        }
+
+        // ---- Chrome: thin left border matching the bar-popup borders ----
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: root.colMuted
+            opacity: 0.4
+        }
+
+        ColumnLayout {
+            id: settingsPanelLayout
+
+            anchors.fill: parent
+            anchors.margins: 8
+
+            spacing: 8
+
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                contentWidth: width
+                contentHeight: settingsContent.implicitHeight
+                clip: true
+
+                Column {
+                    id: settingsContent
+
+                    width: parent.width
+                    spacing: 6
+
+                    Text {
+                        text: "Settings"
+                        color: root.colFg
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Text {
+                        visible: settingsPanel.settingsError.length > 0
+
+                        text: settingsPanel.settingsError
+                        color: root.colRed
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize - 2
+                        }
+                    }
+
+                    Text {
+                        text: "Theme"
+                        topPadding: 6
+                        color: root.colAccent
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Repeater {
+                        model: settingsPanel.themes
+                        delegate: themeRowComponent
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 1
+                        color: root.colMuted
+                        opacity: 0.4
+                    }
+
+                    Text {
+                        text: "Corners"
+                        topPadding: 6
+                        color: root.colAccent
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 34
+                        color: "transparent"
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: settingsPanel.cornersRounding === 10 ? "Rounded" : "Square"
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: 38
+                            height: 20
+                            radius: 10
+
+                            color: settingsPanel.cornersRounding === 10 ? root.colAccent : "transparent"
+                            border.color: settingsPanel.cornersRounding === 10 ? root.colAccent : root.colMuted
+                            border.width: 1
+
+                            Rectangle {
+                                width: 14
+                                height: 14
+                                radius: 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: settingsPanel.cornersRounding === 10 ? parent.width - width - 3 : 3
+
+                                color: settingsPanel.cornersRounding === 10 ? root.colBg : root.colMuted
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsPanel.toggleCorners()
+                        }
+                    }
                 }
             }
         }

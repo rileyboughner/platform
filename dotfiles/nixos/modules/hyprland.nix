@@ -76,6 +76,10 @@
       install -Dm755 ${../../scripts/calendar-events} $out/bin/calendar-events
     '')
 
+    (pkgs.runCommand "corners-toggle" { } ''
+      install -Dm755 ${../../scripts/corners-toggle} $out/bin/corners-toggle
+    '')
+
     (pkgs.runCommand "kdeconnect-sms-dbus" { } ''
       install -Dm755 ${../../scripts/kdeconnect-sms-dbus} $out/bin/kdeconnect-sms-dbus
     '')

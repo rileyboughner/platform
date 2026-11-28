@@ -20,6 +20,23 @@
 
 local colors = dofile(os.getenv("HOME") .. "/.cache/wal/colors.lua")
 
+-- Corner rounding, persisted in ~/.cache/hyprland/corners. This is the
+-- single source of truth: the settings panel toggle writes it and applies
+-- it live with hyprctl, and this read picks it up on every Hyprland
+-- reload or rebuild. The file holds just the value: 0 for square, 10
+-- for rounded. Defaults to rounded when the file is missing or invalid.
+local cornerRounding = 10
+do
+	local f = io.open(os.getenv("HOME") .. "/.cache/hyprland/corners", "r")
+	if f then
+		local v = tonumber(f:read("*l"))
+		if v then
+			cornerRounding = v
+		end
+		f:close()
+	end
+end
+
 ------------------
 ---- MONITORS ----
 ------------------
@@ -131,7 +148,7 @@ hl.config({
 	},
 
 	decoration = {
-		rounding = 10,
+		rounding = cornerRounding,
 		rounding_power = 2,
 
 		-- Change transparency of focused and unfocused windows
@@ -389,6 +406,7 @@ hl.bind(mainMod .. " + ALT + P", hl.dsp.exec_cmd("quickshell ipc call sms toggle
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pypr toggle dashboard"))
 hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("pypr toggle muse"))
 hl.bind(mainMod .. " + H", hl.dsp.exec_cmd("quickshell ipc call sidepanel toggle"))
+hl.bind(mainMod .. " + ALT + S", hl.dsp.exec_cmd("quickshell ipc call settingspanel toggle"))
 
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("quickshell ipc call bar toggle"))
 

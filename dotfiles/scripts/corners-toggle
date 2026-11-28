@@ -1,0 +1,27 @@
+#!/bin/sh
+# Toggle Hyprland window corner rounding between square (0) and rounded (10).
+# Persists the value to ~/.cache/hyprland/corners, the single source of
+# truth read by hyprland.lua on every Hyprland reload, and applies it live
+# with hyprctl. Prints the new rounding value on stdout.
+set -eu
+
+STATE="$HOME/.cache/hyprland/corners"
+
+current=10
+if [ -f "$STATE" ]; then
+    v=$(tr -d '[:space:]' < "$STATE" 2>/dev/null || true)
+    case "$v" in
+        0|10) current="$v" ;;
+    esac
+fi
+
+if [ "$current" = "10" ]; then
+    next=0
+else
+    next=10
+fi
+
+mkdir -p "$(dirname "$STATE")"
+printf '%s\n' "$next" > "$STATE"
+hyprctl keyword decoration:rounding "$next" >/dev/null 2>&1 || true
+printf '%s\n' "$next"
