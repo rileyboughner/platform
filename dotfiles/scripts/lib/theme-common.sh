@@ -218,4 +218,10 @@ theme_reload_all() {
     hyprlauncher -d >/dev/null 2>&1 &
 
     systemctl --user restart hyprpolkitagent.service
+
+    # Vivaldi theme follows pywal. vivaldi-pywal only writes Preferences
+    # when Vivaldi is closed (edits made while it runs are overwritten
+    # on exit), so this is best-effort and silent when Vivaldi is open;
+    # the theme applies on the next Vivaldi launch after a theme change.
+    "$HOME/.platform/dotfiles/scripts/vivaldi-pywal" --quiet >/dev/null 2>&1 || true
 }
