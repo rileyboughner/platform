@@ -37,6 +37,23 @@ do
 	end
 end
 
+-- Window animations, persisted in ~/.cache/hyprland/animations. Same
+-- pattern as corner rounding: the settings panel toggle writes it and
+-- applies it live with hyprctl, and this read picks it up on every
+-- Hyprland reload or rebuild. The file holds just the value: 1 for on,
+-- 0 for off. Defaults to on when the file is missing or invalid.
+local animationsEnabled = true
+do
+	local f = io.open(os.getenv("HOME") .. "/.cache/hyprland/animations", "r")
+	if f then
+		local v = tonumber(f:read("*l"))
+		if v ~= nil then
+			animationsEnabled = v ~= 0
+		end
+		f:close()
+	end
+end
+
 ------------------
 ---- MONITORS ----
 ------------------
@@ -176,7 +193,7 @@ hl.config({
 	},
 
 	animations = {
-		enabled = true,
+		enabled = animationsEnabled,
 	},
 })
 

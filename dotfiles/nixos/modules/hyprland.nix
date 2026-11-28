@@ -80,6 +80,10 @@
       install -Dm755 ${../../scripts/corners-toggle} $out/bin/corners-toggle
     '')
 
+    (pkgs.runCommand "animations-toggle" { } ''
+      install -Dm755 ${../../scripts/animations-toggle} $out/bin/animations-toggle
+    '')
+
     (pkgs.runCommand "kdeconnect-sms-dbus" { } ''
       install -Dm755 ${../../scripts/kdeconnect-sms-dbus} $out/bin/kdeconnect-sms-dbus
     '')

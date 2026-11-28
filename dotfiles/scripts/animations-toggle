@@ -1,0 +1,31 @@
+#!/bin/sh
+# Toggle Hyprland window/workspace animations on and off.
+# Persists the value to ~/.cache/hyprland/animations, the single source of
+# truth read by hyprland.lua on every Hyprland reload, and applies it live
+# with hyprctl eval (hyprctl keyword is rejected by the Lua config parser,
+# so eval is the live equivalent: it applies instantly with no reload).
+# Prints the new value on stdout: 1 for on, 0 for off.
+set -eu
+
+STATE="$HOME/.cache/hyprland/animations"
+
+current=1
+if [ -f "$STATE" ]; then
+    v=$(tr -d '[:space:]' < "$STATE" 2>/dev/null || true)
+    case "$v" in
+        0|1) current="$v" ;;
+    esac
+fi
+
+if [ "$current" = "1" ]; then
+    next=0
+    next_bool=false
+else
+    next=1
+    next_bool=true
+fi
+
+mkdir -p "$(dirname "$STATE")"
+printf '%s\n' "$next" > "$STATE"
+hyprctl eval "hl.config({animations = {enabled = $next_bool}})" >/dev/null 2>&1 || true
+printf '%s\n' "$next"

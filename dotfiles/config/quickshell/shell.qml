@@ -5609,6 +5609,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         property var themes: []
         property string currentTheme: ""
         property int cornersRounding: 10
+        property bool animationsEnabled: true
         property string settingsError: ""
 
         function refreshThemes() {
@@ -5620,12 +5621,25 @@ property string fontFamily: "JetBrainsMono Nerd Font"
         function refreshCornersState() {
             settingsCornersStateProcess.running = true
         }
+        function refreshAnimationsState() {
+            settingsAnimationsStateProcess.running = true
+        }
         function applyTheme(name) {
-            settingsThemeSetProcess.command = ["theme-set", name]
+            // Theme rows toggle: clicking a preset applies it, clicking
+            // the active preset again (or Wallpaper) deselects it and
+            // returns to colors derived from the current wallpaper.
+            if (name === "Wallpaper" || name === settingsPanel.currentTheme) {
+                settingsThemeSetProcess.command = ["theme-auto"]
+            } else {
+                settingsThemeSetProcess.command = ["theme-set", name]
+            }
             settingsThemeSetProcess.running = true
         }
         function toggleCorners() {
             settingsCornersToggleProcess.running = true
+        }
+        function toggleAnimations() {
+            settingsAnimationsToggleProcess.running = true
         }
 
         WlrLayershell.layer: WlrLayer.Top
@@ -5648,6 +5662,7 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 settingsPanel.refreshThemes()
                 settingsPanel.refreshThemeState()
                 settingsPanel.refreshCornersState()
+                settingsPanel.refreshAnimationsState()
             }
         }
 
@@ -5668,7 +5683,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
 
             stdout: StdioCollector {
                 onStreamFinished: {
-                    settingsPanel.themes = text.trim().split("\n").filter((t) => t.length > 0)
+                    const found = text.trim().split("\n").filter((t) => t.length > 0)
+                    // Wallpaper first: it stands for colors derived from
+                    // the current wallpaper, the state when no preset is
+                    // active. It is not a preset file.
+                    settingsPanel.themes = ["Wallpaper"].concat(found)
                 }
             }
         }
@@ -5728,6 +5747,38 @@ property string fontFamily: "JetBrainsMono Nerd Font"
             }
         }
 
+        Process {
+            id: settingsAnimationsStateProcess
+
+            command: ["sh", "-c", "cat \"$HOME/.cache/hyprland/animations\" 2>/dev/null || echo 1"]
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    const v = parseInt(text.trim(), 10)
+                    settingsPanel.animationsEnabled = isNaN(v) ? true : v !== 0
+                }
+            }
+        }
+
+        Process {
+            id: settingsAnimationsToggleProcess
+
+            command: [Quickshell.env("HOME") + "/.platform/dotfiles/scripts/animations-toggle"]
+
+            stdout: StdioCollector {
+                id: settingsAnimationsToggleStdout
+            }
+
+            onExited: (exitCode) => {
+                if (exitCode === 0) {
+                    const v = parseInt(settingsAnimationsToggleStdout.text.trim(), 10)
+                    if (!isNaN(v)) settingsPanel.animationsEnabled = v !== 0
+                } else {
+                    settingsPanel.settingsError = "animations toggle failed"
+                }
+            }
+        }
+
         // ---- Theme row delegate ----
 
         Component {
@@ -5737,7 +5788,11 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                 id: themeRow
 
                 required property var modelData
-                readonly property bool isActive: settingsPanel.currentTheme === themeRow.modelData
+                // Wallpaper is active when no preset is pinned; a preset
+                // row is active when it matches the pinned theme name.
+                readonly property bool isActive: themeRow.modelData === "Wallpaper"
+                    ? settingsPanel.currentTheme === ""
+                    : settingsPanel.currentTheme === themeRow.modelData
 
                 width: parent.width
                 height: 34
@@ -5907,6 +5962,72 @@ property string fontFamily: "JetBrainsMono Nerd Font"
                         MouseArea {
                             anchors.fill: parent
                             onClicked: settingsPanel.toggleCorners()
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 1
+                        color: root.colMuted
+                        opacity: 0.4
+                    }
+
+                    Text {
+                        text: "Animations"
+                        topPadding: 6
+                        color: root.colAccent
+
+                        font {
+                            family: root.fontFamily
+                            pixelSize: root.fontSize
+                            bold: true
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 34
+                        color: "transparent"
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            text: settingsPanel.animationsEnabled ? "On" : "Off"
+                            color: root.colFg
+
+                            font {
+                                family: root.fontFamily
+                                pixelSize: root.fontSize
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            width: 38
+                            height: 20
+                            radius: 10
+
+                            color: settingsPanel.animationsEnabled ? root.colAccent : "transparent"
+                            border.color: settingsPanel.animationsEnabled ? root.colAccent : root.colMuted
+                            border.width: 1
+
+                            Rectangle {
+                                width: 14
+                                height: 14
+                                radius: 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: settingsPanel.animationsEnabled ? parent.width - width - 3 : 3
+
+                                color: settingsPanel.animationsEnabled ? root.colBg : root.colMuted
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settingsPanel.toggleAnimations()
                         }
                     }
 
